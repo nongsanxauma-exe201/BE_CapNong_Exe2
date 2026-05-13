@@ -1,0 +1,15 @@
+package com.swd301.foodmarket.dto.request;
+
+import lombok.*;
+import lombok.experimental.FieldDefaults;
+
+@Getter
+@Setter
+@NoArgsConstructor
+@AllArgsConstructor
+@Builder
+@FieldDefaults(level = AccessLevel.PRIVATE)
+public class ReviewUpdateRequest {
+    private Integer ratingStar;
+    private String comment;
+}

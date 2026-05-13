@@ -1,0 +1,127 @@
+spring:
+  application:
+    name: FoodMarket
+
+  # ===============================
+  # GOOGLE OAUTH2
+  # ===============================
+  security:
+    oauth2:
+      client:
+        registration:
+          google:
+            client-id: ${GOOGLE_CLIENT_ID}
+            client-secret: ${GOOGLE_CLIENT_SECRET}
+            scope:
+              - email
+              - profile
+  # ===============================
+  # DATABASE (MYSQL)
+  # ===============================
+  datasource:
+    url: ${DB_URL}
+    username: ${DB_USERNAME}
+    password: ${DB_PASSWORD}
+    driver-class-name: com.mysql.cj.jdbc.Driver
+
+    hikari:
+      maximum-pool-size: 20
+      minimum-idle: 5
+      idle-timeout: 30000
+      max-lifetime: 1800000
+      connection-timeout: 30000
+
+  # ===============================
+  # JPA / HIBERNATE
+  # ===============================
+  jpa:
+    hibernate:
+      ddl-auto: update
+    show-sql: false
+    properties:
+      hibernate:
+        dialect: org.hibernate.dialect.MySQLDialect
+        format_sql: false
+  # ===============================
+  # VERIFY OTP EMAIL
+  # ===============================
+  mail:
+    host: smtp.gmail.com
+    port: 587
+    username: ${MAIL_USERNAME}
+    password: ${MAIL_PASSWORD}
+    properties:
+      mail:
+        smtp:
+          auth: true
+          starttls:
+            enable: true
+
+# ===============================
+# JWT CONFIG (MAP FROM .env)
+# ===============================
+jwt:
+  signer-key: ${JWT_SIGNER_KEY}
+  valid-duration: ${JWT_VALID_DURATION}
+  refreshable-duration: ${JWT_REFRESHABLE_DURATION}
+
+# ===============================
+# SERVER
+# ===============================
+server:
+  port: ${SERVER_PORT:8080}
+  servlet:
+    context-path: /api/v1
+
+
+# ===============================
+# LOGGING
+# ===============================
+logging:
+  level:
+    root: INFO
+    org:
+      hibernate:
+        SQL: OFF
+      springframework:
+        web: INFO
+
+  # ===============================
+  # Cloudinary CONFIG (MAP FROM .env)
+  # ===============================
+cloudinary:
+  cloud-name: ${CLOUDINARY_CLOUD_NAME}
+  api-key: ${CLOUDINARY_API_KEY}
+  api-secret: ${CLOUDINARY_API_SECRET}
+  # ===============================
+  # PAYOS (MAP FROM .env)
+  # ===============================
+payos:
+  client-id: ${PAYOS_CLIENT_ID}
+  api-key: ${PAYOS_API_KEY}
+  checksum-key: ${PAYOS_CHECKSUM_KEY}
+  api-url: https://api-merchant.payos.vn/v2/payment-requests
+servlet:
+  multipart:
+    max-file-size: 30MB
+    max-request-size: 35MB
+
+# ===============================
+# GOONG CONFIG (MAP FROM .env)
+# ===============================
+goong:
+  api:
+    key: ${GOONG_API_KEY}
+  geocode:
+    url: "https://rsapi.goong.io/geocode"
+  distance:
+    matrix:
+      url: "https://rsapi.goong.io/DistanceMatrix"
+
+# ===============================
+# CHATGPT CONFIG (MAP FROM .env)
+# ===============================
+gemini:
+  api:
+    key: ${GEMINI_API_KEY}
+FRONTEND_URL: ${FE_URL}

@@ -1,0 +1,20 @@
+package com.swd301.foodmarket.dto.request;
+
+import lombok.*;
+import lombok.experimental.FieldDefaults;
+
+import java.math.BigDecimal;
+
+@Data
+@Builder
+@NoArgsConstructor
+@AllArgsConstructor
+@FieldDefaults(level = AccessLevel.PRIVATE)
+public class BuildPlanCreateRequest {
+
+    String planName;
+
+    String planType; // DAILY / WEEKLY
+
+    BigDecimal targetBudget;
+}
