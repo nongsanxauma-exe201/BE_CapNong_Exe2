@@ -6,16 +6,14 @@ import com.swd301.foodmarket.dto.request.OrderItemRequest;
 import com.swd301.foodmarket.dto.request.OrderUpdateRequest;
 import com.swd301.foodmarket.dto.response.OrderResponse;
 import com.swd301.foodmarket.dto.response.PageResponse;
+import com.swd301.foodmarket.dto.response.StaffOrderReportResponse;
 import com.swd301.foodmarket.entity.*;
 import com.swd301.foodmarket.enums.OrderStatus;
 import com.swd301.foodmarket.exception.AppException;
 import com.swd301.foodmarket.exception.ErrorCode;
 import com.swd301.foodmarket.mapper.OrderMapper;
 import com.swd301.foodmarket.repository.*;
-import com.swd301.foodmarket.service.CartService;
-import com.swd301.foodmarket.service.GoongMapService;
-import com.swd301.foodmarket.service.OrderService;
-import com.swd301.foodmarket.service.UserService;
+import com.swd301.foodmarket.service.*;
 import org.springframework.transaction.annotation.Transactional;
 import lombok.AccessLevel;
 import lombok.RequiredArgsConstructor;
@@ -27,9 +25,12 @@ import org.springframework.data.domain.Pageable;
 import org.springframework.data.domain.Sort;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.stereotype.Service;
+import org.springframework.web.multipart.MultipartFile;
 
 import java.math.BigDecimal;
 import java.math.RoundingMode;
+import java.time.LocalDate;
+import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
@@ -50,11 +51,13 @@ public class OrderServiceImpl implements OrderService {
     UserService userService;
     CartService cartService;
     BuildComboRepository buildComboRepository;
+    TrackingRepository trackingRepository;
 
 
     ProductMysteryRepository productMysteryRepository;
 
     GoongMapService goongMapService;   // ✅ dùng để geocode địa chỉ
+     TrackingService trackingService;
 
     // ===================== SHIPPING FEE =====================
 
@@ -132,6 +135,43 @@ public class OrderServiceImpl implements OrderService {
             log.error("[ShippingFee] Lỗi tính phí ship: {}", e.getMessage());
             return BigDecimal.valueOf(15_000);
         }
+    }
+    @Override
+    public Page<OrderResponse> getOrdersForStaff(int page, int size, OrderStatus status) {
+        Pageable pageable = PageRequest.of(page, size, Sort.by("createdAt").descending());
+       List<OrderStatus>  listStatus = new ArrayList<>();
+         if (status != null) {
+              listStatus.add(status);
+         } else {
+             listStatus.addAll(List.of(
+                             OrderStatus.SHIPPING_TO_WAREHOUSE,
+                             OrderStatus.ARRIVED_AT_WAREHOUSE,
+                             OrderStatus.QUALITY_CHECKING,
+                             OrderStatus.QUALITY_APPROVED,
+                             OrderStatus.QUALITY_CHECKED,
+                             OrderStatus.QUALITY_REJECTED
+                     )
+             );
+         }
+       Page<Order> resultPage = orderRepository.findAllByStatusIsIn(listStatus, pageable);
+       return resultPage.map(orderMapper::toResponse);
+    }
+
+    @Override
+    public StaffOrderReportResponse generateStaffOrderReport() {
+
+
+        LocalDateTime startOfDay = LocalDate.now().atStartOfDay();
+        LocalDateTime endOfDay = startOfDay.plusDays(1);
+        StaffOrderReportResponse response = StaffOrderReportResponse.builder()
+                .incomingOrders(orderRepository.countByStatus(OrderStatus.SHIPPING_TO_WAREHOUSE))
+                .quantityCheckedReject(orderRepository.countByStatus(OrderStatus.QUALITY_REJECTED))
+                .qualityCheckingOrders(orderDetailRepository.countByOrder_Status(OrderStatus.ARRIVED_AT_WAREHOUSE))
+                .packagingOrders(orderRepository.countByStatus(OrderStatus.QUALITY_APPROVED))
+                .approvedTodayOrders(trackingRepository.countByCreatedAtBetweenAndStatus(startOfDay,endOfDay,OrderStatus.QUALITY_APPROVED))
+                .pendingFarmerApprovals(orderRepository.countDistinctShopOwnerIdByStatus(OrderStatus.ARRIVED_AT_WAREHOUSE))
+                .build();
+        return response;
     }
 
     // ===================== ORDER =====================
@@ -333,7 +373,7 @@ public class OrderServiceImpl implements OrderService {
 
         @Transactional
         @Override
-        public OrderResponse updateOrder (Integer id, OrderUpdateRequest request){
+        public OrderResponse updateOrder (Integer id, OrderUpdateRequest request,List<MultipartFile> files){
 
             Order order = orderRepository.findById(id)
                     .orElseThrow(() -> new AppException(ErrorCode.ORDER_NOT_FOUND));
@@ -478,6 +518,8 @@ public class OrderServiceImpl implements OrderService {
 
 
         Order savedOrder = orderRepository.save(order);
+        // tracking order
+        trackingService.trackingOrder(order,files);
 
         if (savedOrder.getStatus() == OrderStatus.FAILED) {
 

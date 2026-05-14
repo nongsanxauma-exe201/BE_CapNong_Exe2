@@ -55,4 +55,6 @@ public class OrderDetail {
     @Column(name = "is_requested_return", nullable = false)
     @Builder.Default
     Boolean isRequestedReturn = false;
+    @OneToOne(mappedBy = "orderDetail")
+    private QualityResult qualityResult;
 }

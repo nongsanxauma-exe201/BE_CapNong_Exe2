@@ -8,7 +8,7 @@ import org.mapstruct.*;
 import java.util.ArrayList;
 import java.util.List;
 
-@Mapper(componentModel = "spring")
+@Mapper(componentModel = "spring", uses = {TrackingMapper.class, UserMapper.class})
 public interface OrderMapper {
 
     // ================== ORDER ==================

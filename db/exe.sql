@@ -45,17 +45,27 @@ SET FOREIGN_KEY_CHECKS = 1;
 -- ============================================================
 -- 1. ROLES
 -- ============================================================
-INSERT INTO roles (name, description) VALUES
-    ('ADMIN','System administrator'),
-    ('BUYER','Regular customer'),
-    ('SHOP_OWNER','Shop owner / Seller'),
-    ('SHIPPER','Shipment personnel')
+ALTER TABLE roles
+    MODIFY COLUMN name ENUM(
+        'ADMIN',
+        'BUYER',
+        'SHOP_OWNER',
+        'SHIPPER',
+        'STAFF'
+        );
+INSERT INTO roles (name, description) VALUES   ('STAFF','staff personnel')
+#     ('ADMIN','System administrator'),
+#     ('BUYER','Regular customer'),
+#     ('SHOP_OWNER','Shop owner / Seller'),
+#     ('SHIPPER','Shipment personnel'),
+
     ON DUPLICATE KEY UPDATE description=VALUES(description);
 
 SET @admin_role_id=(SELECT id FROM roles WHERE name='ADMIN');
 SET @buyer_role_id=(SELECT id FROM roles WHERE name='BUYER');
 SET @shop_role_id=(SELECT id FROM roles WHERE name='SHOP_OWNER');
 SET @shipper_role_id=(SELECT id FROM roles WHERE name='SHIPPER');
+SET @staff_role_id   = (SELECT id FROM roles WHERE name='STAFF');
 
 -- ============================================================
 -- 2. CATEGORIES (chỉ Củ và Quả/Trái cây)
@@ -110,6 +120,10 @@ INSERT INTO users (email,password,role_id,status,full_name,phone_number,address,
 VALUES ('shop3@gmail.com','$2a$12$lU/EpH6mhkL4ERuMRO2cjeeT1CPHxqAyDHGwnDctIWzojS6k/oG/K',@shop_role_id,'PENDING','Phạm Bán Hàng','0944444445','Q.3, TP.HCM','Nông Sản Chờ Duyệt','https://res.cloudinary.com/dfp44sbsj/image/upload/v1774252337/brands/t9muel0yqmqfzfu3ndij.jpg','Shop mới tạo đang chờ Ban quản trị duyệt.',0.0,'Techcombank','19034567890124','PHAM BAN HANG','',NOW())
     ON DUPLICATE KEY UPDATE email=email;
 SET @shop3_id=(SELECT id FROM users WHERE email='shop3@gmail.com');
+INSERT INTO users (email,password,role_id,status,full_name,phone_number,address,description,create_at)
+VALUES ('staff@gmail.com','$2a$12$lU/EpH6mhkL4ERuMRO2cjeeT1CPHxqAyDHGwnDctIWzojS6k/oG/K',@staff_role_id,'ACTIVE','Nhân viên ','0900000009','TP.HCM','Nhân viên kho',NOW())
+ON DUPLICATE KEY UPDATE email=email;
+SET @staff_id=(SELECT id FROM users WHERE email='staff@gmail.com');
 
 -- ============================================================
 -- 4. WALLETS
@@ -277,6 +291,26 @@ INSERT INTO vouchers (shop_id,voucher_code,discount_value,max_discount,min_order
 --              PENDING, CONFIRMED, SHIPPING, DELIVERED, CANCELLED,
 --              PENDING, FAILED, SHIPPING, DELIVERED, CONFIRMED
 -- ============================================================
+ALTER TABLE orders
+    MODIFY COLUMN status ENUM(
+        'PENDING',
+        'CONFIRMED',
+        'SHIPPING',
+        'SHIPPING_TO_WAREHOUSE',
+        'ARRIVED_AT_WAREHOUSE',
+        'QUALITY_CHECKING',
+        'QUALITY_CHECKED',
+        'QUALITY_APPROVED',
+        'QUALITY_REJECTED',
+        'DELIVERED',
+        'CANCELLED',
+        'PAID',
+        'FAILED'
+        ) NOT NULL;
+
+
+
+
 INSERT INTO orders (buyer_id,shop_owner_id,shipper_id,shipping_fee,recipient_name,recipient_phone,shipping_address,shipping_latitude,shipping_longitude,shop_latitude,shop_longitude,note,status,total_amount,payment_method,created_at) VALUES
 -- #1  -30m   PENDING
 (@buyer1_id,@shop1_id,NULL,15000,'Ngô Gia Sang','0911111111','Đ. Võ Trường Toản, Linh Trung, Thủ Đức, TP.HCM',10.8651,106.7752,10.8697,106.7717,'Giao buổi sáng trước 10h','PENDING',95000,'COD',DATE_SUB(NOW(),INTERVAL 30 MINUTE)),
@@ -709,3 +743,8 @@ SET FOREIGN_KEY_CHECKS = 1;
 -- Transactions:     8 (SUCCESS×3, PENDING×3, FAILED×1 + 1 withdraw)
 -- ============================================================
 SELECT 'exe.sql executed successfully!' AS result;
+
+
+
+
+

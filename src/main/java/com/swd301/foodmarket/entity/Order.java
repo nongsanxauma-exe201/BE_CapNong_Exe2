@@ -8,6 +8,7 @@ import lombok.experimental.FieldDefaults;
 
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
+import java.util.ArrayList;
 import java.util.List;
 
 @Entity
@@ -109,4 +110,6 @@ public class Order {
     void onCreate() {
         createdAt = LocalDateTime.now();
     }
+    @OneToMany(mappedBy = "order")
+    List<Tracking> trackings = new ArrayList<>();
 }

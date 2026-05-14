@@ -1,5 +1,6 @@
 package com.swd301.foodmarket.repository;
 
+import com.swd301.foodmarket.dto.response.OrderResponse;
 import com.swd301.foodmarket.entity.Order;
 import com.swd301.foodmarket.entity.User;
 import com.swd301.foodmarket.enums.OrderStatus;
@@ -9,6 +10,7 @@ import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
+import java.util.Collection;
 import java.util.List;
 
 public interface OrderRepository extends JpaRepository<Order,Integer>
@@ -44,5 +46,15 @@ public interface OrderRepository extends JpaRepository<Order,Integer>
     List<Order> findOrdersBetweenUsers(@Param("userA") User userA,
                                        @Param("userB") User userB);
 
+
+    Page<Order> findAllByStatusIsIn(Collection<OrderStatus> statuses, Pageable pageable);
+
+    Integer countByStatus(OrderStatus status);
+    @Query("""
+    SELECT COUNT(DISTINCT o.shopOwner.id)
+    FROM Order o
+    WHERE o.status = :status
+""")
+    Integer countDistinctShopOwnerIdByStatus(@Param("status") OrderStatus status);
 
 }
