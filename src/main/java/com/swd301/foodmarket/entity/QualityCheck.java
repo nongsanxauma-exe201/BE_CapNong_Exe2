@@ -5,6 +5,7 @@ import lombok.*;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.UUID;
 
 @Entity
 @Table(name = "quality_check")
@@ -16,10 +17,14 @@ import java.util.List;
 public class QualityCheck {
     @Id
     @GeneratedValue(strategy = GenerationType.UUID)
-    private String qualityCheckId;
+    private UUID qualityCheckId;
     private boolean isPassed;
     @OneToMany(mappedBy = "qualityCheck")
-    List<Image> images = new ArrayList<>();
-
-
+    private List<Image> images = new ArrayList<>();
+    @ManyToOne
+    @JoinColumn(name = "quality_criteria_id")
+    private QualityCriteria qualityCriteria;
+    @ManyToOne
+    @JoinColumn(name = "quality_result_id")
+    private QualityResult qualityResult;
 }

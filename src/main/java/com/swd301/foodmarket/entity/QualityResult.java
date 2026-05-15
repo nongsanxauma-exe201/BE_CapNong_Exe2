@@ -3,6 +3,11 @@ package com.swd301.foodmarket.entity;
 import jakarta.persistence.*;
 import lombok.*;
 
+import java.time.LocalDateTime;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.UUID;
+
 @Entity
 @Table(name = "quality_result")
 @Getter
@@ -13,7 +18,7 @@ import lombok.*;
 public class QualityResult {
     @Id
     @GeneratedValue(strategy = GenerationType.UUID)
-    private String qualityResultId;
+    private UUID qualityResultId;
     @Column(columnDefinition = "TEXT")
     private String note;
     @Enumerated(EnumType.STRING)
@@ -21,4 +26,8 @@ public class QualityResult {
     @OneToOne
     @JoinColumn(name = "order_detail_id")
     private OrderDetail orderDetail;
+    @OneToMany(mappedBy = "qualityResult")
+    private List<QualityCheck> qualityChecks = new ArrayList<>();
+    @Builder.Default
+    private LocalDateTime createdAt = LocalDateTime.now();
 }

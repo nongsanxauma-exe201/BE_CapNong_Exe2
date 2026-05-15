@@ -7,7 +7,7 @@ import org.springframework.http.HttpStatus;
 
 @Getter
 public enum ErrorCode {
-    UNCATEGORIZED_EXCEPTION(9999,"Uncategorized Error", HttpStatus.INTERNAL_SERVER_ERROR),
+    UNCATEGORIZED_EXCEPTION(9999, "Uncategorized Error", HttpStatus.INTERNAL_SERVER_ERROR),
     USER_EXISTED(1001, "User already exists", HttpStatus.BAD_REQUEST),
     ROLE_NOT_FOUND(1002, "Role not found", HttpStatus.NOT_FOUND),
     PRODUCT_NOT_FOUND(1003, "Product not found", HttpStatus.NOT_FOUND),
@@ -26,9 +26,9 @@ public enum ErrorCode {
     INVALID_KEY(1005, "Invalid key", HttpStatus.BAD_REQUEST),
     CART_ITEM_NOT_FOUND(1006, "Cart item not found", HttpStatus.NOT_FOUND),
     PRODUCT_OUT_OF_STOCK(1007, "Product is out of stock", HttpStatus.BAD_REQUEST),
-    USER_NOT_EXISTED(10010, "User not existed",HttpStatus.NOT_FOUND),
+    USER_NOT_EXISTED(10010, "User not existed", HttpStatus.NOT_FOUND),
     MYSTERY_BOX_SOLD_OUT(10011, "Mystery box is sold out", HttpStatus.BAD_REQUEST),
-//   Create user errors
+    //   Create user errors
     EMAIL_INVALID(1006, "Email invalid", HttpStatus.BAD_REQUEST),
     EMAIL_REQUIRED(1009, "Email required", HttpStatus.BAD_REQUEST),
     EMAIL_TOO_LONG(1011, "Email too long", HttpStatus.BAD_REQUEST),
@@ -92,7 +92,9 @@ public enum ErrorCode {
     RETURN_REQUEST_ALREADY_EXISTS(9002, "Return request already exists for this item", HttpStatus.BAD_REQUEST),
     INVALID_RETURN_STATUS(9003, "Invalid status for this return operation", HttpStatus.BAD_REQUEST),
     ORDER_DETAIL_NOT_FOUND(9004, "Order detail not found", HttpStatus.NOT_FOUND),
-
+    // Quality Check errors
+    QUALITY_CRIERIA_NOT_FOUND(10001, "Quality criteria not found", HttpStatus.NOT_FOUND),
+    QUALITY_CHECK_NOT_FOUND(10002, "Quality check not found", HttpStatus.NOT_FOUND),
     ;
 
     private final int code;

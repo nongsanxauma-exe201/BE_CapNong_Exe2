@@ -8,13 +8,14 @@ import org.mapstruct.*;
 import java.util.ArrayList;
 import java.util.List;
 
-@Mapper(componentModel = "spring", uses = {TrackingMapper.class, UserMapper.class})
+@Mapper(componentModel = "spring", uses = {TrackingMapper.class, UserMapper.class, QualityResultMapper.class})
 public interface OrderMapper {
 
     // ================== ORDER ==================
     @Mapping(target = "status", source = "status")
     @Mapping(target = "items", expression = "java(mapItems(order))")
     @Mapping(target = "buyerId", source = "buyer.id")
+    @Mapping(target = "passedQualityCheck", expression = "java(allPassQualityChecks(order))")
     OrderResponse toResponse(Order order);
 
     // ================== PRODUCT ==================
@@ -36,6 +37,18 @@ public interface OrderMapper {
                 response.setReturnStatus(latest.getStatus().name());
             }
         }
+    }
+
+    default boolean allPassQualityChecks(Order order) {
+        if (order.getOrderDetails() == null) return true; // Nếu không có sản phẩm nào, coi như đã qua QC
+
+        int count = 0;
+        for (OrderDetail detail : order.getOrderDetails()) {
+            if (detail.getQualityResult() != null && detail.getQualityResult().getQualityResult().equals(com.swd301.foodmarket.enums.QualityResult.APPROVED)) {
+                count++;
+            }
+        }
+        return  count == order.getOrderDetails().size();
     }
 
     // ================== MYSTERY BOX ==================

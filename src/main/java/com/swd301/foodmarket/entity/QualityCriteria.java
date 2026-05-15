@@ -10,11 +10,11 @@ import lombok.*;
 @NoArgsConstructor
 @AllArgsConstructor
 @Builder
-public class QualityCrieria {
+public class QualityCriteria {
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
-    private Integer qualityCrieriaId;
-    private String name;
+    private Integer qualityCriteriaId;
+    private String qualityName;
     private String description;
 
 }

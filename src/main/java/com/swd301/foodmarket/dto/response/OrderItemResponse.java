@@ -24,4 +24,5 @@ public class OrderItemResponse {
     String  imageUrl;           // ảnh sản phẩm / túi mù
     Boolean isRequestedReturn;  // đã yêu cầu trả hàng chưa
     String  returnStatus;       // trạng thái hoàn tiền (PENDING, COMPLETED, ...)
+    QualityCheckResponse qualityResult; // kết quả kiểm tra chất lượng (nếu có)
 }

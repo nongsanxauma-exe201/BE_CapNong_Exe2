@@ -35,5 +35,6 @@ public class OrderResponse {
     List<OrderItemResponse> items;
     Integer buyerId;
     List<TrackingResponse> trackings;
+     boolean passedQualityCheck;
 
 }

@@ -716,6 +716,21 @@ INSERT INTO transactions (payment_id,payment_gateway,amount,balance_after,status
 
 SET FOREIGN_KEY_CHECKS = 1;
 
+
+INSERT INTO quality_crieria (quality_name, description)
+VALUES
+    ('Màu sắc', 'Kiểm tra màu sắc sản phẩm có tự nhiên, đồng đều hay không'),
+
+    ('Mùi hương', 'Kiểm tra sản phẩm không có mùi lạ, mùi hư hỏng'),
+
+    ('Độ tươi', 'Kiểm tra sản phẩm còn tươi, không héo úa hoặc dập nát'),
+
+    ('Đóng gói', 'Kiểm tra bao bì còn nguyên vẹn, không rách hoặc móp méo'),
+
+    ('Trọng lượng', 'Kiểm tra trọng lượng thực tế có khớp với khai báo'),
+
+    ('Đánh giá chuyên môn', 'Nhân viên kiểm định đánh giá tổng quan chất lượng sản phẩm');
+
 -- ============================================================
 -- TỔNG KẾT DỮ LIỆU
 -- ============================================================
@@ -743,6 +758,7 @@ SET FOREIGN_KEY_CHECKS = 1;
 -- Transactions:     8 (SUCCESS×3, PENDING×3, FAILED×1 + 1 withdraw)
 -- ============================================================
 SELECT 'exe.sql executed successfully!' AS result;
+
 
 
 

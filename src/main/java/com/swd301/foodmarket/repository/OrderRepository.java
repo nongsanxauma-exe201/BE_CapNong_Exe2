@@ -57,4 +57,5 @@ public interface OrderRepository extends JpaRepository<Order,Integer>
 """)
     Integer countDistinctShopOwnerIdByStatus(@Param("status") OrderStatus status);
 
+    Integer countDistinctShopOwnerIdByStatusIsIn(Collection<OrderStatus> statuses);
 }

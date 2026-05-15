@@ -147,9 +147,7 @@ public class OrderServiceImpl implements OrderService {
                              OrderStatus.SHIPPING_TO_WAREHOUSE,
                              OrderStatus.ARRIVED_AT_WAREHOUSE,
                              OrderStatus.QUALITY_CHECKING,
-                             OrderStatus.QUALITY_APPROVED,
-                             OrderStatus.QUALITY_CHECKED,
-                             OrderStatus.QUALITY_REJECTED
+                             OrderStatus.QUALITY_CHECKED
                      )
              );
          }
@@ -165,11 +163,11 @@ public class OrderServiceImpl implements OrderService {
         LocalDateTime endOfDay = startOfDay.plusDays(1);
         StaffOrderReportResponse response = StaffOrderReportResponse.builder()
                 .incomingOrders(orderRepository.countByStatus(OrderStatus.SHIPPING_TO_WAREHOUSE))
-                .quantityCheckedReject(orderRepository.countByStatus(OrderStatus.QUALITY_REJECTED))
+                .quantityChecking(orderRepository.countByStatus(OrderStatus.QUALITY_CHECKING))
+                .packagingOrders(orderRepository.countByStatus(OrderStatus.QUALITY_CHECKED))
                 .qualityCheckingOrders(orderDetailRepository.countByOrder_Status(OrderStatus.ARRIVED_AT_WAREHOUSE))
-                .packagingOrders(orderRepository.countByStatus(OrderStatus.QUALITY_APPROVED))
-                .approvedTodayOrders(trackingRepository.countByCreatedAtBetweenAndStatus(startOfDay,endOfDay,OrderStatus.QUALITY_APPROVED))
-                .pendingFarmerApprovals(orderRepository.countDistinctShopOwnerIdByStatus(OrderStatus.ARRIVED_AT_WAREHOUSE))
+                .approvedTodayOrders(trackingRepository.countByCreatedAtBetweenAndStatus(startOfDay,endOfDay,OrderStatus.QUALITY_CHECKED))
+                .pendingFarmerApprovals(orderRepository.countDistinctShopOwnerIdByStatusIsIn(List.of(OrderStatus.ARRIVED_AT_WAREHOUSE, OrderStatus.QUALITY_CHECKING)))
                 .build();
         return response;
     }
