@@ -15,6 +15,8 @@ public class QualityCheckResponse {
     private Integer orderDetailId;
     private List<QualityCheckingResponse> qualityCheckingResponses;
     private LocalDateTime createdAt;
+    private double  rejectedWeight;
+
 
     @Data
     public static class QualityCheckingResponse {

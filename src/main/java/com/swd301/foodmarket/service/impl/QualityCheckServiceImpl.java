@@ -10,6 +10,7 @@ import com.swd301.foodmarket.exception.ErrorCode;
 import com.swd301.foodmarket.mapper.QualityResultMapper;
 import com.swd301.foodmarket.repository.*;
 import com.swd301.foodmarket.service.CloudinaryService;
+import com.swd301.foodmarket.service.NotificationService;
 import com.swd301.foodmarket.service.OrderService;
 import com.swd301.foodmarket.service.QualityCheckService;
 import jakarta.transaction.Transactional;
@@ -37,6 +38,7 @@ public class QualityCheckServiceImpl implements QualityCheckService {
     private final QualityResultMapper qualityResultMapper;
     private final OrderRepository orderRepository;
     private final OrderService orderService;
+    private final NotificationService notificationService;
     @Override
     @Transactional
     public QualityCheckResponse checkQuality(QualityCheckRequest qualityCheckRequest, MultiValueMap<String, MultipartFile> fileMap ) {
@@ -47,6 +49,7 @@ public class QualityCheckServiceImpl implements QualityCheckService {
                 .note(qualityCheckRequest.getNote())
                 .qualityResult(qualityCheckRequest.getQualityResult())
                 .orderDetail(orderDetail)
+                .rejectedWeight(qualityCheckRequest.getRejectedWeight())
                 .build();
         qualityResutlRepository.save(qualityResult);
         int  count = 1;
@@ -113,6 +116,7 @@ public class QualityCheckServiceImpl implements QualityCheckService {
         }
 
     }
+
     @Override
     public QualityCheckResponse getByOrderItemId(Integer orderItemId) {
         OrderDetail orderDetail = orderDetailRepository.findById(orderItemId).orElseThrow(

@@ -87,16 +87,20 @@ public class NotificationServiceImpl implements NotificationService {
 
         // Tạo UserNotification cho tất cả user thuộc các role được chọn
         List<User> targetUsers = userRepository.findByRole_NameIn(targetRoles);
-        List<UserNotification> userNotifications = targetUsers.stream()
-                .map(user -> UserNotification.builder()
-                        .user(user)
-                        .notification(savedNotification)
-                        .isRead(false)
-                        .isDeleted(false)
-                        .build())
-                .collect(Collectors.toList());
-        
-        userNotificationRepository.saveAll(userNotifications);
+        for(User user : targetUsers) {
+            createUserNotification(user, savedNotification);
+
+        }
+    }
+    @Override
+    public void createUserNotification(User user, Notification notification) {
+       UserNotification userNotification =  UserNotification.builder()
+                .user(user)
+                .notification(notification)
+                .isRead(false)
+                .isDeleted(false)
+                .build();
+        userNotificationRepository.save(userNotification);
     }
 
     // =====================================================================
@@ -166,6 +170,8 @@ public class NotificationServiceImpl implements NotificationService {
         un.setIsDeleted(true);
         userNotificationRepository.save(un);
     }
+
+
 
     /**
      * Lấy role hiện tại của user đang login
