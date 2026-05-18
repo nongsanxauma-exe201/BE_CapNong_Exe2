@@ -17,6 +17,7 @@ import com.swd301.foodmarket.repository.ShipperLocationRepository;
 import com.swd301.foodmarket.repository.UserRepository;
 import com.swd301.foodmarket.repository.WalletRepository;
 import com.swd301.foodmarket.service.GoongMapService;
+import com.swd301.foodmarket.service.NotificationService;
 import com.swd301.foodmarket.service.ShipperService;
 import com.swd301.foodmarket.service.UserService;
 import lombok.AccessLevel;
@@ -26,11 +27,14 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.web.filter.RequestContextFilter;
 
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
 import java.util.Comparator;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.stream.Collectors;
 
 @Service
@@ -45,6 +49,8 @@ public class ShipperServiceImpl implements ShipperService {
     GoongMapService goongMapService;
     WalletRepository walletRepository;
     UserService userService;
+    NotificationService notificationService;
+    private final RequestContextFilter requestContextFilter;
     // ===================== HELPERS =====================
 
     private User getCurrentShipper() {
@@ -227,9 +233,13 @@ public class ShipperServiceImpl implements ShipperService {
         if (request.getNote() != null && !request.getNote().isBlank()) {
             order.setNote(request.getNote());
         }
+        BigDecimal totalAmount = order.getTotalAmount();
+
+
+        // tiền hàng (chưa trừ phí)
 
         // ====================================================
-        // TRẢ TIỀN SHIPPER (3% SHIPPING FEE)
+        // TRẢ TIỀN SHIPPER
         // ====================================================
 
         if (request.getStatus() == OrderStatus.DELIVERED) {
@@ -256,7 +266,10 @@ public class ShipperServiceImpl implements ShipperService {
                 log.info("Shipper wallet BEFORE: {}", shipperWallet.getFrozenBalance());
 
                 shipperWallet.setFrozenBalance(
-                        shipperWallet.getFrozenBalance().add(shipperFee)
+                        shipperWallet.getFrozenBalance().subtract(shipperFee)
+                );
+                shipperWallet.setTotalBalance(
+                        shipperWallet.getTotalBalance().add(shipperFee)
                 );
 
                 shipperWallet.setTotalRevenueAllTime(
@@ -285,6 +298,61 @@ public class ShipperServiceImpl implements ShipperService {
 
 //                log.info("Admin wallet AFTER: {}", adminWallet.getTotalBalance());
             }
+            BigDecimal shopGross = totalAmount.subtract(shippingFee);
+            BigDecimal shopRevenue = shopGross.multiply(BigDecimal.valueOf(0.9)); // trừ 10% phí sàn
+            if (shopRevenue.compareTo(BigDecimal.ZERO) > 0) {
+                Wallet shopWallet = walletRepository.findByShopOwner_Id(order.getShopOwner().getId())
+                        .orElseThrow(() -> new AppException(ErrorCode.WALLET_NOT_FOUND));
+                // tra tien cho buyer khi  ma don hang bi hu mot phan
+                Map<String,String> refundResult = calculateRefundAmount(order);
+                BigDecimal refundAmount = refundResult.get("refundAmount") != null ? new BigDecimal(refundResult.get("refundAmount")) : BigDecimal.ZERO;
+                if(order.getPaymentMethod().equalsIgnoreCase("PAYOS"))
+                {
+                    if(refundAmount.compareTo(BigDecimal.ZERO) > 0) {
+                        Wallet buyerWallet = walletRepository.findByBuyer(order.getBuyer());
+                        if(buyerWallet == null) {
+                            log.error("Buyer wallet not found for buyer {}", order.getBuyer().getId());
+                            throw new AppException(ErrorCode.WALLET_NOT_FOUND);
+                        }
+
+                        log.info("Buyer wallet BEFORE refund: {}", buyerWallet.getTotalBalance());
+                        buyerWallet.setTotalBalance(
+                                buyerWallet.getTotalBalance().add(refundAmount)
+                        );
+                        walletRepository.save(buyerWallet);
+                        log.info("Buyer wallet AFTER refund: {}", buyerWallet.getTotalBalance());
+                        // thong bao cho shop va buyer  khi don hang bi hu mot phan va da duoc tra tien lai
+                        Notification notification = Notification.builder()
+                                .title("Hoàn tiền đơn hàng #" + order.getId())
+                                .message("Bạn đã nhận được " +refundAmount+ "đ từ "+refundResult.get("message")+"từ đơn hang #" + order.getId())
+                                .receiverType(order.getBuyer().toString())
+                                .build();
+                        notificationService.createUserNotification(order.getBuyer(), notification);
+                        Notification notificatio = Notification.builder()
+                                .title("Hoàn tiền đơn hàng #" + order.getId())
+                                .message("Bạn đã bị trừ  " +refundAmount+ "đ lý do "+refundResult.get("message")+ "từ đơn hàng #" + order.getId())
+                                .receiverType(order.getBuyer().toString())
+                                .build();
+                        notificationService.createUserNotification(order.getShopOwner(), notificatio);
+                    }
+                }
+
+
+                shopRevenue = shopRevenue.subtract(refundAmount);
+                shopWallet.setFrozenBalance(
+                        shopWallet.getFrozenBalance().subtract(shopRevenue)
+                );
+                shopWallet.setTotalBalance(
+                        shopWallet.getTotalBalance().add(shopRevenue)
+                );
+                shopWallet.setTotalRevenueAllTime(
+                        shopWallet.getTotalRevenueAllTime().add(shopRevenue)
+                );
+
+                shopWallet.setUpdatedAt(LocalDateTime.now());
+                walletRepository.save(shopWallet);
+            }
+
         }
 
         // ====================================================
@@ -317,12 +385,11 @@ public class ShipperServiceImpl implements ShipperService {
         return toShipperOrderResponse(order);
     }
 
-    // Nếu tính tiền bằng COD thì sẽ refund là xong
-    // với PAy os thì mình sẽ thêm api  canRecieve tiền hoàn nếu có thì buyer ấn vào nhập stk tên ngân hàng và sau đó
-    // tạo ra request withdraw/ tạo request refund cũng được rồi admin chuyển cho buyer là xong
-    public BigDecimal calculateRefundAmount(Order order) {
+
+    public Map<String,String> calculateRefundAmount(Order order) {
         List<OrderDetail> details = order.getOrderDetails();
         BigDecimal refundAmount = BigDecimal.ZERO;
+        String message = "";
         for(OrderDetail detail : details) {
             QualityResult qualityResult = detail.getQualityResult();
             double percentage = 0;
@@ -330,10 +397,14 @@ public class ShipperServiceImpl implements ShipperService {
                 percentage = (double) (qualityResult.getRejectedWeight() * 100) / detail.getQuantity();
             }
             if (percentage > 5) {
+                message+= "Sản phẩm " + detail.getProduct().getProductName() + " bị hư hỏng " + qualityResult.getRejectedWeight();
                 refundAmount = refundAmount.add(detail.getUnitPrice().multiply(BigDecimal.valueOf(qualityResult.getRejectedWeight())));
             }
         }
-        return refundAmount;
+        Map<String,String> map = new HashMap<>();
+        map.put("message", message);
+        map.put("refundAmount", refundAmount.toString());
+        return map;
 
     }
     @Override

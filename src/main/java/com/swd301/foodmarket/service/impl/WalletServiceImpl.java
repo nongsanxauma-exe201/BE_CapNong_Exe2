@@ -7,6 +7,7 @@ import com.swd301.foodmarket.dto.response.WalletResponse;
 import com.swd301.foodmarket.dto.response.WithdrawRequestResponse;
 import com.swd301.foodmarket.entity.*;
 import com.swd301.foodmarket.enums.PayoutStatus;
+import com.swd301.foodmarket.enums.RoleName;
 import com.swd301.foodmarket.enums.WalletType;
 import com.swd301.foodmarket.enums.WithdrawRequestStatus;
 import com.swd301.foodmarket.exception.AppException;
@@ -55,16 +56,21 @@ public class WalletServiceImpl implements WalletService {
     @Override
     public WalletResponse getMyWallet() {
         User currentUser = getCurrentUser();
-
-        Wallet wallet = walletRepository.findByShopOwner_Id(currentUser.getId())
-                .orElseThrow(() -> new AppException(ErrorCode.WALLET_NOT_FOUND));
-
+        Role role = currentUser.getRole();
+        Wallet wallet = null;
+        if(role.getName().equals(RoleName.SHOP_OWNER)){
+             wallet = walletRepository.findByShopOwner_Id(currentUser.getId()).get();
+        }
+        if(role.getName() == RoleName.BUYER){
+             wallet = walletRepository.findByBuyer(currentUser);
+        }
         return walletMapper.toResponse(wallet);
     }
 
     @Override
     public WalletResponse getMyShipperWallet() {
         User currentUser = getCurrentUser();
+
 
         Wallet wallet = walletRepository.findByShipper(currentUser)
                 .orElseThrow(() -> new AppException(ErrorCode.WALLET_NOT_FOUND));
@@ -127,8 +133,8 @@ public class WalletServiceImpl implements WalletService {
     public List<WithdrawRequestResponse> getMyShipperWithdrawRequests() {
         User shipper = getCurrentUser();
 
-        Wallet wallet = walletRepository.findByShipper(shipper)
-                .orElseThrow(() -> new AppException(ErrorCode.WALLET_NOT_FOUND));
+//        Wallet wallet = walletRepository.findByShipper(shipper)
+//                .orElseThrow(() -> new AppException(ErrorCode.WALLET_NOT_FOUND));
 
         return withdrawRequestMapper.toResponses(
                 withdrawRequestRepository.findByWallet_Shipper_IdOrderByIdDesc(shipper.getId())
@@ -388,14 +394,21 @@ log.info("Wallet balance: {}, request amount {}", wallet.getTotalBalance(),reque
 
     @Override
     public List<WithdrawRequestResponse> getMyWithdrawRequests() {
-        User shopOwner = getCurrentUser();
+        User currentUser = getCurrentUser();
+        Role role = currentUser.getRole();
+        if(role.getName().equals(RoleName.SHOP_OWNER)){
+            return withdrawRequestMapper.toResponses(
+                    withdrawRequestRepository.findByWallet_ShopOwner_IdOrderByIdDesc(currentUser.getId())
+            );
+        }
+        if(role.getName() == RoleName.BUYER){
+            return withdrawRequestMapper.toResponses(
+                    withdrawRequestRepository.findByWallet_Buyer_IdOrderByIdDesc(currentUser.getId())
+            );
+        }
 
-        Wallet wallet = walletRepository.findByShopOwner(shopOwner)
-                .orElseThrow(() -> new AppException(ErrorCode.WALLET_NOT_FOUND));
 
-        return withdrawRequestMapper.toResponses(
-                withdrawRequestRepository.findByWallet_ShopOwner_IdOrderByIdDesc(shopOwner.getId())
-        );
+        return null;
     }
 
     @Override

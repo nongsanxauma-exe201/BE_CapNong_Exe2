@@ -47,4 +47,8 @@ public interface WalletRepository extends JpaRepository<Wallet, Integer> {
     @Query("SELECT w FROM Wallet w WHERE w.shipper.id = :shipperId")
     Optional<Wallet> findByShipperIdForUpdate(Integer shipperId);
 
+    boolean existsByBuyer(User buyer);
+
+
+    Wallet findByBuyer(User buyer);
 }

@@ -173,6 +173,7 @@ public class UserServiceImpl implements UserService {
             }
         }
 
+
         // ===============================
         // AUTO CREATE SHIPPER WALLET
         // ===============================
@@ -180,6 +181,25 @@ public class UserServiceImpl implements UserService {
         if (savedUser.getRole().getName().equals(RoleName.SHIPPER)) {
 
             if (!walletRepository.existsByShipper(savedUser)) {
+
+                Wallet wallet = Wallet.builder()
+                        .shipper(savedUser)
+                        .status(WalletStatus.ACTIVE)
+                        .totalBalance(BigDecimal.ZERO)
+                        .frozenBalance(BigDecimal.ZERO)
+                        .totalRevenueAllTime(BigDecimal.ZERO)
+                        .totalWithdrawn(BigDecimal.ZERO)
+                        .commissionWallet(BigDecimal.ZERO)
+                        .type(WalletType.SHIPPER)
+                        .build();
+
+                walletRepository.save(wallet);
+
+                log.info("Wallet created for shipper ID: {}", savedUser.getId());
+            }
+        }
+        if(request.getRoleName().equals(RoleName.BUYER)) {
+            if (!walletRepository.existsByBuyer(savedUser)) {
 
                 Wallet wallet = Wallet.builder()
                         .shipper(savedUser)
