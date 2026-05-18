@@ -60,14 +60,14 @@ public class AuthenticationServiceImpl implements AuthenticationService {
     public AuthenticationResponse authenticated(AuthenticationRequest request) {
 
         User user = userRepository.findByEmail(request.getEmail())
-                .orElseThrow(() -> new AppException(ErrorCode.USER_NOT_EXISTED));
+                .orElseThrow(() -> new AppException(ErrorCode.INVALID_LOGIN));
 
         if (user.getStatus() == UserStatus.INACTIVE) {
             throw new AppException(ErrorCode.USER_DEACTIVATED);
         }
 
         if (!passwordEncoder.matches(request.getPassword(), user.getPassword())) {
-            throw new AppException(ErrorCode.PASSWORD_WRONG);
+            throw new AppException(ErrorCode.INVALID_LOGIN);
         }
         if(user.getStatus() == UserStatus.PENDING) {
             throw new AppException(ErrorCode.USER_PENDING);

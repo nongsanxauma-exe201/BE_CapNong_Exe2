@@ -1,13 +1,11 @@
 package com.swd301.foodmarket.service.impl;
 
+import com.swd301.foodmarket.constant.BankBinConstants;
 import com.swd301.foodmarket.dto.request.WalletCreationRequest;
 import com.swd301.foodmarket.dto.request.WithdrawRequestCreationRequest;
 import com.swd301.foodmarket.dto.response.WalletResponse;
 import com.swd301.foodmarket.dto.response.WithdrawRequestResponse;
-import com.swd301.foodmarket.entity.PayosPayoutResult;
-import com.swd301.foodmarket.entity.User;
-import com.swd301.foodmarket.entity.Wallet;
-import com.swd301.foodmarket.entity.WithdrawRequest;
+import com.swd301.foodmarket.entity.*;
 import com.swd301.foodmarket.enums.PayoutStatus;
 import com.swd301.foodmarket.enums.WalletType;
 import com.swd301.foodmarket.enums.WithdrawRequestStatus;
@@ -15,9 +13,11 @@ import com.swd301.foodmarket.exception.AppException;
 import com.swd301.foodmarket.exception.ErrorCode;
 import com.swd301.foodmarket.mapper.WalletMapper;
 import com.swd301.foodmarket.mapper.WithdrawRequestMapper;
+import com.swd301.foodmarket.repository.ImageRepository;
 import com.swd301.foodmarket.repository.UserRepository;
 import com.swd301.foodmarket.repository.WalletRepository;
 import com.swd301.foodmarket.repository.WithdrawRequestRepository;
+import com.swd301.foodmarket.service.CloudinaryService;
 import com.swd301.foodmarket.service.PayosService;
 import com.swd301.foodmarket.service.WalletService;
 import jakarta.transaction.Transactional;
@@ -27,6 +27,7 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.stereotype.Service;
+import org.springframework.web.multipart.MultipartFile;
 
 import java.math.BigDecimal;
 import java.math.RoundingMode;
@@ -44,7 +45,10 @@ public class WalletServiceImpl implements WalletService {
     private final WithdrawRequestMapper withdrawRequestMapper;
     private final UserRepository userRepository;
     private final PayosService payosService;
+    private final VieQRServiceImpl vieQRService;
+    private final CloudinaryService cloudinaryService;
     private static final BigDecimal WITHDRAW_FEE_PERCENT = new BigDecimal("0.10");// 10%
+    private final ImageRepository imageRepository;
     @Value("${FRONTEND_URL}")
     private String frontUrl;
 
@@ -147,45 +151,51 @@ public class WalletServiceImpl implements WalletService {
                 || wr.getReceiveAmount().compareTo(BigDecimal.ZERO) <= 0) {
             throw new AppException(ErrorCode.INVALID_AMOUNT);
         }
-
-        // tạo orderCode unique
-        Long orderCode = Long.parseLong(
-                wr.getId() + "" + System.currentTimeMillis()
-        );
-
-        PayosPayoutResult qrResult = payosService.createQr(
-                wr.getReceiveAmount(),
-                orderCode,
-                wr.getId(),
-                wr.getBankName(),
+//
+//        // tạo orderCode unique
+//        Long orderCode = Long.parseLong(
+//                wr.getId() + "" + System.currentTimeMillis()
+//        );
+//
+//        PayosPayoutResult qrResult = payosService.createQr(
+//                wr.getReceiveAmount(),
+//                orderCode,
+//                wr.getId(),
+//                wr.getBankName(),
+//                wr.getBankAccountNumber(),
+//                wr.getBankAccountHolder(),
+//                frontUrl+"/admin/wallet?withdrawId=" + wr.getId(),
+//                frontUrl+"/admin/wallet?withdrawId=" + wr.getId() + "&cancel=true"
+//        );
+//
+//        if (qrResult == null ||
+//                (qrResult.getCheckoutUrl() == null && qrResult.getQrCodeUrl() == null)) {
+//            throw new AppException(ErrorCode.PAYOS_CREATE_QR_FAILED);
+//        }
+       String qrUrl = vieQRService.generateVieQRCode(
+               String.valueOf(BankBinConstants.getBankBinIgnoreCase(wr.getBankName())),
                 wr.getBankAccountNumber(),
-                wr.getBankAccountHolder(),
-                frontUrl+"/admin/wallet?withdrawId=" + wr.getId(),
-                frontUrl+"/admin/wallet?withdrawId=" + wr.getId() + "&cancel=true"
+               wr.getAmount(),
+                null,
+                wr.getBankAccountHolder()
         );
-
-        if (qrResult == null ||
-                (qrResult.getCheckoutUrl() == null && qrResult.getQrCodeUrl() == null)) {
-            throw new AppException(ErrorCode.PAYOS_CREATE_QR_FAILED);
-        }
-
-        wr.setPayoutProvider("PAYOS");
+        wr.setPayoutProvider("VietQR");
         wr.setPayoutStatus(PayoutStatus.CREATED);
-        wr.setPayoutOrderCode(String.valueOf(orderCode));
-        wr.setPayoutQrUrl(qrResult.getQrCodeUrl());
-        wr.setPayoutCheckoutUrl(qrResult.getCheckoutUrl());
+//        wr.setPayoutOrderCode(String.valueOf(orderCode));
+        wr.setPayoutQrUrl(qrUrl);
+//        wr.setPayoutCheckoutUrl(qrResult.getCheckoutUrl());
 
         withdrawRequestRepository.save(wr);
 
         WithdrawRequestResponse res = withdrawRequestMapper.toResponse(wr);
-        res.setQrCodeUrl(qrResult.getQrCodeUrl());
-        res.setCheckoutUrl(qrResult.getCheckoutUrl());
+        res.setQrCodeUrl(qrUrl);
+//        res.setCheckoutUrl(qrResult.getCheckoutUrl());
 
         return res;
     }
     @Override
     @Transactional
-    public WithdrawRequestResponse confirmWithdrawSuccess(Integer requestId, String adminNote) {
+    public WithdrawRequestResponse confirmWithdrawSuccess(Integer requestId, String adminNote, List<MultipartFile> evidents) {
 
         User admin = getCurrentUser();
 
@@ -247,8 +257,20 @@ public class WalletServiceImpl implements WalletService {
         wr.setPayoutAt(LocalDateTime.now());
 
         withdrawRequestRepository.save(wr);
+        // insert evident
+        saveEvidnetFile(evidents,wr);
 
         return withdrawRequestMapper.toResponse(wr);
+    }
+    public  void saveEvidnetFile( List<MultipartFile> evidents, WithdrawRequest wr) {
+        if(evidents != null && evidents.size() > 0) {
+            for (MultipartFile file : evidents) {
+                imageRepository.save(Image.builder()
+                        .withdrawRequest(wr)
+                        .imageUrl(cloudinaryService.uploadImage(file))
+                        .build());
+            }
+        }
     }
     @Override
     public WithdrawRequestResponse createWithdrawRequest(WithdrawRequestCreationRequest request) {
@@ -261,7 +283,7 @@ public class WalletServiceImpl implements WalletService {
         if (request.getAmount().compareTo(BigDecimal.ZERO) <= 0) {
             throw new AppException(ErrorCode.INVALID_AMOUNT);
         }
-
+log.info("Wallet balance: {}, request amount {}", wallet.getTotalBalance(),request.getAmount());
         if (wallet.getTotalBalance().compareTo(request.getAmount()) < 0) {
             throw new AppException(ErrorCode.INSUFFICIENT_BALANCE);
         }
@@ -316,7 +338,7 @@ public class WalletServiceImpl implements WalletService {
 
 
     @Override
-    public WithdrawRequestResponse rejectWithdraw(Integer requestId, String adminNote) {
+    public WithdrawRequestResponse rejectWithdraw(Integer requestId, String adminNote, List<MultipartFile> files) {
         User admin = getCurrentUser();
 
         WithdrawRequest wr = withdrawRequestRepository.findById(requestId)
@@ -338,6 +360,8 @@ public class WalletServiceImpl implements WalletService {
             wallet.setTotalBalance(wallet.getTotalBalance().add(wr.getAmount())); // trả tiền lại
         }
         walletRepository.save(wallet);
+        // save image
+        saveEvidnetFile(files,wr);
 
         return withdrawRequestMapper.toResponse(wr);
     }

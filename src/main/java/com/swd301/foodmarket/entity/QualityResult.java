@@ -28,6 +28,9 @@ public class QualityResult {
     private OrderDetail orderDetail;
     @OneToMany(mappedBy = "qualityResult")
     private List<QualityCheck> qualityChecks = new ArrayList<>();
+    private Double  rejectedWeight = 0.0;
+    @Builder.Default
+    private boolean refunded = false;
     @Builder.Default
     private LocalDateTime createdAt = LocalDateTime.now();
 }

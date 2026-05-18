@@ -18,6 +18,7 @@ import com.swd301.foodmarket.repository.PaymentRepository;
 import com.swd301.foodmarket.repository.TransactionRepository;
 import com.swd301.foodmarket.repository.WalletRepository;
 import com.swd301.foodmarket.service.CartService;
+import com.swd301.foodmarket.service.NotificationService;
 import com.swd301.foodmarket.service.PaymentService;
 import com.swd301.foodmarket.service.PayosService;
 import jakarta.transaction.Transactional;
@@ -28,6 +29,7 @@ import org.springframework.stereotype.Service;
 
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
+import java.util.List;
 
 @Service
 @RequiredArgsConstructor
@@ -41,6 +43,7 @@ public class PaymentServiceImpl implements PaymentService {
     private final TransactionRepository transactionRepository;
     private final CartService cartService;
     private final WalletRepository walletRepository;
+    private final NotificationService notificationService;
 
     @Override
     public PaymentResponse createPayment(CreatePaymentRequest request) {

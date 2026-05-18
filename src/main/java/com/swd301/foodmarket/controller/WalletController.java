@@ -8,8 +8,10 @@ import com.swd301.foodmarket.dto.response.WithdrawRequestResponse;
 import com.swd301.foodmarket.service.WalletService;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
+import org.springframework.http.MediaType;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
+import org.springframework.web.multipart.MultipartFile;
 
 import java.util.List;
 
@@ -77,13 +79,14 @@ public class WalletController {
         }
 
         // Admin duyệt
-        @PutMapping("/withdraw-requests/{id}/confirm-success")
+        @PutMapping(value = "/withdraw-requests/{id}/confirm-success",consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
         @PreAuthorize("hasRole('ADMIN')")
         public ApiResponse<WithdrawRequestResponse> confirmSuccess(
-                        @PathVariable Integer id,
-                        @RequestParam(required = false) String note) {
+                @PathVariable Integer id,
+                @RequestParam(required = false) String note,
+                @RequestPart List<MultipartFile> evidents) {
                 return ApiResponse.<WithdrawRequestResponse>builder()
-                                .result(walletService.confirmWithdrawSuccess(id, note))
+                                .result(walletService.confirmWithdrawSuccess(id, note,evidents))
                                 .build();
         }
 
@@ -96,13 +99,14 @@ public class WalletController {
         }
 
         // Admin từ chối
-        @PutMapping("/withdraw-requests/{id}/reject")
+        @PutMapping(value = "/withdraw-requests/{id}/reject",consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
         @PreAuthorize("hasRole('ADMIN')")
         public ApiResponse<WithdrawRequestResponse> reject(
                         @PathVariable Integer id,
-                        @RequestParam(required = false) String note) {
+                        @RequestParam(required = false) String note,
+                        @RequestPart(required = false) List<MultipartFile> evidents) {
                 return ApiResponse.<WithdrawRequestResponse>builder()
-                                .result(walletService.rejectWithdraw(id, note))
+                                .result(walletService.rejectWithdraw(id, note, evidents))
                                 .build();
         }
 

@@ -28,4 +28,7 @@ public class Image {
     @ManyToOne
     @JoinColumn(name = "quality_check_id")
     private QualityCheck qualityCheck;
+    @ManyToOne
+    @JoinColumn(name = "withDraw_id")
+    private WithdrawRequest withdrawRequest;
 }

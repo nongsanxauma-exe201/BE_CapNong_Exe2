@@ -6,10 +6,7 @@ import com.swd301.foodmarket.dto.request.UpdateOrderStatusRequest;
 import com.swd301.foodmarket.dto.response.AvailableOrderResponse;
 import com.swd301.foodmarket.dto.response.ShipperLocationResponse;
 import com.swd301.foodmarket.dto.response.ShipperOrderResponse;
-import com.swd301.foodmarket.entity.Order;
-import com.swd301.foodmarket.entity.ShipperLocation;
-import com.swd301.foodmarket.entity.User;
-import com.swd301.foodmarket.entity.Wallet;
+import com.swd301.foodmarket.entity.*;
 import com.swd301.foodmarket.enums.OrderStatus;
 import com.swd301.foodmarket.enums.RoleName;
 import com.swd301.foodmarket.enums.WalletType;
@@ -320,7 +317,25 @@ public class ShipperServiceImpl implements ShipperService {
         return toShipperOrderResponse(order);
     }
 
+    // Nếu tính tiền bằng COD thì sẽ refund là xong
+    // với PAy os thì mình sẽ thêm api  canRecieve tiền hoàn nếu có thì buyer ấn vào nhập stk tên ngân hàng và sau đó
+    // tạo ra request withdraw/ tạo request refund cũng được rồi admin chuyển cho buyer là xong
+    public BigDecimal calculateRefundAmount(Order order) {
+        List<OrderDetail> details = order.getOrderDetails();
+        BigDecimal refundAmount = BigDecimal.ZERO;
+        for(OrderDetail detail : details) {
+            QualityResult qualityResult = detail.getQualityResult();
+            double percentage = 0;
+            if (qualityResult != null && qualityResult.getRejectedWeight() > 0) {
+                percentage = (double) (qualityResult.getRejectedWeight() * 100) / detail.getQuantity();
+            }
+            if (percentage > 5) {
+                refundAmount = refundAmount.add(detail.getUnitPrice().multiply(BigDecimal.valueOf(qualityResult.getRejectedWeight())));
+            }
+        }
+        return refundAmount;
 
+    }
     @Override
     public List<ShipperOrderResponse> getMyOrders() {
         User shipper = getCurrentShipper();

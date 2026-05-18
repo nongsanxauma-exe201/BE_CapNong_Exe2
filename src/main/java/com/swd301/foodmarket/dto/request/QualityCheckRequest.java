@@ -11,6 +11,8 @@ public class QualityCheckRequest {
     private com.swd301.foodmarket.enums.QualityResult qualityResult;
     private Integer orderDetailId;
     private List<QualityCheckingRequest> qualityChecks;
+    private double  rejectedWeight;
+
     @Data
     public static class QualityCheckingRequest{
         private Integer qualityCrieriaId;

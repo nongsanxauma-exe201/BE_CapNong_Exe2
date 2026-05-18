@@ -4,6 +4,8 @@ package com.swd301.foodmarket.exception;
 import lombok.Getter;
 import org.springframework.http.HttpStatus;
 
+import java.math.BigDecimal;
+
 
 @Getter
 public enum ErrorCode {
@@ -28,6 +30,7 @@ public enum ErrorCode {
     PRODUCT_OUT_OF_STOCK(1007, "Product is out of stock", HttpStatus.BAD_REQUEST),
     USER_NOT_EXISTED(10010, "User not existed", HttpStatus.NOT_FOUND),
     MYSTERY_BOX_SOLD_OUT(10011, "Mystery box is sold out", HttpStatus.BAD_REQUEST),
+    INVALID_LOGIN(10012, "Email or Password wrong", HttpStatus.BAD_REQUEST),
     //   Create user errors
     EMAIL_INVALID(1006, "Email invalid", HttpStatus.BAD_REQUEST),
     EMAIL_REQUIRED(1009, "Email required", HttpStatus.BAD_REQUEST),
@@ -95,6 +98,13 @@ public enum ErrorCode {
     // Quality Check errors
     QUALITY_CRIERIA_NOT_FOUND(10001, "Quality criteria not found", HttpStatus.NOT_FOUND),
     QUALITY_CHECK_NOT_FOUND(10002, "Quality check not found", HttpStatus.NOT_FOUND),
+    // Vie QR
+    BANK_NOT_FOUND(11001, "bankBin is required", HttpStatus.BAD_REQUEST),
+    ACCOUNT_NOT_FOUND(11002, "accountNo is required", HttpStatus.BAD_REQUEST),
+    INVALID_MONEY(12001, "amount must be greater than 0", HttpStatus.BAD_REQUEST),
+
+
+
     ;
 
     private final int code;
