@@ -779,34 +779,34 @@ INSERT INTO orders (buyer_id,shop_owner_id,shipper_id,shipping_fee,recipient_nam
 VALUES
     (@buyer1_id,@shop1_id,NULL,15000,'Ngô Gia Sang','0911111111',
      'Đ. Võ Trường Toản, Linh Trung, Thủ Đức, TP.HCM',10.8651,106.7752,10.8697,106.7717,
-     'Đóng gói cẩn thận giúp mình nhé','QUALITY_APPROVED',130000,'COD',
+     'Đóng gói cẩn thận giúp mình nhé','QUALITY_CHECKED',130000,'COD',
      DATE_SUB(NOW(),INTERVAL 20 MINUTE)),
 
     (@buyer1_id,@shop1_id,NULL,15000,'Ngô Gia Sang','0911111111',
      'Đ. Võ Trường Toản, Linh Trung, Thủ Đức, TP.HCM',10.8651,106.7752,10.8697,106.7717,
-     'Trái cây dễ dập, bọc kỹ giúp mình','QUALITY_APPROVED',320000,'PAYOS',
+     'Trái cây dễ dập, bọc kỹ giúp mình','QUALITY_CHECKED',320000,'PAYOS',
      DATE_SUB(NOW(),INTERVAL 35 MINUTE)),
 
     (@buyer1_id,@shop2_id,NULL,15000,'Ngô Gia Sang','0911111111',
      'A15 Tiền Giang, Đông Hòa, Dĩ An, Bình Dương',10.8978,106.7731,10.9021,106.7698,
-     NULL,'QUALITY_APPROVED',220000,'COD',
+     NULL,'QUALITY_CHECKED',220000,'COD',
      DATE_SUB(NOW(),INTERVAL 50 MINUTE)),
 
     (@buyer1_id,@shop2_id,NULL,15000,'Ngô Gia Sang','0911111111',
      'A15 Tiền Giang, Đông Hòa, Dĩ An, Bình Dương',10.8978,106.7731,10.9021,106.7698,
-     NULL,'QUALITY_APPROVED',119000,'COD',
+     NULL,'QUALITY_CHECKED',119000,'COD',
      DATE_SUB(NOW(),INTERVAL 65 MINUTE)),
 
     (@buyer1_id,@shop1_id,NULL,15000,'Ngô Gia Sang','0911111111',
      'Đ. Võ Trường Toản, Linh Trung, Thủ Đức, TP.HCM',10.8651,106.7752,10.8697,106.7717,
-     NULL,'QUALITY_APPROVED',194000,'PAYOS',
+     NULL,'QUALITY_CHECKED',194000,'PAYOS',
      DATE_SUB(NOW(),INTERVAL 80 MINUTE));
 
-SET @qa1=(SELECT order_id FROM orders WHERE status='QUALITY_APPROVED' AND shop_owner_id=@shop1_id ORDER BY created_at DESC LIMIT 1 OFFSET 0);
-SET @qa2=(SELECT order_id FROM orders WHERE status='QUALITY_APPROVED' AND shop_owner_id=@shop1_id ORDER BY created_at DESC LIMIT 1 OFFSET 1);
-SET @qa3=(SELECT order_id FROM orders WHERE status='QUALITY_APPROVED' AND shop_owner_id=@shop2_id ORDER BY created_at DESC LIMIT 1 OFFSET 0);
-SET @qa4=(SELECT order_id FROM orders WHERE status='QUALITY_APPROVED' AND shop_owner_id=@shop2_id ORDER BY created_at DESC LIMIT 1 OFFSET 1);
-SET @qa5=(SELECT order_id FROM orders WHERE status='QUALITY_APPROVED' AND shop_owner_id=@shop1_id ORDER BY created_at ASC LIMIT 1);
+SET @qa1=(SELECT order_id FROM orders WHERE status='QUALITY_CHECKED' AND shop_owner_id=@shop1_id ORDER BY created_at DESC LIMIT 1 OFFSET 0);
+SET @qa2=(SELECT order_id FROM orders WHERE status='QUALITY_CHECKED' AND shop_owner_id=@shop1_id ORDER BY created_at DESC LIMIT 1 OFFSET 1);
+SET @qa3=(SELECT order_id FROM orders WHERE status='QUALITY_CHECKED' AND shop_owner_id=@shop2_id ORDER BY created_at DESC LIMIT 1 OFFSET 0);
+SET @qa4=(SELECT order_id FROM orders WHERE status='QUALITY_CHECKED' AND shop_owner_id=@shop2_id ORDER BY created_at DESC LIMIT 1 OFFSET 1);
+SET @qa5=(SELECT order_id FROM orders WHERE status='QUALITY_CHECKED' AND shop_owner_id=@shop1_id ORDER BY created_at ASC LIMIT 1);
 
 INSERT INTO order_details (order_id,product_id,quantity,unit_price,is_requested_return) VALUES
                                                                                             (@qa1,@p_ca_rot,3,25000,0), (@qa1,@p_khoai_tay,2,30000,0),
@@ -953,7 +953,7 @@ SELECT 'exe.sql executed successfully!' AS result;
 -- Dang nhap: staff@gmail.com / Admin@123
 -- ============================================================
 -- [1] TRANG PACKING (/staff/pack):
---     - Section "Cho dong goi": 5 don QUALITY_APPROVED
+--     - Section "Cho dong goi": 5 don QUALITY_CHECKED
 --       * Ca rot + Khoai tay (shop1)
 --       * Dau tay + Tao (shop1)
 --       * Xoai + Cam (shop2)

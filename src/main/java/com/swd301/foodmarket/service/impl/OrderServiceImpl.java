@@ -168,9 +168,9 @@ public class OrderServiceImpl implements OrderService {
                 .incomingOrders(orderRepository.countByStatus(OrderStatus.SHIPPING_TO_WAREHOUSE))
                 .quantityCheckedReject(orderRepository.countByStatus(OrderStatus.QUALITY_REJECTED))
                 .qualityCheckingOrders(orderDetailRepository.countByOrder_Status(OrderStatus.ARRIVED_AT_WAREHOUSE))
-                .packagingOrders(orderRepository.countByStatus(OrderStatus.QUALITY_APPROVED))
+                .packagingOrders(orderRepository.countByStatus(OrderStatus.QUALITY_CHECKED))
                 .readyOrders(orderRepository.countByStatus(OrderStatus.READY))
-                .approvedTodayOrders(trackingRepository.countByCreatedAtBetweenAndStatus(startOfDay,endOfDay,OrderStatus.QUALITY_APPROVED))
+                .approvedTodayOrders(trackingRepository.countByCreatedAtBetweenAndStatus(startOfDay,endOfDay,OrderStatus.QUALITY_CHECKED))
                 .pendingFarmerApprovals(orderRepository.countDistinctShopOwnerIdByStatus(OrderStatus.ARRIVED_AT_WAREHOUSE))
                 .build();
         return response;
