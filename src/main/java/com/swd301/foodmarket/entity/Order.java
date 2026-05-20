@@ -112,4 +112,8 @@ public class Order {
     }
     @OneToMany(mappedBy = "order")
     List<Tracking> trackings = new ArrayList<>();
+
+    // tiền hoàn khi kiểm tra có vấn đề về hàng sau kiem tra chat luong
+    BigDecimal refundAmount;
+    String refundReason;
 }

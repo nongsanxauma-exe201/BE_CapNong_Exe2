@@ -17,6 +17,7 @@ public interface OrderRepository extends JpaRepository<Order,Integer>
 {
 
     List<Order> findByShipperIsNullAndStatus(OrderStatus status);
+    Page<Order> findByShipperIsNullAndStatus(OrderStatus status,Pageable pageable);
 
     // Đơn của shipper này
     List<Order> findByShipper(User shipper);
@@ -58,4 +59,6 @@ public interface OrderRepository extends JpaRepository<Order,Integer>
     Integer countDistinctShopOwnerIdByStatus(@Param("status") OrderStatus status);
 
     Integer countDistinctShopOwnerIdByStatusIsIn(Collection<OrderStatus> statuses);
+
+
 }
