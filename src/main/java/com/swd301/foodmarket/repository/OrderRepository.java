@@ -12,6 +12,7 @@ import org.springframework.data.repository.query.Param;
 
 import java.util.Collection;
 import java.util.List;
+import java.util.Optional;
 
 public interface OrderRepository extends JpaRepository<Order,Integer>
 {
@@ -50,6 +51,9 @@ public interface OrderRepository extends JpaRepository<Order,Integer>
     Page<Order> findAllByStatusIsIn(Collection<OrderStatus> statuses, Pageable pageable);
 
     Integer countByStatus(OrderStatus status);
+
+    @Query("SELECT COUNT(o) FROM Order o WHERE o.status IN :statuses")
+    Integer countByStatusIn(@Param("statuses") List<OrderStatus> statuses);
     @Query("""
     SELECT COUNT(DISTINCT o.shopOwner.id)
     FROM Order o
@@ -57,4 +61,7 @@ public interface OrderRepository extends JpaRepository<Order,Integer>
 """)
     Integer countDistinctShopOwnerIdByStatus(@Param("status") OrderStatus status);
 
+    Optional<Order> findFirstByShipperIdAndStatus(Integer shipperId, OrderStatus status);
+
+    List<Order> findByShipperIdAndStatus(Integer shipperId, OrderStatus status);
 }

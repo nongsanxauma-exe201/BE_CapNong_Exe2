@@ -19,6 +19,9 @@ public class StaffOrderReportResponse {
     // Đơn hàng đã đạt chuẩn và cần đóng gói
     private Integer packagingOrders;
 
+    // Đơn hàng đã đóng gói xong, chờ shipper lấy
+    private Integer readyOrders;
+
     // Số lượng nông dân cần được duyệt / xử lý
     private Integer pendingFarmerApprovals;
 

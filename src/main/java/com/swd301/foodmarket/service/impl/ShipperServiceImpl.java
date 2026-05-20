@@ -32,6 +32,7 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
+import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.List;
 import java.util.stream.Collectors;
@@ -137,30 +138,28 @@ public class ShipperServiceImpl implements ShipperService {
     @Override
     @Transactional
     public List<AvailableOrderResponse> getAvailableOrdersNearby(Double shipperLat, Double shipperLng) {
-        getCurrentShipper();
+        User shipper = getCurrentShipper();
 
         LatLong shipperLocation = new LatLong(shipperLat, shipperLng);
-        List<Order> availableOrders = orderRepository.findByShipperIsNullAndStatus(OrderStatus.CONFIRMED);
 
-        log.info("[SHIPPER] Finding orders near ({}, {}), total CONFIRMED: {}",
+        // Chỉ query READY + chưa có shipper (tự pick)
+        List<Order> availableOrders = orderRepository
+                .findByShipperIsNullAndStatus(OrderStatus.READY);
+
+        log.info("[SHIPPER] Finding orders near ({}, {}), total READY: {}",
                 shipperLat, shipperLng, availableOrders.size());
 
         return availableOrders.stream()
                 .map(order -> {
-                    // ✅ Geocode shop (điểm lấy hàng)
                     LatLong shopLocation = getOrGeocodeShopLocation(order);
-
-                    // ✅ Geocode nhà buyer (điểm giao hàng)
                     LatLong buyerLocation = getOrGeocodeShippingLocation(order);
 
-                    // ✅ Khoảng cách shipper → shop (dùng để sort, quan trọng nhất)
                     Double shipToShopKm = null;
                     if (shopLocation != null) {
                         double d = goongMapService.getDistanceKm(shipperLocation, shopLocation);
                         shipToShopKm = d == Double.MAX_VALUE ? null : d;
                     }
 
-                    // ✅ Khoảng cách shop → nhà buyer (shipper biết tổng quãng đường)
                     Double shopToBuyerKm = null;
                     if (shopLocation != null && buyerLocation != null) {
                         double d = goongMapService.getDistanceKm(shopLocation, buyerLocation);
@@ -182,10 +181,9 @@ public class ShipperServiceImpl implements ShipperService {
                             .estimatedDeliveryDate(order.getEstimatedDeliveryDate())
                             .shipToShopKm(shipToShopKm)
                             .shopToBuyerKm(shopToBuyerKm)
-                            .distanceKm(shipToShopKm) // backward compat
+                            .distanceKm(shipToShopKm)
                             .build();
                 })
-                // ✅ Sort theo shipper → shop (gần shop nhất trước)
                 .sorted(Comparator.comparingDouble(o ->
                         o.getShipToShopKm() != null ? o.getShipToShopKm() : Double.MAX_VALUE))
                 .limit(6)
@@ -198,12 +196,17 @@ public class ShipperServiceImpl implements ShipperService {
         User shipper = getCurrentShipper();
         Order order = orderRepository.findById(orderId)
                 .orElseThrow(() -> new AppException(ErrorCode.ORDER_NOT_FOUND));
-        if (order.getShipper() != null) throw new AppException(ErrorCode.ORDER_ALREADY_TAKEN);
-        if (order.getStatus() != OrderStatus.CONFIRMED) throw new AppException(ErrorCode.INVALID_ORDER_STATUS);
+
+        // Chỉ nhận đơn READY chưa có shipper
+        if (order.getStatus() != OrderStatus.READY || order.getShipper() != null) {
+            throw new AppException(ErrorCode.INVALID_ORDER_STATUS);
+        }
+
         order.setShipper(shipper);
         order.setStatus(OrderStatus.SHIPPING);
         orderRepository.save(order);
-        log.info("Shipper {} accepted order {}", shipper.getId(), orderId);
+
+        log.info("Shipper {} accepted order {} (self-pick)", shipper.getId(), orderId);
         return toShipperOrderResponse(order);
     }
 

@@ -15,6 +15,7 @@ TRUNCATE TABLE payments;
 TRUNCATE TABLE transactions;
 TRUNCATE TABLE order_details;
 TRUNCATE TABLE order_mystery_boxes;
+TRUNCATE TABLE trackings;
 TRUNCATE TABLE orders;
 TRUNCATE TABLE withdraw_requests;
 TRUNCATE TABLE wallets;
@@ -53,11 +54,11 @@ ALTER TABLE roles
         'SHIPPER',
         'STAFF'
         );
-INSERT INTO roles (name, description) VALUES   ('STAFF','staff personnel')
-#     ('ADMIN','System administrator'),
-#     ('BUYER','Regular customer'),
-#     ('SHOP_OWNER','Shop owner / Seller'),
-#     ('SHIPPER','Shipment personnel'),
+INSERT INTO roles (name, description) VALUES   ('STAFF','staff personnel'),
+    ('ADMIN','System administrator'),
+    ('BUYER','Regular customer'),
+    ('SHOP_OWNER','Shop owner / Seller'),
+    ('SHIPPER','Shipment personnel')
 
     ON DUPLICATE KEY UPDATE description=VALUES(description);
 
@@ -125,6 +126,27 @@ VALUES ('staff@gmail.com','$2a$12$lU/EpH6mhkL4ERuMRO2cjeeT1CPHxqAyDHGwnDctIWzojS
 ON DUPLICATE KEY UPDATE email=email;
 SET @staff_id=(SELECT id FROM users WHERE email='staff@gmail.com');
 
+INSERT INTO users (email, password, role_id, status, full_name, phone_number, address, description, rating_average, license, vehicle_number, license_image_url, vehicle_doc_image_url, create_at, logo_url)
+VALUES (
+           'shipper3@gmail.com',
+           '$2a$12$lU/EpH6mhkL4ERuMRO2cjeeT1CPHxqAyDHGwnDctIWzojS6k/oG/K',
+           @shipper_role_id,
+           'ACTIVE',
+           'Lê Văn Nhanh',
+           '0933333334',
+           'Thủ Đức, TP.HCM',
+           'Shipper chuyên nghiệp khu vực Thủ Đức',
+           4.9,
+           'B2-11223344',
+           '59-X2 456.78',
+           'https://res.cloudinary.com/dfp44sbsj/image/upload/v1774253418/brands/tftlykogelfaisztf7fk.jpg',
+           'https://res.cloudinary.com/dfp44sbsj/image/upload/v1774253567/brands/cneiljr2dzws18oibzuq.jpg',
+           NOW(),
+           'https://res.cloudinary.com/dfp44sbsj/image/upload/v1774252921/brands/xu1pv9ty2njacb3bhozh.jpg'
+       )
+ON DUPLICATE KEY UPDATE email = email;
+SET @shipper3_id = (SELECT id FROM users WHERE email = 'shipper3@gmail.com');
+
 -- ============================================================
 -- 4. WALLETS
 -- ============================================================
@@ -143,6 +165,9 @@ VALUES (@shipper1_id,'ACTIVE',60000,0,60000,0,0,'SHIPPER'),
 SET @wallet_shop1_id=(SELECT wallet_id FROM wallets WHERE shop_id=@shop1_id);
 SET @wallet_shop2_id=(SELECT wallet_id FROM wallets WHERE shop_id=@shop2_id);
 SET @wallet_shop3_id=(SELECT wallet_id FROM wallets WHERE shop_id=@shop3_id);
+
+INSERT INTO wallets (shipper_id, status, total_balance, frozen_balance, total_revenue_all_time, total_withdrawn, commission_wallet, type)
+VALUES (@shipper3_id, 'ACTIVE', 0, 0, 0, 0, 0, 'SHIPPER');
 
 -- ============================================================
 -- 5. PRODUCTS
@@ -302,11 +327,30 @@ ALTER TABLE orders
         'QUALITY_CHECKED',
         'QUALITY_APPROVED',
         'QUALITY_REJECTED',
+        'READY',
         'DELIVERED',
         'CANCELLED',
         'PAID',
         'FAILED'
         ) NOT NULL;
+-- Sync ENUM trackings.status với OrderStatus Java enum
+ALTER TABLE trackings
+    MODIFY COLUMN status ENUM(
+        'PENDING',
+        'CONFIRMED',
+        'SHIPPING',
+        'SHIPPING_TO_WAREHOUSE',
+        'ARRIVED_AT_WAREHOUSE',
+        'QUALITY_CHECKING',
+        'QUALITY_CHECKED',
+        'QUALITY_APPROVED',
+        'QUALITY_REJECTED',
+        'READY',
+        'DELIVERED',
+        'CANCELLED',
+        'PAID',
+        'FAILED'
+        ) NULL;
 
 
 
@@ -431,6 +475,9 @@ INSERT INTO order_details (order_id,product_id,quantity,unit_price,is_requested_
 
 INSERT IGNORE INTO shipper_locations (shipper_id,order_id,latitude,longitude,updated_at)
 VALUES (@shipper1_id,@os1,10.8670,106.7730,NOW());
+
+INSERT IGNORE INTO shipper_locations (shipper_id, order_id, latitude, longitude, updated_at)
+VALUES (@shipper3_id, NULL, 10.8651, 106.7752, NOW());
 -- ============================================================
 -- 9. REVIEWS
 -- ============================================================
@@ -714,11 +761,168 @@ INSERT INTO transactions (payment_id,payment_gateway,amount,balance_after,status
 (NULL,'PAYOS',150000.00,217630.00,'PENDING',
  'Đang xử lý rút tiền về tài khoản Techcombank 19034567890123 - Lê Thị Ngọc');
 
+-- ============================================================
+-- 22. TEST DATA CHO 3 TÍNH NĂNG STAFF
+--     Tính năng 1: Đóng gói  → status QUALITY_APPROVED → READY
+--     Tính năng 2: Gọi Shipper → status READY (chưa có shipper)
+--     Tính năng 3: Hồ sơ nhân viên → user staff@gmail.com
+-- ============================================================
+
+-- ----------------------------------------------------------------
+-- TÍNH NĂNG 1: ĐÓNG GÓI — 5 đơn QUALITY_APPROVED
+-- Staff tick checklist → bấm "Hoàn tất đóng gói" → READY
+-- ----------------------------------------------------------------
+INSERT INTO orders (buyer_id,shop_owner_id,shipper_id,shipping_fee,recipient_name,recipient_phone,
+                    shipping_address,shipping_latitude,shipping_longitude,
+                    shop_latitude,shop_longitude,
+                    note,status,total_amount,payment_method,created_at)
+VALUES
+    (@buyer1_id,@shop1_id,NULL,15000,'Ngô Gia Sang','0911111111',
+     'Đ. Võ Trường Toản, Linh Trung, Thủ Đức, TP.HCM',10.8651,106.7752,10.8697,106.7717,
+     'Đóng gói cẩn thận giúp mình nhé','QUALITY_APPROVED',130000,'COD',
+     DATE_SUB(NOW(),INTERVAL 20 MINUTE)),
+
+    (@buyer1_id,@shop1_id,NULL,15000,'Ngô Gia Sang','0911111111',
+     'Đ. Võ Trường Toản, Linh Trung, Thủ Đức, TP.HCM',10.8651,106.7752,10.8697,106.7717,
+     'Trái cây dễ dập, bọc kỹ giúp mình','QUALITY_APPROVED',320000,'PAYOS',
+     DATE_SUB(NOW(),INTERVAL 35 MINUTE)),
+
+    (@buyer1_id,@shop2_id,NULL,15000,'Ngô Gia Sang','0911111111',
+     'A15 Tiền Giang, Đông Hòa, Dĩ An, Bình Dương',10.8978,106.7731,10.9021,106.7698,
+     NULL,'QUALITY_APPROVED',220000,'COD',
+     DATE_SUB(NOW(),INTERVAL 50 MINUTE)),
+
+    (@buyer1_id,@shop2_id,NULL,15000,'Ngô Gia Sang','0911111111',
+     'A15 Tiền Giang, Đông Hòa, Dĩ An, Bình Dương',10.8978,106.7731,10.9021,106.7698,
+     NULL,'QUALITY_APPROVED',119000,'COD',
+     DATE_SUB(NOW(),INTERVAL 65 MINUTE)),
+
+    (@buyer1_id,@shop1_id,NULL,15000,'Ngô Gia Sang','0911111111',
+     'Đ. Võ Trường Toản, Linh Trung, Thủ Đức, TP.HCM',10.8651,106.7752,10.8697,106.7717,
+     NULL,'QUALITY_APPROVED',194000,'PAYOS',
+     DATE_SUB(NOW(),INTERVAL 80 MINUTE));
+
+SET @qa1=(SELECT order_id FROM orders WHERE status='QUALITY_APPROVED' AND shop_owner_id=@shop1_id ORDER BY created_at DESC LIMIT 1 OFFSET 0);
+SET @qa2=(SELECT order_id FROM orders WHERE status='QUALITY_APPROVED' AND shop_owner_id=@shop1_id ORDER BY created_at DESC LIMIT 1 OFFSET 1);
+SET @qa3=(SELECT order_id FROM orders WHERE status='QUALITY_APPROVED' AND shop_owner_id=@shop2_id ORDER BY created_at DESC LIMIT 1 OFFSET 0);
+SET @qa4=(SELECT order_id FROM orders WHERE status='QUALITY_APPROVED' AND shop_owner_id=@shop2_id ORDER BY created_at DESC LIMIT 1 OFFSET 1);
+SET @qa5=(SELECT order_id FROM orders WHERE status='QUALITY_APPROVED' AND shop_owner_id=@shop1_id ORDER BY created_at ASC LIMIT 1);
+
+INSERT INTO order_details (order_id,product_id,quantity,unit_price,is_requested_return) VALUES
+                                                                                            (@qa1,@p_ca_rot,3,25000,0), (@qa1,@p_khoai_tay,2,30000,0),
+                                                                                            (@qa2,@p_dau_tay,1,180000,0), (@qa2,@p_tao,1,110000,0),
+                                                                                            (@qa3,@p2_xoai,2,85000,0), (@qa3,@p2_cam,1,35000,0),
+                                                                                            (@qa4,@p2_dua_hau,3,12000,0), (@qa4,@p2_thanh_long,2,35000,0),
+                                                                                            (@qa5,@p_bi_do,3,22000,0), (@qa5,@p_hanh_tay,2,25000,0), (@qa5,@p_toi,1,85000,0);
+
+-- ----------------------------------------------------------------
+-- TÍNH NĂNG 2: GỌI SHIPPER — 4 đơn READY chưa có shipper
+-- Staff chọn shipper → bấm "Phân công" → BE set shipperId + SHIPPING
+-- Hoặc shipper tự vào app thấy đơn READY → bấm nhận → SHIPPING
+-- ----------------------------------------------------------------
+INSERT INTO orders (buyer_id,shop_owner_id,shipper_id,shipping_fee,recipient_name,recipient_phone,
+                    shipping_address,shipping_latitude,shipping_longitude,
+                    shop_latitude,shop_longitude,
+                    note,status,total_amount,payment_method,created_at)
+VALUES
+    (@buyer1_id,@shop1_id,NULL,15000,'Ngô Gia Sang','0911111111',
+     'Đ. Võ Trường Toản, Linh Trung, Thủ Đức, TP.HCM',10.8651,106.7752,10.8697,106.7717,
+     'Giao trước 12h trưa','READY',80000,'COD',
+     DATE_SUB(NOW(),INTERVAL 95 MINUTE)),
+
+    (@buyer1_id,@shop2_id,NULL,15000,'Ngô Gia Sang','0911111111',
+     'A15 Tiền Giang, Đông Hòa, Dĩ An, Bình Dương',10.8978,106.7731,10.9021,106.7698,
+     NULL,'READY',110000,'COD',
+     DATE_SUB(NOW(),INTERVAL 110 MINUTE)),
+
+    (@buyer1_id,@shop1_id,NULL,15000,'Ngô Gia Sang','0911111111',
+     'Đ. Võ Trường Toản, Linh Trung, Thủ Đức, TP.HCM',10.8651,106.7752,10.8697,106.7717,
+     NULL,'READY',165000,'PAYOS',
+     DATE_SUB(NOW(),INTERVAL 125 MINUTE)),
+
+    (@buyer1_id,@shop2_id,NULL,15000,'Ngô Gia Sang','0911111111',
+     'A15 Tiền Giang, Đông Hòa, Dĩ An, Bình Dương',10.8978,106.7731,10.9021,106.7698,
+     NULL,'READY',95000,'COD',
+     DATE_SUB(NOW(),INTERVAL 140 MINUTE));
+
+SET @rd1=(SELECT order_id FROM orders WHERE status='READY' AND shop_owner_id=@shop1_id ORDER BY created_at DESC LIMIT 1 OFFSET 0);
+SET @rd2=(SELECT order_id FROM orders WHERE status='READY' AND shop_owner_id=@shop2_id ORDER BY created_at DESC LIMIT 1 OFFSET 0);
+SET @rd3=(SELECT order_id FROM orders WHERE status='READY' AND shop_owner_id=@shop1_id ORDER BY created_at ASC LIMIT 1);
+SET @rd4=(SELECT order_id FROM orders WHERE status='READY' AND shop_owner_id=@shop2_id ORDER BY created_at ASC LIMIT 1);
+
+INSERT INTO order_details (order_id,product_id,quantity,unit_price,is_requested_return) VALUES
+                                                                                            (@rd1,@p_ca_chua,2,35000,0), (@rd1,@p_dua_leo,1,15000,0),
+                                                                                            (@rd2,@p2_oi,2,30000,0), (@rd2,@p2_cam,1,35000,0),
+                                                                                            (@rd3,@p_gung,1,55000,0), (@rd3,@p_nghe,1,40000,0), (@rd3,@p2_sa,3,10000,0),
+                                                                                            (@rd4,@p2_dua_hau,5,12000,0);
+
+-- ----------------------------------------------------------------
+-- SHIPPER LOCATIONS
+-- Shipper1 (ACTIVE): rảnh
+-- Shipper2 (PENDING): có trong bảng nhưng BE filter ACTIVE nên không hiện
+-- Shipper3 (ACTIVE): rảnh
+-- ----------------------------------------------------------------
+INSERT INTO shipper_locations (shipper_id, order_id, latitude, longitude, updated_at)
+VALUES (@shipper1_id, NULL, 10.8670, 106.7730, NOW())
+ON DUPLICATE KEY UPDATE order_id=NULL, latitude=10.8670, longitude=106.7730, updated_at=NOW();
+
+INSERT INTO shipper_locations (shipper_id, order_id, latitude, longitude, updated_at)
+VALUES (@shipper2_id, @os1, 10.8720, 106.7680, NOW())
+ON DUPLICATE KEY UPDATE order_id=@os1, latitude=10.8720, longitude=106.7680, updated_at=NOW();
+
+INSERT INTO shipper_locations (shipper_id, order_id, latitude, longitude, updated_at)
+VALUES (@shipper3_id, NULL, 10.8651, 106.7752, NOW())
+ON DUPLICATE KEY UPDATE order_id=NULL, latitude=10.8651, longitude=106.7752, updated_at=NOW();
+
+-- ----------------------------------------------------------------
+-- TÍNH NĂNG 3: PIPELINE STAFF — đơn ở các trạng thái kho
+-- ----------------------------------------------------------------
+INSERT INTO orders (buyer_id,shop_owner_id,shipper_id,shipping_fee,recipient_name,recipient_phone,
+                    shipping_address,shipping_latitude,shipping_longitude,
+                    shop_latitude,shop_longitude,
+                    note,status,total_amount,payment_method,created_at)
+VALUES
+    (@buyer1_id,@shop1_id,NULL,15000,'Ngô Gia Sang','0911111111',
+     'Đ. Võ Trường Toản, Linh Trung, Thủ Đức, TP.HCM',10.8651,106.7752,10.8697,106.7717,
+     NULL,'SHIPPING_TO_WAREHOUSE',145000,'COD',
+     DATE_SUB(NOW(),INTERVAL 155 MINUTE)),
+
+    (@buyer1_id,@shop2_id,NULL,15000,'Ngô Gia Sang','0911111111',
+     'A15 Tiền Giang, Đông Hòa, Dĩ An, Bình Dương',10.8978,106.7731,10.9021,106.7698,
+     NULL,'SHIPPING_TO_WAREHOUSE',175000,'PAYOS',
+     DATE_SUB(NOW(),INTERVAL 170 MINUTE)),
+
+    (@buyer1_id,@shop1_id,NULL,15000,'Ngô Gia Sang','0911111111',
+     'Đ. Võ Trường Toản, Linh Trung, Thủ Đức, TP.HCM',10.8651,106.7752,10.8697,106.7717,
+     NULL,'SHIPPING_TO_WAREHOUSE',98000,'COD',
+     DATE_SUB(NOW(),INTERVAL 185 MINUTE)),
+
+    (@buyer1_id,@shop1_id,NULL,15000,'Ngô Gia Sang','0911111111',
+     'Đ. Võ Trường Toản, Linh Trung, Thủ Đức, TP.HCM',10.8651,106.7752,10.8697,106.7717,
+     NULL,'ARRIVED_AT_WAREHOUSE',112000,'COD',
+     DATE_SUB(NOW(),INTERVAL 200 MINUTE)),
+
+    (@buyer1_id,@shop2_id,NULL,15000,'Ngô Gia Sang','0911111111',
+     'A15 Tiền Giang, Đông Hòa, Dĩ An, Bình Dương',10.8978,106.7731,10.9021,106.7698,
+     NULL,'ARRIVED_AT_WAREHOUSE',155000,'PAYOS',
+     DATE_SUB(NOW(),INTERVAL 215 MINUTE));
+
+SET @stw1=(SELECT order_id FROM orders WHERE status='SHIPPING_TO_WAREHOUSE' AND shop_owner_id=@shop1_id ORDER BY created_at DESC LIMIT 1 OFFSET 0);
+SET @stw2=(SELECT order_id FROM orders WHERE status='SHIPPING_TO_WAREHOUSE' AND shop_owner_id=@shop2_id ORDER BY created_at DESC LIMIT 1);
+SET @stw3=(SELECT order_id FROM orders WHERE status='SHIPPING_TO_WAREHOUSE' AND shop_owner_id=@shop1_id ORDER BY created_at ASC LIMIT 1);
+SET @atw1=(SELECT order_id FROM orders WHERE status='ARRIVED_AT_WAREHOUSE' AND shop_owner_id=@shop1_id ORDER BY created_at DESC LIMIT 1);
+SET @atw2=(SELECT order_id FROM orders WHERE status='ARRIVED_AT_WAREHOUSE' AND shop_owner_id=@shop2_id ORDER BY created_at DESC LIMIT 1);
+
+INSERT INTO order_details (order_id,product_id,quantity,unit_price,is_requested_return) VALUES
+                                                                                            (@stw1,@p_ca_rot,4,25000,0), (@stw1,@p_khoai_tay,1,30000,0),
+                                                                                            (@stw2,@p2_xoai,1,85000,0), (@stw2,@p2_cam,2,35000,0), (@stw2,@p2_oi,1,30000,0),
+                                                                                            (@stw3,@p_bi_do,2,22000,0), (@stw3,@p_hanh_tay,2,25000,0),
+                                                                                            (@atw1,@p_khoai_lang,2,28000,0), (@atw1,@p_gung,1,55000,0),
+                                                                                            (@atw2,@p2_thanh_long,2,35000,0), (@atw2,@p2_buoi,1,65000,0);
 SET FOREIGN_KEY_CHECKS = 1;
 
 -- ============================================================
 -- TỔNG KẾT DỮ LIỆU
--- ============================================================
 -- Roles:            4 (ADMIN, BUYER, SHOP_OWNER, SHIPPER)
 -- Categories:       2 (Củ, Quả/Trái cây)
 -- Users:            8 (1 admin, 2 buyer, 2 shipper, 3 shop)
@@ -743,6 +947,46 @@ SET FOREIGN_KEY_CHECKS = 1;
 -- Transactions:     8 (SUCCESS×3, PENDING×3, FAILED×1 + 1 withdraw)
 -- ============================================================
 SELECT 'exe.sql executed successfully!' AS result;
+
+-- ============================================================
+-- CHECKLIST KIEM TRA 3 TINH NANG STAFF
+-- Dang nhap: staff@gmail.com / Admin@123
+-- ============================================================
+-- [1] TRANG PACKING (/staff/pack):
+--     - Section "Cho dong goi": 5 don QUALITY_APPROVED
+--       * Ca rot + Khoai tay (shop1)
+--       * Dau tay + Tao (shop1)
+--       * Xoai + Cam (shop2)
+--       * Dua hau + Thanh long (shop2)
+--       * Bi do + Hanh tay + Toi (shop1)
+--     - Tick du 5 checklist -> nut "Bat dau dong goi" sang len
+--     - Bam "Bat dau dong goi" -> don chuyen sang PACK
+--     - Section "Dang dong goi": 2 don PACK
+--       * Khoai lang + Cu cai (shop1)
+--       * Nho + Buoi (shop2)
+--     - Bam "Hoan tat dong goi" -> don chuyen sang READY
+--
+-- [2] TRANG CALL SHIPPER (/staff/shipper):
+--     - Cot trai "Don san sang giao": 4 don READY
+--       * Ca chua + Dua leo (shop1)
+--       * Oi + Cam (shop2)
+--       * Gung + Nghe + Sa (shop1)
+--       * Dua hau (shop2)
+--     - Cot phai "Shipper khu vuc": 2 shipper online
+--       * Nguyen Van Hoang (shipper1): badge "Ranh"
+--       * Tran Giao Hang (shipper2): badge "Dang giao"
+--     - Chon shipper ranh -> bam "Phan cong Shipper"
+--     - Don bien mat khoi danh sach READY
+--
+-- [3] TRANG HO SO NHAN VIEN (/staff/profile):
+--     - Thong tin: Nhan vien, staff@gmail.com, 0900000009, TP.HCM
+--     - Bao cao tong quan:
+--       * Don dang van chuyen toi kho: 3
+--       * Don dang kiem duyet: 2
+--       * Don cho/dang dong goi: 7 (5 QUALITY_APPROVED + 2 PACK)
+--       * Don san sang giao: 4 (READY)
+--       * Nong dan cho duyet: 2
+-- ============================================================
 
 
 

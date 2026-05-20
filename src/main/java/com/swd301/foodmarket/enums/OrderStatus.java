@@ -10,6 +10,7 @@ public enum OrderStatus {
     QUALITY_CHECKED,
     QUALITY_APPROVED,
     QUALITY_REJECTED,
+    READY,      // Đã đóng gói xong, chờ shipper lấy
     DELIVERED,
     CANCELLED,
     PAID,

@@ -149,7 +149,8 @@ public class OrderServiceImpl implements OrderService {
                              OrderStatus.QUALITY_CHECKING,
                              OrderStatus.QUALITY_APPROVED,
                              OrderStatus.QUALITY_CHECKED,
-                             OrderStatus.QUALITY_REJECTED
+                             OrderStatus.QUALITY_REJECTED,
+                             OrderStatus.READY
                      )
              );
          }
@@ -168,6 +169,7 @@ public class OrderServiceImpl implements OrderService {
                 .quantityCheckedReject(orderRepository.countByStatus(OrderStatus.QUALITY_REJECTED))
                 .qualityCheckingOrders(orderDetailRepository.countByOrder_Status(OrderStatus.ARRIVED_AT_WAREHOUSE))
                 .packagingOrders(orderRepository.countByStatus(OrderStatus.QUALITY_APPROVED))
+                .readyOrders(orderRepository.countByStatus(OrderStatus.READY))
                 .approvedTodayOrders(trackingRepository.countByCreatedAtBetweenAndStatus(startOfDay,endOfDay,OrderStatus.QUALITY_APPROVED))
                 .pendingFarmerApprovals(orderRepository.countDistinctShopOwnerIdByStatus(OrderStatus.ARRIVED_AT_WAREHOUSE))
                 .build();
