@@ -58,6 +58,10 @@ public class Order {
     @JsonIgnore
     List<Payment> payments;
 
+    @ManyToMany(mappedBy = "orders")
+    @JsonIgnore
+    List<TripJoinRequest> tripJoinRequests;
+
     // ================= DATA =================
 
     @Column(name = "shipping_fee", precision = 18, scale = 2)
@@ -116,4 +120,7 @@ public class Order {
     // tiền hoàn khi kiểm tra có vấn đề về hàng sau kiem tra chat luong
     BigDecimal refundAmount;
     String refundReason;
+    @ManyToOne
+    @JoinColumn(name="trip_stop_id")
+    TripStop tripStop;
 }

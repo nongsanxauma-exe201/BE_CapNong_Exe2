@@ -43,6 +43,8 @@ public enum ErrorCode {
     PASSWORD_SAME_AS_OLD(1015, "The new password must not be the same as the old password", HttpStatus.BAD_REQUEST),
 
     MYSTERY_BOX_NOT_FOUND(2001, "Mystery box not found", HttpStatus.NOT_FOUND),
+    TRIP_NOT_FOUND(2002, "Trip not found", HttpStatus.NOT_FOUND),
+    TRIP_JOIN_REQUEST_NOT_FOUND(2003, "Trip join request not found", HttpStatus.NOT_FOUND),
 
     NOTIFICATION_NOT_FOUND(1016, "Notification not found", HttpStatus.NOT_FOUND),
     INVALID_NOTIFICATION_REQUEST(1017, "Invalid request data", HttpStatus.BAD_REQUEST),
@@ -103,7 +105,11 @@ public enum ErrorCode {
     ACCOUNT_NOT_FOUND(11002, "accountNo is required", HttpStatus.BAD_REQUEST),
     INVALID_MONEY(12001, "amount must be greater than 0", HttpStatus.BAD_REQUEST),
 
-
+    // Vehical
+    VEHICLE_NOT_FOUND(13001, "Vehicle not found", HttpStatus.NOT_FOUND),
+    VEHICLE_NUMBER_ALREADY_EXISTED(13002, "Vehicle number already existed", HttpStatus.BAD_REQUEST),
+    //Warehouse
+    WAREHOUSE_NOT_FOUND(14001, "Warehouse not found", HttpStatus.NOT_FOUND)
 
     ;
 
