@@ -1,9 +1,12 @@
 package com.swd301.foodmarket.dto.response;
 
+import com.swd301.foodmarket.entity.TripStop;
 import com.swd301.foodmarket.enums.TripStatus;
 import lombok.Data;
 
 import java.time.LocalDateTime;
+import java.util.List;
+
 @Data
 public class TripResponse {
     Integer id;
@@ -23,4 +26,9 @@ public class TripResponse {
     Double totalEstimatedDistanceKm;
     Boolean isShareable;
     TripStatus status;
+    Double basePrice;
+    Double distanceRate;
+    Double weightRate;
+    List<TripStopResponse> tripStops;
+
 }

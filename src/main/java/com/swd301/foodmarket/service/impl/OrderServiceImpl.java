@@ -186,7 +186,7 @@ public class OrderServiceImpl implements OrderService {
     @Override
     public PageResponse<OrderResponse> getAllOrdersPaged(int page, int size) {
         Pageable pageable = PageRequest.of(page, size, Sort.by("createdAt").descending());
-        Page<Order> pageResult = orderRepository.findAll(pageable);
+        Page<Order> pageResult = orderRepository.findByShopOwner(getCurrentUser(),pageable);
         return PageResponse.<OrderResponse>builder()
                 .content(pageResult.getContent().stream().map(orderMapper::toResponse).toList())
                 .page(pageResult.getNumber())

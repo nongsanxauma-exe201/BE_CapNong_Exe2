@@ -61,4 +61,8 @@ public interface OrderRepository extends JpaRepository<Order,Integer>
     Integer countDistinctShopOwnerIdByStatusIsIn(Collection<OrderStatus> statuses);
 
 
+
+    Page<Order> findByShopOwner(User shopOwner, Pageable pageable);
+
+    Page<Order> findByShopOwnerAndStatus(User shopOwner, OrderStatus status, Pageable pageable);
 }

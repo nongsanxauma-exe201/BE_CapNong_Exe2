@@ -35,65 +35,55 @@ public class RouteOptimizationServiceImpl implements RouteOptimizationService {
     private final RoutingService routingService;
     private final TripRepository tripRepository;
 
-    @Override
+//    @Override
+//    @Transactional
+//    public void calculateOptimalRoute(Trip trip) {
+//        log.info("Optimizing route for trip: {}", trip.getId());
+//
+//        // Remove existing stops for recalculation
+//        List<TripStop> existingStops = tripStopRepository.findByTripIdOrderBySequenceAsc(trip.getId());
+//        tripStopRepository.deleteAll(existingStops);
+//
+//        int sequence = 2;
+//
+//
+//        // 2. Add Approved Join Requests Locations (Ideally we should use GoongMapService Distance Matrix here)
+//        List<TripJoinRequest> acceptedRequests = tripJoinRequestRepository.findByTripIdAndStatus(trip.getId(), TripJoinStatus.ACCEPTED);
+//
+//        for (TripJoinRequest req : acceptedRequests) {
+//            TripStop reqStop = TripStop.builder()
+//                    .trip(trip)
+//                    .sequence(sequence++)
+//                    .lat(req.getPickupLat())
+//                    .lng(req.getPickupLng())
+//                    .farmer(req.getFarmer())
+//                    .stopType(TripStopType.PICKUP)
+//                    .order(req.getOrders())
+//                    .build();
+//            tripStopRepository.save(reqStop);
+//
+//            for (Order order : req.getOrders()) {
+//                order.setTripStop(reqStop);
+//                orderRepository.save(order);
+//            }
+//
+//        }
+//
+//        // 3. Add Warehouse Dropoff
+//        TripStop warehouseStop = TripStop.builder()
+//                .trip(trip)
+//                .sequence(sequence++)
+//                .lat(trip.getWarehouse().getLatitude())
+//                .lng(trip.getWarehouse().getLongitude())
+//                .stopType(TripStopType.WAREHOUSE_DROPOFF)
+//                .build();
+//        tripStopRepository.save(warehouseStop);
+//
+//        log.info("Route optimization completed for trip: {} with {} stops", trip.getId(), sequence - 1);
+//    }
+
     @Transactional
     public void calculateOptimalRoute(Trip trip) {
-        log.info("Optimizing route for trip: {}", trip.getId());
-
-        // Remove existing stops for recalculation
-        List<TripStop> existingStops = tripStopRepository.findByTripIdOrderBySequenceAsc(trip.getId());
-        tripStopRepository.deleteAll(existingStops);
-
-        int sequence = 1;
-
-        // 1. Add Trip Owner's Start Location
-        TripStop ownerStop = TripStop.builder()
-                .trip(trip)
-                .sequence(sequence++)
-                .lat(trip.getStartLat())
-                .lng(trip.getStartLng())
-                .farmer(trip.getOwner())
-                .stopType(TripStopType.PICKUP)
-                .build();
-        tripStopRepository.save(ownerStop);
-
-        // 2. Add Approved Join Requests Locations (Ideally we should use GoongMapService Distance Matrix here)
-        List<TripJoinRequest> acceptedRequests = tripJoinRequestRepository.findByTripIdAndStatus(trip.getId(), TripJoinStatus.ACCEPTED);
-
-        for (TripJoinRequest req : acceptedRequests) {
-            TripStop reqStop = TripStop.builder()
-                    .trip(trip)
-                    .sequence(sequence++)
-                    .lat(req.getPickupLat())
-                    .lng(req.getPickupLng())
-                    .farmer(req.getFarmer())
-                    .stopType(TripStopType.PICKUP)
-                    .order(req.getOrders())
-                    .build();
-            tripStopRepository.save(reqStop);
-
-            for (Order order : req.getOrders()) {
-                order.setTripStop(reqStop);
-                orderRepository.save(order);
-            }
-
-        }
-
-        // 3. Add Warehouse Dropoff
-        TripStop warehouseStop = TripStop.builder()
-                .trip(trip)
-                .sequence(sequence++)
-                .lat(trip.getWarehouse().getLatitude())
-                .lng(trip.getWarehouse().getLongitude())
-                .stopType(TripStopType.WAREHOUSE_DROPOFF)
-                .build();
-        tripStopRepository.save(warehouseStop);
-
-        log.info("Route optimization completed for trip: {} with {} stops", trip.getId(), sequence - 1);
-    }
-
-    @Transactional
-    public void calculateOptimalRoute2(Trip trip) {
 
         log.info(
                 "Rebuilding route for trip: {}",
@@ -106,17 +96,32 @@ public class RouteOptimizationServiceImpl implements RouteOptimizationService {
 
         List<TripStop> oldStops =
                 tripStopRepository
-                        .findByTripIdOrderBySequenceAsc(
-                                trip.getId()
+                        .findByTripAndSequenceIsNot(
+                                trip,
+                                1
                         );
+        // unlink orders before delete
+        for (TripStop stop : oldStops) {
+
+            if (stop.getOrder() != null) {
+
+                for (Order order : stop.getOrder()) {
+
+                    order.setTripStop(null);
+
+                    orderRepository.save(order);
+                }
+            }
+        }
 
         tripStopRepository.deleteAll(oldStops);
+
 
         // =====================================================
         // 2. CREATE NEW STOPS
         // =====================================================
 
-        int sequence = 1;
+        int sequence = 2;
 
         List<TripStop> createdStops =
                 new ArrayList<>();
@@ -125,46 +130,76 @@ public class RouteOptimizationServiceImpl implements RouteOptimizationService {
         // OWNER START POINT
         // =====================================================
 
-        TripStop ownerStartStop = TripStop.builder()
-                .trip(trip)
-                .sequence(sequence++)
-                .lat(trip.getStartLat())
-                .lng(trip.getStartLng())
-                .farmer(trip.getOwner())
-                .stopType(TripStopType.PICKUP)
-                .isPickup(false)
-                .build();
-
-        ownerStartStop =
-                tripStopRepository.save(ownerStartStop);
-
+        TripStop ownerStartStop =  tripStopRepository.findByTripAndSequence(trip, 1);
         createdStops.add(ownerStartStop);
 
         // =====================================================
         // APPROVED JOIN REQUESTS
         // =====================================================
 
-        List<TripJoinRequest> approvedRequests =
-                tripJoinRequestRepository
-                        .findByTripIdAndStatus(
-                                trip.getId(),
-                                TripJoinStatus.ACCEPTED
+        // =====================================================
+// APPROVED JOIN REQUESTS
+// =====================================================
+
+        List<TripJoinRequest> remainingRequests =
+                new ArrayList<>(
+                        tripJoinRequestRepository
+                                .findByTripIdAndStatus(
+                                        trip.getId(),
+                                        TripJoinStatus.ACCEPTED
+                                )
+                );
+
+// current position = owner start
+        double currentLat = ownerStartStop.getLat();
+        double currentLng = ownerStartStop.getLng();
+
+        while (!remainingRequests.isEmpty()) {
+
+            TripJoinRequest nearestRequest = null;
+
+            double nearestDistance = Double.MAX_VALUE;
+
+            // =====================================================
+            // FIND NEAREST REQUEST
+            // =====================================================
+
+            for (TripJoinRequest request : remainingRequests) {
+
+                double distance =
+                        calculateDistanceKm(
+                                currentLat,
+                                currentLng,
+                                request.getPickupLat(),
+                                request.getPickupLng()
                         );
 
-        for (TripJoinRequest request
-                : approvedRequests) {
+                if (distance < nearestDistance) {
+
+                    nearestDistance = distance;
+
+                    nearestRequest = request;
+                }
+            }
+
+            if (nearestRequest == null) {
+                break;
+            }
+
+            // =====================================================
+            // CREATE PICKUP STOP
+            // =====================================================
 
             TripStop pickupStop =
                     TripStop.builder()
                             .trip(trip)
                             .sequence(sequence++)
-                            .lat(request.getPickupLat())
-                            .lng(request.getPickupLng())
-                            .farmer(request.getFarmer())
-                            .stopType(
-                                    TripStopType.PICKUP
-                            )
-                            .order(request.getOrders())
+                            .lat(nearestRequest.getPickupLat())
+                            .lng(nearestRequest.getPickupLng())
+                            .farmer(nearestRequest.getFarmer())
+                            .stopType(TripStopType.PICKUP)
+                            .order(new ArrayList<>(nearestRequest.getOrders()))
+                            .priceForStop(nearestRequest.getPriceOffer())
                             .isPickup(false)
                             .build();
 
@@ -173,17 +208,29 @@ public class RouteOptimizationServiceImpl implements RouteOptimizationService {
 
             createdStops.add(pickupStop);
 
-            // =============================================
-            // LINK ORDERS TO STOP
-            // =============================================
+            // =====================================================
+            // LINK ORDERS
+            // =====================================================
 
-            for (Order order
-                    : request.getOrders()) {
+            for (Order order : nearestRequest.getOrders()) {
 
                 order.setTripStop(pickupStop);
 
                 orderRepository.save(order);
             }
+
+            // =====================================================
+            // UPDATE CURRENT POSITION
+            // =====================================================
+
+            currentLat = nearestRequest.getPickupLat();
+            currentLng = nearestRequest.getPickupLng();
+
+            // =====================================================
+            // REMOVE FROM LIST
+            // =====================================================
+
+            remainingRequests.remove(nearestRequest);
         }
 
         // =====================================================
@@ -221,9 +268,7 @@ public class RouteOptimizationServiceImpl implements RouteOptimizationService {
 
         long totalDurationSeconds = 0;
 
-        for (int i = 0;
-             i < createdStops.size() - 1;
-             i++) {
+        for (int i = 0;i < createdStops.size() - 1; i++) {
 
             TripStop current =
                     createdStops.get(i);
@@ -320,6 +365,29 @@ public class RouteOptimizationServiceImpl implements RouteOptimizationService {
                 trip.getId(),
                 createdStops.size()
         );
+    }
+    private double calculateDistanceKm(
+            double lat1,
+            double lng1,
+            double lat2,
+            double lng2
+    ) {
+
+        final int EARTH_RADIUS_KM = 6371;
+
+        double dLat = Math.toRadians(lat2 - lat1);
+        double dLng = Math.toRadians(lng2 - lng1);
+
+        double a =
+                Math.sin(dLat / 2) * Math.sin(dLat / 2)
+                        + Math.cos(Math.toRadians(lat1))
+                        * Math.cos(Math.toRadians(lat2))
+                        * Math.sin(dLng / 2)
+                        * Math.sin(dLng / 2);
+
+        double c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+
+        return EARTH_RADIUS_KM * c;
     }
 
 }

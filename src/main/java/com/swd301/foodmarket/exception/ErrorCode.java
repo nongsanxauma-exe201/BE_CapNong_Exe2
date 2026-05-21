@@ -109,7 +109,9 @@ public enum ErrorCode {
     VEHICLE_NOT_FOUND(13001, "Vehicle not found", HttpStatus.NOT_FOUND),
     VEHICLE_NUMBER_ALREADY_EXISTED(13002, "Vehicle number already existed", HttpStatus.BAD_REQUEST),
     //Warehouse
-    WAREHOUSE_NOT_FOUND(14001, "Warehouse not found", HttpStatus.NOT_FOUND)
+    WAREHOUSE_NOT_FOUND(14001, "Warehouse not found", HttpStatus.NOT_FOUND),
+    // trip stop
+    TRIP_STOP_NOT_FOUND(15001, "Trip stop not found", HttpStatus.NOT_FOUND)
 
     ;
 

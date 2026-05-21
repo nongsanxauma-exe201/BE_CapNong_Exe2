@@ -7,6 +7,7 @@ import lombok.*;
 import lombok.experimental.FieldDefaults;
 
 import java.math.BigDecimal;
+import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.List;
 
@@ -58,4 +59,8 @@ public class TripJoinRequest {
 
     @Column(name = "price_offer", precision = 18, scale = 2)
     BigDecimal priceOffer;
+
+    @Builder.Default
+    private LocalDateTime createdAt = LocalDateTime.now();
+
 }

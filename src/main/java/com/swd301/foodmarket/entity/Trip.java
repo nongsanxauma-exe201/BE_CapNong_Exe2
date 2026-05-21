@@ -66,12 +66,17 @@ public class Trip {
     Boolean isShareable;
 
     @OneToMany(mappedBy = "trip", cascade = CascadeType.ALL, orphanRemoval = true)
+    @OrderBy("sequence ASC")
     List<TripStop> tripStops;
 
     @OneToMany(mappedBy = "trip", cascade = CascadeType.ALL, orphanRemoval = true)
     List<TripJoinRequest> tripJoinRequests;
     @Column(name = "status", nullable = false)
     @Enumerated(EnumType.STRING)
-    TripStatus status;
-    Double pricePerKm;
+            @Builder.Default
+    TripStatus status = TripStatus.CREATED;
+    Double basePrice;
+    Double distanceRate;
+    Double weightRate;
+
 }

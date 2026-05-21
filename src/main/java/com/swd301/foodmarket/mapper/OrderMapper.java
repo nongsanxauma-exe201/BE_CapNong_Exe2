@@ -27,6 +27,7 @@ public interface OrderMapper {
     @Mapping(target = "imageUrl", source = "product.imageUrl")
     @Mapping(target = "itemType", constant = "PRODUCT")
     @Mapping(target = "isRequestedReturn", source = "isRequestedReturn")
+    @Mapping(target = "unit", source = "product.unit")
     OrderItemResponse toItemResponse(OrderDetail detail);
 
     @AfterMapping

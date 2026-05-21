@@ -25,18 +25,15 @@ public class TripMatchingServiceImpl implements TripMatchingService {
     private final TripMapper tripMapper;
 
     @Override
-    public List<TripResponse> findSuggestedTrips(LatLong pickupLoc, Integer warehouseId, Double requestedWeight, LocalDateTime departureTime) {
+    public List<TripResponse> findSuggestedTrips(LatLong pickupLoc, Integer warehouseId) {
         List<Trip> availableTrips = tripService.getShareableTrips();
 
         return availableTrips.stream().filter(trip -> {
-            // Check capacity
-            if (trip.getAvailableCapacityKg() < requestedWeight) return false;
+//            // Check capacity
+//            if (trip.getAvailableCapacityKg() < requestedWeight) return false;
             
             // Check warehouse destination (simplified)
             if (!trip.getWarehouse().getId().equals(warehouseId)) return false;
-            
-            // Check time difference (e.g., within 2 hours)
-            if (Math.abs(java.time.Duration.between(trip.getDepartureTime(), departureTime).toHours()) > 2) return false;
 
             // Check if the pickup location is near the route
             LatLong tripStartLoc = new LatLong(trip.getStartLat(), trip.getStartLng());

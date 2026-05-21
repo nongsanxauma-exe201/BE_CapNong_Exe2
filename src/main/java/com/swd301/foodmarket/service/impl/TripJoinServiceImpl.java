@@ -4,6 +4,7 @@ import com.swd301.foodmarket.dto.goong.LatLong;
 import com.swd301.foodmarket.dto.request.CreateTripJoinRequest;
 import com.swd301.foodmarket.dto.response.TripJoinRequestResponse;
 import com.swd301.foodmarket.entity.*;
+import com.swd301.foodmarket.enums.OrderStatus;
 import com.swd301.foodmarket.enums.TripJoinStatus;
 import com.swd301.foodmarket.exception.AppException;
 import com.swd301.foodmarket.exception.ErrorCode;
@@ -19,6 +20,9 @@ import com.swd301.foodmarket.service.TripJoinService;
 import com.swd301.foodmarket.service.TripService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Sort;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -54,28 +58,23 @@ public class TripJoinServiceImpl implements TripJoinService {
             orders.add( orderRepository.findById(id).orElseThrow(() -> new AppException(ErrorCode.ORDER_NOT_FOUND)));
         }
 
-        double requestedKg = calculaReqeustedKg(request);
+        double requestedKg =  request.getRequestedKg();
         if (trip.getAvailableCapacityKg() < requestedKg) {
             throw new AppException(ErrorCode.INVALID_REQUEST);
         }
 
-        LatLong latLong = null;
-        if(request.getAddress() == null && request.getPickupLat() != null && request.getPickupLng() != null) {
-            latLong = new LatLong(request.getPickupLat(), request.getPickupLng());
-        }
-        else {
-            latLong = goongMapService.geocodeAddress(request.getAddress());
-
-        }
+        LatLong latLong = latLong = new LatLong(request.getPickupLat(), request.getPickupLng());;
         double distanceKm =  goongMapService.getDistanceKm(
                 latLong,
                 new LatLong(trip.getWarehouse().getLatitude(), trip.getWarehouse().getLongitude())
         );;
+        Double price = trip.getBasePrice() + (trip.getDistanceRate() * distanceKm)+ (trip.getWeightRate() * requestedKg);
+
         TripJoinRequest joinRequest = TripJoinRequest.builder()
                 .trip(trip)
                 .farmer(getCurrentUser())
                 .requestedKg(requestedKg)
-                .priceOffer(BigDecimal.valueOf(trip.getPricePerKm()*distanceKm))
+                .priceOffer(BigDecimal.valueOf(price))
                 .status(TripJoinStatus.PENDING)
                 .orders(orders)
                 .pickupLng(latLong.getLongitude())
@@ -84,58 +83,59 @@ public class TripJoinServiceImpl implements TripJoinService {
 
         return tripJoinRequestMapper.entityToResponse(tripJoinRequestRepository.save(joinRequest));
     }
-    public double calculaReqeustedKg(CreateTripJoinRequest request)
-    {
-        double totalKg  = 0.0;
-        for(Integer id : request.getOrderIds())
-        {
-            Order order = orderRepository.findById(id).orElseThrow(() -> new AppException(ErrorCode.ORDER_NOT_FOUND));
-            for(OrderDetail detail : order.getOrderDetails())
-            {
-                if(detail.getProduct().getUnit().equals("kg"))
-                {
-                    totalKg += detail.getQuantity() ;
-                }
-                 else if(detail.getProduct().getUnit().equals("g"))
-                {
-                    totalKg += detail.getQuantity() / 1000.0 ;
-                }
-                 else if(detail.getProduct().getUnit().equals("chai"))
-                {
-                    // giả sử 1 chai là 0.5kg
-                    totalKg += detail.getQuantity() * 0.5 ;
-                }
-                    else if(detail.getProduct().getUnit().equals("hộp") || detail.getProduct().getUnit().equals("hũ"))
-                {
-                    // giả sử 1 hộp là 0.3kg
-                    totalKg += detail.getQuantity() * 0.3 ;
-
-                }
-                    else if(detail.getProduct().getUnit().equals("cây"))
-                {
-                    // giả sử 1 cây là 0.2kg
-                    totalKg += detail.getQuantity() * 0.2 ;
-                }
-                    else if(detail.getProduct().getUnit().equals("bịch") || detail.getProduct().getUnit().equals("túi"))
-                {                    // giả sử 1 bịch là 0.4kg
-                    totalKg += detail.getQuantity() * 0.4 ;
-                }
-                    else if(detail.getProduct().getUnit().equals("bó"))
-                {
-                    // giả sử 1 bó là 0.6kg
-                    totalKg += detail.getQuantity() * 0.6 ;
-                }
-
-            }
-        }
-        return totalKg;
-    }
+//    public double calculaReqeustedKg(CreateTripJoinRequest request)
+//    {
+//        double totalKg  = 0.0;
+//        for(Integer id : request.getOrderIds())
+//        {
+//            Order order = orderRepository.findById(id).orElseThrow(() -> new AppException(ErrorCode.ORDER_NOT_FOUND));
+//            for(OrderDetail detail : order.getOrderDetails())
+//            {
+//                if(detail.getProduct().getUnit().equals("kg"))
+//                {
+//                    totalKg += detail.getQuantity() ;
+//                }
+//                 else if(detail.getProduct().getUnit().equals("g"))
+//                {
+//                    totalKg += detail.getQuantity() / 1000.0 ;
+//                }
+//                 else if(detail.getProduct().getUnit().equals("chai"))
+//                {
+//                    // giả sử 1 chai là 0.5kg
+//                    totalKg += detail.getQuantity() * 0.5 ;
+//                }
+//                    else if(detail.getProduct().getUnit().equals("hộp") || detail.getProduct().getUnit().equals("hũ"))
+//                {
+//                    // giả sử 1 hộp là 0.3kg
+//                    totalKg += detail.getQuantity() * 0.3 ;
+//
+//                }
+//                    else if(detail.getProduct().getUnit().equals("cây"))
+//                {
+//                    // giả sử 1 cây là 0.2kg
+//                    totalKg += detail.getQuantity() * 0.2 ;
+//                }
+//                    else if(detail.getProduct().getUnit().equals("bịch") || detail.getProduct().getUnit().equals("túi"))
+//                {                    // giả sử 1 bịch là 0.4kg
+//                    totalKg += detail.getQuantity() * 0.4 ;
+//                }
+//                    else if(detail.getProduct().getUnit().equals("bó"))
+//                {
+//                    // giả sử 1 bó là 0.6kg
+//                    totalKg += detail.getQuantity() * 0.6 ;
+//                }
+//
+//            }
+//        }
+//        return totalKg;
+//    }
 
     @Override
     @Transactional
     public TripJoinRequestResponse approveJoinRequest(Integer requestId) {
         TripJoinRequest request = tripJoinRequestRepository.findById(requestId)
                 .orElseThrow(() -> new AppException(ErrorCode.TRIP_JOIN_REQUEST_NOT_FOUND));
+
 
         if (!request.getTrip().getOwner().getId().equals(getCurrentUser().getId())) {
             throw new AppException(ErrorCode.UNAUTHORIZED);
@@ -145,10 +145,13 @@ public class TripJoinServiceImpl implements TripJoinService {
         
         Trip trip = request.getTrip();
         trip.setAvailableCapacityKg(trip.getAvailableCapacityKg() - request.getRequestedKg());
-        
+        tripJoinRequestRepository.save(request);
         // Recalculate routes
         routeOptimizationService.calculateOptimalRoute(trip);
-        
+        for (Order order : request.getOrders()) {
+            order.setStatus(OrderStatus.ARRIVED_AT_WAREHOUSE);
+            orderRepository.save(order);
+        }
         return tripJoinRequestMapper.entityToResponse( tripJoinRequestRepository.save(request));
     }
 
@@ -165,6 +168,29 @@ public class TripJoinServiceImpl implements TripJoinService {
         request.setStatus(TripJoinStatus.REJECTED);
         return tripJoinRequestMapper.entityToResponse( tripJoinRequestRepository.save(request));
     }
+
+    @Override
+    public Page<TripJoinRequestResponse> getMySentJoinRequests(int page, int size) {
+        PageRequest pageRequest = PageRequest.of(page, size, Sort.by("createdAt").descending());
+        Page<TripJoinRequest> joinRequests = tripJoinRequestRepository.findByFarmer(getCurrentUser(), pageRequest);
+        return joinRequests.map(tripJoinRequestMapper::entityToResponse);
+    }
+
+    @Override
+    public Page<TripJoinRequestResponse> getJoinRequestsForMyTrips(int page, int size) {
+        PageRequest pageRequest = PageRequest.of(page, size, Sort.by("createdAt").descending());
+        Page<TripJoinRequest> joinRequests = tripJoinRequestRepository.findByTrip_Owner(getCurrentUser(), pageRequest);
+        return joinRequests.map(tripJoinRequestMapper::entityToResponse);
+    }
+
+    @Override
+    public TripJoinRequestResponse getJoinRequestById(Integer requestId) {
+            TripJoinRequest request = tripJoinRequestRepository.findById(requestId).orElseThrow(
+                    () -> new AppException(ErrorCode.TRIP_JOIN_REQUEST_NOT_FOUND)
+            );
+        return tripJoinRequestMapper.entityToResponse(request);
+    }
+
     private User getCurrentUser() {
         String username = SecurityContextHolder.getContext().getAuthentication().getName();
         return userRepository.findByEmail(username)

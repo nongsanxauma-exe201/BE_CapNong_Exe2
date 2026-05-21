@@ -6,6 +6,7 @@ import jakarta.persistence.*;
 import lombok.*;
 import lombok.experimental.FieldDefaults;
 
+import java.math.BigDecimal;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.List;
@@ -52,4 +53,5 @@ public class TripStop {
     @Builder.Default
     boolean isPickup = false;
     LocalDateTime actualArrivalTime;
+    BigDecimal priceForStop;
 }

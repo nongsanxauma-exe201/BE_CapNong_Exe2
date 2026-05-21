@@ -8,5 +8,5 @@ import java.time.LocalDateTime;
 import java.util.List;
 
 public interface TripMatchingService {
-    List<TripResponse> findSuggestedTrips(LatLong pickupLoc, Integer warehouseId, Double requestedWeight, LocalDateTime departureTime);
+    List<TripResponse> findSuggestedTrips(LatLong pickupLoc, Integer warehouseId);
 }

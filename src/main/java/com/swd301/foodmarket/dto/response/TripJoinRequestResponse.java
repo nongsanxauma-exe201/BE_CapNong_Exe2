@@ -5,6 +5,7 @@ import lombok.*;
 import lombok.experimental.FieldDefaults;
 
 import java.math.BigDecimal;
+import java.time.LocalDateTime;
 import java.util.List;
 
 @Getter
@@ -23,7 +24,7 @@ public class TripJoinRequestResponse {
 
     String farmerName;
 
-    OrderResponse order;
+    List<OrderResponse> orders;
 
     Double requestedKg;
 
@@ -34,4 +35,8 @@ public class TripJoinRequestResponse {
     TripJoinStatus status;
 
     BigDecimal priceOffer;
+
+    LocalDateTime createdAt;
+
+    TripResponse trip;
 }
