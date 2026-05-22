@@ -149,7 +149,7 @@ public class TripJoinServiceImpl implements TripJoinService {
         // Recalculate routes
         routeOptimizationService.calculateOptimalRoute(trip);
         for (Order order : request.getOrders()) {
-            order.setStatus(OrderStatus.ARRIVED_AT_WAREHOUSE);
+            order.setStatus(OrderStatus.READY_FOR_PICKUP);
             orderRepository.save(order);
         }
         return tripJoinRequestMapper.entityToResponse( tripJoinRequestRepository.save(request));

@@ -3,6 +3,7 @@ package com.swd301.foodmarket.enums;
 public enum OrderStatus {
     PENDING,
     CONFIRMED,
+    READY_FOR_PICKUP,
     SHIPPING,
     SHIPPING_TO_WAREHOUSE,
     ARRIVED_AT_WAREHOUSE,

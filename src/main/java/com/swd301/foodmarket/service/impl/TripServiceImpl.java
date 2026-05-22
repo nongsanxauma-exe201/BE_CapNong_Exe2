@@ -220,7 +220,32 @@ public class TripServiceImpl implements TripService {
                 () -> new AppException(ErrorCode.TRIP_STOP_NOT_FOUND)
         );
         tripStop.setPickup(true);
+        List<Order> orders = tripStop.getOrder();
+        if(orders != null)
+        {
+            for(Order order : orders)
+            {
+                order.setStatus(OrderStatus.SHIPPING_TO_WAREHOUSE);
+            }
+            orderRepository.saveAll(orders);
+        }
+        // update lại trạng thái của trip nếu tất cả các stop đều đã được pickup
+        updateStatusForTripStop(tripStop);
         return tripStropMapper.toTripStop(tripStopRepository.save(tripStop));
+    }
+    public void updateStatusForTripStop(TripStop tripSto)
+    {
+        List<TripStop> tripStops = tripSto.getTrip().getTripStops();
+        for(TripStop stop : tripStops)
+        {
+           if(!stop.isPickup())
+           {
+               return;
+           }
+        }
+        Trip trip = tripSto.getTrip();
+        trip.setStatus(TripStatus.COMPLETED);
+        tripRepository.save(trip);
     }
 
     private User getCurrentUser() {
