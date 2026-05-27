@@ -92,7 +92,15 @@ public class TripServiceImpl implements TripService {
                 .farmer(trip.getOwner())
                 .stopType(TripStopType.PICKUP)
                 .build();
-        tripStopRepository.save(ownerStop);
+
+        TripStop warehouseStop = TripStop.builder()
+                .trip(trip)
+                .sequence(2)
+                .lat(trip.getWarehouse().getLatitude())
+                .lng(trip.getWarehouse().getLongitude())
+                .stopType(TripStopType.WAREHOUSE_DROPOFF)
+                .build();
+        tripStopRepository.saveAll(List.of(ownerStop,warehouseStop));
         updateTripAndOrder(ownerStop, request.getOrderIds());
         //
 

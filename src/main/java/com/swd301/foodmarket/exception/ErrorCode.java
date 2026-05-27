@@ -100,6 +100,7 @@ public enum ErrorCode {
     // Quality Check errors
     QUALITY_CRIERIA_NOT_FOUND(10001, "Quality criteria not found", HttpStatus.NOT_FOUND),
     QUALITY_CHECK_NOT_FOUND(10002, "Quality check not found", HttpStatus.NOT_FOUND),
+    INVALID_QUALITY_CHECK_REQUEST(10003, "Invalid quality check request", HttpStatus.BAD_REQUEST),
     // Vie QR
     BANK_NOT_FOUND(11001, "bankBin is required", HttpStatus.BAD_REQUEST),
     ACCOUNT_NOT_FOUND(11002, "accountNo is required", HttpStatus.BAD_REQUEST),

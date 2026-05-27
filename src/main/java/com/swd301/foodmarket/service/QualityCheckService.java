@@ -13,5 +13,7 @@ public interface QualityCheckService {
 
     QualityCheckResponse checkQuality(QualityCheckRequest qualityCheckRequest, MultiValueMap<String, MultipartFile> files);
     QualityCheckResponse getByOrderItemId(Integer orderItemId);
+    QualityCheckResponse getByMysteryBox(Integer orderItemId);
+
     Page<QualityCriteria> getQualityCriteriaById(int page , int size);
 }

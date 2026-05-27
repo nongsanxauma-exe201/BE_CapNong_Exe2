@@ -35,6 +35,14 @@ public class QualityCheckController {
                 .result(qualityCheckService.getByOrderItemId(orderDetailId))
                 .build();
     }
+    @GetMapping("/mystery-box/{mysteryBoxId}")
+    public ApiResponse<QualityCheckResponse> getByMyteryBox(
+            @PathVariable Integer mysteryBoxId
+    ) {
+        return ApiResponse.<QualityCheckResponse>builder()
+                .result(qualityCheckService.getByMysteryBox(mysteryBoxId))
+                .build();
+    }
     @GetMapping("/criteria")
     public ApiResponse<?> getQualityCriteria(
             @RequestParam(defaultValue = "0") int page,

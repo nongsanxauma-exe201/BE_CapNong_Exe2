@@ -59,6 +59,7 @@ public interface OrderMapper {
     @Mapping(target = "unitPrice", source = "mysteryBox.price")
     @Mapping(target = "imageUrl", source = "mysteryBox.imageUrl")
     @Mapping(target = "itemType", constant = "MYSTERY_BOX")
+    @Mapping(target = "orderMysteryBoxId", source = "id")
     OrderItemResponse toMysteryBoxItemResponse(OrderMysteryBox orderBox);
 
     // ================== AFTER MAPPING ==================
