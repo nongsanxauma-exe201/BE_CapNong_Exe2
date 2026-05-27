@@ -9,7 +9,8 @@ import java.util.List;
 public class QualityCheckRequest {
     private String note;
     private com.swd301.foodmarket.enums.QualityResult qualityResult;
-    private Integer orderDetailId;
+    private Integer orderDetailId; // neu la mau binh thuong nhu hien tai
+    private Integer orderMysteryBoxId; // neu la mau mystery box
     private List<QualityCheckingRequest> qualityChecks;
     private double  rejectedWeight;
 

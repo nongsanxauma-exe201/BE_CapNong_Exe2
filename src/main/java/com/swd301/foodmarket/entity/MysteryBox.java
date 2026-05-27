@@ -66,4 +66,5 @@ public class MysteryBox {
     @Column(name = "sold_quantity")
     @Builder.Default
     Integer soldQuantity = 0;
+
 }

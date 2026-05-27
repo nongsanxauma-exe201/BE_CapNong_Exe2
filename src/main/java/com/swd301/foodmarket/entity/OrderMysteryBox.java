@@ -26,4 +26,6 @@ public class OrderMysteryBox {
 
     @Column(nullable = false)
     private Integer quantity;
+    @OneToOne(mappedBy = "orderMysteryBox")
+    private QualityResult qualityResult;
 }

@@ -10,5 +10,6 @@ import org.mapstruct.Mapping;
 public interface QualityResultMapper {
     @Mapping(target = "qualityCheckingResponses", source = "qualityChecks")
     @Mapping(target = "orderDetailId", source = "orderDetail.id")
+    @Mapping(target = "orderMysteryBoxId", source = "orderMysteryBox.id")
     QualityCheckResponse toQualityCheckResponse(QualityResult qualityResult);
 }

@@ -13,6 +13,7 @@ public class QualityCheckResponse {
     private String note;
     private com.swd301.foodmarket.enums.QualityResult qualityResult;
     private Integer orderDetailId;
+    private Integer orderMysteryBoxId;
     private List<QualityCheckingResponse> qualityCheckingResponses;
     private LocalDateTime createdAt;
     private double  rejectedWeight;
