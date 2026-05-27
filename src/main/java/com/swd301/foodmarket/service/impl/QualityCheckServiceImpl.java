@@ -111,8 +111,10 @@ public class QualityCheckServiceImpl implements QualityCheckService {
             }
         }
         Order order = orderDetail.getOrder();
-        order.setRefundAmount(order.getRefundAmount().add(refundAmount));
-        order.setRefundReason(order.getRefundReason() == null ? message : order.getRefundReason() + "\n" + message);
+        BigDecimal currentRefund = order.getRefundAmount() != null
+                ? order.getRefundAmount()
+                : BigDecimal.ZERO;
+        order.setRefundAmount(currentRefund.add(refundAmount));        order.setRefundReason(order.getRefundReason() == null ? message : order.getRefundReason() + "\n" + message);
         orderRepository.save(order);
         return qualityResultMapper.toQualityCheckResponse(qualityResult);
     }

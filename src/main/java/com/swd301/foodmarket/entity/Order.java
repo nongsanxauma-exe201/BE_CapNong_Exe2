@@ -118,7 +118,7 @@ public class Order {
     List<Tracking> trackings = new ArrayList<>();
 
     // tiền hoàn khi kiểm tra có vấn đề về hàng sau kiem tra chat luong
-    BigDecimal refundAmount;
+    BigDecimal refundAmount = BigDecimal.ZERO;
     String refundReason;
     @ManyToOne
     @JoinColumn(name="trip_stop_id")

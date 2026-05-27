@@ -42,8 +42,7 @@ public class AdminInitializer implements CommandLineRunner {
         }
 
         // 2️⃣ Kiểm tra admin tồn tại chưa
-        boolean adminExists = userRepository.existsByRole_Name(RoleName.ADMIN);
-
+        boolean adminExists = userRepository.findByEmail("admin@gmail.com").isPresent();
         if (!adminExists) {
 
             Role roleAdmin = roleRepository.findByName(RoleName.ADMIN)

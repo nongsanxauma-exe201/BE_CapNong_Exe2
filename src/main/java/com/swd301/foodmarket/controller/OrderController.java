@@ -16,6 +16,7 @@ import lombok.experimental.FieldDefaults;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.domain.Page;
 import org.springframework.http.MediaType;
+import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.multipart.MultipartFile;
 
@@ -119,6 +120,7 @@ public class OrderController {
     }
     // STAFF api
     @GetMapping("/staff")
+    @PreAuthorize("hasAnyRole('STAFF', 'ADMIN')")
     public ApiResponse<Page<OrderResponse>> getOrdersForStaff(
             @RequestParam(defaultValue = "0") int page,
             @RequestParam(defaultValue = "10") int size,
@@ -129,6 +131,7 @@ public class OrderController {
                 .build();
     }
     @GetMapping("/staff/report")
+    @PreAuthorize("hasAnyRole('STAFF', 'ADMIN')")
     public ApiResponse<StaffOrderReportResponse> getReportForStaff(
     ) {
         return ApiResponse.<StaffOrderReportResponse>builder()
