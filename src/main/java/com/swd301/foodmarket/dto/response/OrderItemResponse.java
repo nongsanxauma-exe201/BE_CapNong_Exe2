@@ -19,6 +19,7 @@ public class OrderItemResponse {
     String  productName;        // tên sản phẩm HOẶC boxType của túi mù
     Integer quantity;
     BigDecimal unitPrice;
+    String unit;
 
     String  itemType;           // "PRODUCT" hoặc "MYSTERY_BOX"
     String  imageUrl;           // ảnh sản phẩm / túi mù

@@ -4,6 +4,7 @@ import com.swd301.foodmarket.dto.goong.LatLong;
 import com.swd301.foodmarket.dto.request.ShipperLocationRequest;
 import com.swd301.foodmarket.dto.request.UpdateOrderStatusRequest;
 import com.swd301.foodmarket.dto.response.AvailableOrderResponse;
+import com.swd301.foodmarket.dto.response.PageResponse;
 import com.swd301.foodmarket.dto.response.ShipperLocationResponse;
 import com.swd301.foodmarket.dto.response.ShipperOrderResponse;
 import com.swd301.foodmarket.entity.*;
@@ -12,39 +13,52 @@ import com.swd301.foodmarket.enums.RoleName;
 import com.swd301.foodmarket.enums.WalletType;
 import com.swd301.foodmarket.exception.AppException;
 import com.swd301.foodmarket.exception.ErrorCode;
+import com.swd301.foodmarket.mapper.OrderMapper;
 import com.swd301.foodmarket.repository.OrderRepository;
 import com.swd301.foodmarket.repository.ShipperLocationRepository;
 import com.swd301.foodmarket.repository.UserRepository;
 import com.swd301.foodmarket.repository.WalletRepository;
 import com.swd301.foodmarket.service.GoongMapService;
+import com.swd301.foodmarket.service.NotificationService;
 import com.swd301.foodmarket.service.ShipperService;
 import com.swd301.foodmarket.service.UserService;
 import lombok.AccessLevel;
 import lombok.RequiredArgsConstructor;
 import lombok.experimental.FieldDefaults;
 import lombok.extern.slf4j.Slf4j;
+import org.aspectj.weaver.ast.Or;
+import org.springframework.beans.factory.annotation.Value;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Pageable;
+import org.springframework.data.domain.Sort;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.web.filter.RequestContextFilter;
 
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
-import java.util.Comparator;
-import java.util.List;
+import java.util.*;
 import java.util.stream.Collectors;
 
 @Service
 @RequiredArgsConstructor
-@FieldDefaults(level = AccessLevel.PRIVATE, makeFinal = true)
+@FieldDefaults(level = AccessLevel.PRIVATE)
 @Slf4j
 public class ShipperServiceImpl implements ShipperService {
 
-    OrderRepository orderRepository;
-    ShipperLocationRepository shipperLocationRepository;
-    UserRepository userRepository;
-    GoongMapService goongMapService;
-    WalletRepository walletRepository;
-    UserService userService;
+    final OrderRepository orderRepository;
+    final  ShipperLocationRepository shipperLocationRepository;
+    final  UserRepository userRepository;
+    final  GoongMapService goongMapService;
+    final  WalletRepository walletRepository;
+    final  UserService userService;
+    final NotificationService notificationService;
+    @Value("${ADDRESS_WAREHOUSE}")
+     String warehouseAddress;
+    private final RequestContextFilter requestContextFilter;
+    private final OrderMapper orderMapper;
     // ===================== HELPERS =====================
 
     private User getCurrentShipper() {
@@ -86,7 +100,9 @@ public class ShipperServiceImpl implements ShipperService {
         if (order.getShopLatitude() != null && order.getShopLongitude() != null) {
             return new LatLong(order.getShopLatitude(), order.getShopLongitude());
         }
-        String shopAddress = order.getShopOwner().getAddress();
+//        String shopAddress = order.getShopOwner().getAddress();
+        // Lấy địa chỉ kho làm shopAddress vì shipper phải tới kho lấy hàng trước, sau đó mới giao đến buyer
+        String shopAddress = warehouseAddress;
         log.info("[Goong] Geocode shopAddress order {}: '{}'", order.getId(), shopAddress);
         LatLong latLong = goongMapService.geocodeAddress(shopAddress);
         if (latLong != null) {
@@ -134,30 +150,28 @@ public class ShipperServiceImpl implements ShipperService {
     @Override
     @Transactional
     public List<AvailableOrderResponse> getAvailableOrdersNearby(Double shipperLat, Double shipperLng) {
-        getCurrentShipper();
+        User shipper = getCurrentShipper();
 
         LatLong shipperLocation = new LatLong(shipperLat, shipperLng);
-        List<Order> availableOrders = orderRepository.findByShipperIsNullAndStatus(OrderStatus.CONFIRMED);
 
-        log.info("[SHIPPER] Finding orders near ({}, {}), total CONFIRMED: {}",
+        // Chỉ query READY + chưa có shipper (tự pick)
+        List<Order> availableOrders = orderRepository
+                .findByShipperIsNullAndStatus(OrderStatus.READY);
+
+        log.info("[SHIPPER] Finding orders near ({}, {}), total READY: {}",
                 shipperLat, shipperLng, availableOrders.size());
 
         return availableOrders.stream()
                 .map(order -> {
-                    // ✅ Geocode shop (điểm lấy hàng)
                     LatLong shopLocation = getOrGeocodeShopLocation(order);
-
-                    // ✅ Geocode nhà buyer (điểm giao hàng)
                     LatLong buyerLocation = getOrGeocodeShippingLocation(order);
 
-                    // ✅ Khoảng cách shipper → shop (dùng để sort, quan trọng nhất)
                     Double shipToShopKm = null;
                     if (shopLocation != null) {
                         double d = goongMapService.getDistanceKm(shipperLocation, shopLocation);
                         shipToShopKm = d == Double.MAX_VALUE ? null : d;
                     }
 
-                    // ✅ Khoảng cách shop → nhà buyer (shipper biết tổng quãng đường)
                     Double shopToBuyerKm = null;
                     if (shopLocation != null && buyerLocation != null) {
                         double d = goongMapService.getDistanceKm(shopLocation, buyerLocation);
@@ -179,10 +193,9 @@ public class ShipperServiceImpl implements ShipperService {
                             .estimatedDeliveryDate(order.getEstimatedDeliveryDate())
                             .shipToShopKm(shipToShopKm)
                             .shopToBuyerKm(shopToBuyerKm)
-                            .distanceKm(shipToShopKm) // backward compat
+                            .distanceKm(shipToShopKm)
                             .build();
                 })
-                // ✅ Sort theo shipper → shop (gần shop nhất trước)
                 .sorted(Comparator.comparingDouble(o ->
                         o.getShipToShopKm() != null ? o.getShipToShopKm() : Double.MAX_VALUE))
                 .limit(6)
@@ -196,11 +209,12 @@ public class ShipperServiceImpl implements ShipperService {
         Order order = orderRepository.findById(orderId)
                 .orElseThrow(() -> new AppException(ErrorCode.ORDER_NOT_FOUND));
         if (order.getShipper() != null) throw new AppException(ErrorCode.ORDER_ALREADY_TAKEN);
-        if (order.getStatus() != OrderStatus.CONFIRMED) throw new AppException(ErrorCode.INVALID_ORDER_STATUS);
+        if (order.getStatus() != OrderStatus.READY) throw new AppException(ErrorCode.INVALID_ORDER_STATUS);
         order.setShipper(shipper);
         order.setStatus(OrderStatus.SHIPPING);
         orderRepository.save(order);
-        log.info("Shipper {} accepted order {}", shipper.getId(), orderId);
+
+        log.info("Shipper {} accepted order {} (self-pick)", shipper.getId(), orderId);
         return toShipperOrderResponse(order);
     }
 
@@ -227,9 +241,13 @@ public class ShipperServiceImpl implements ShipperService {
         if (request.getNote() != null && !request.getNote().isBlank()) {
             order.setNote(request.getNote());
         }
+        BigDecimal totalAmount = order.getTotalAmount();
+
+
+        // tiền hàng (chưa trừ phí)
 
         // ====================================================
-        // TRẢ TIỀN SHIPPER (3% SHIPPING FEE)
+        // TRẢ TIỀN SHIPPER
         // ====================================================
 
         if (request.getStatus() == OrderStatus.DELIVERED) {
@@ -256,7 +274,10 @@ public class ShipperServiceImpl implements ShipperService {
                 log.info("Shipper wallet BEFORE: {}", shipperWallet.getFrozenBalance());
 
                 shipperWallet.setFrozenBalance(
-                        shipperWallet.getFrozenBalance().add(shipperFee)
+                        shipperWallet.getFrozenBalance().subtract(shipperFee)
+                );
+                shipperWallet.setTotalBalance(
+                        shipperWallet.getTotalBalance().add(shipperFee)
                 );
 
                 shipperWallet.setTotalRevenueAllTime(
@@ -285,6 +306,64 @@ public class ShipperServiceImpl implements ShipperService {
 
 //                log.info("Admin wallet AFTER: {}", adminWallet.getTotalBalance());
             }
+            BigDecimal shopGross = totalAmount.subtract(shippingFee);
+            BigDecimal shopRevenue = shopGross.multiply(BigDecimal.valueOf(0.9)); // trừ 10% phí sàn
+            if (shopRevenue.compareTo(BigDecimal.ZERO) > 0) {
+                Wallet shopWallet = walletRepository.findByShopOwner_Id(order.getShopOwner().getId())
+                        .orElseThrow(() -> new AppException(ErrorCode.WALLET_NOT_FOUND));
+                // tra tien cho buyer khi  ma don hang bi hu mot phan
+                if(order.getRefundAmount() != null && order.getRefundAmount().compareTo(BigDecimal.ZERO) > 0) {
+                    BigDecimal refundAmount =  order.getRefundAmount();
+                    shopRevenue = shopRevenue.subtract(order.getRefundAmount());
+                    shopRevenue = shopRevenue.subtract(refundAmount);
+
+                if(order.getPaymentMethod().equalsIgnoreCase("PAYOS"))
+                {
+                    if(refundAmount.compareTo(BigDecimal.ZERO) > 0) {
+                        Wallet buyerWallet = walletRepository.findByBuyer(order.getBuyer());
+                        if(buyerWallet == null) {
+                            log.error("Buyer wallet not found for buyer {}", order.getBuyer().getId());
+                            throw new AppException(ErrorCode.WALLET_NOT_FOUND);
+                        }
+
+                        log.info("Buyer wallet BEFORE refund: {}", buyerWallet.getTotalBalance());
+                        buyerWallet.setTotalBalance(
+                                buyerWallet.getTotalBalance().add(refundAmount)
+                        );
+                        walletRepository.save(buyerWallet);
+                        log.info("Buyer wallet AFTER refund: {}", buyerWallet.getTotalBalance());
+                        // thong bao cho shop va buyer  khi don hang bi hu mot phan va da duoc tra tien lai
+                        Notification notification = Notification.builder()
+                                .title("Hoàn tiền đơn hàng #" + order.getId())
+                                .message("Bạn đã nhận được " +refundAmount+ "đ từ "+order.getRefundAmount()+"từ đơn hang #" + order.getId())
+                                .receiverType("USER_"+order.getBuyer().toString())
+                                .build();
+                        notificationService.createUserNotification(order.getBuyer(), notification);
+                        Notification notificatio = Notification.builder()
+                                .title("Hoàn tiền đơn hàng #" + order.getId())
+                                .message("Bạn đã bị trừ  " +refundAmount+ "đ lý do "+order.getRefundAmount()+ "từ đơn hàng #" + order.getId())
+                                .receiverType("USER_"+order.getShopOwner().toString())
+                                .build();
+                        notificationService.createUserNotification(order.getShopOwner(), notificatio);
+                    }
+                }
+                }
+
+
+                shopWallet.setFrozenBalance(
+                        shopWallet.getFrozenBalance().subtract(shopGross)
+                );
+                shopWallet.setTotalBalance(
+                        shopWallet.getTotalBalance().add(shopRevenue)
+                );
+                shopWallet.setTotalRevenueAllTime(
+                        shopWallet.getTotalRevenueAllTime().add(shopRevenue)
+                );
+
+                shopWallet.setUpdatedAt(LocalDateTime.now());
+                walletRepository.save(shopWallet);
+            }
+
         }
 
         // ====================================================
@@ -317,25 +396,28 @@ public class ShipperServiceImpl implements ShipperService {
         return toShipperOrderResponse(order);
     }
 
-    // Nếu tính tiền bằng COD thì sẽ refund là xong
-    // với PAy os thì mình sẽ thêm api  canRecieve tiền hoàn nếu có thì buyer ấn vào nhập stk tên ngân hàng và sau đó
-    // tạo ra request withdraw/ tạo request refund cũng được rồi admin chuyển cho buyer là xong
-    public BigDecimal calculateRefundAmount(Order order) {
-        List<OrderDetail> details = order.getOrderDetails();
-        BigDecimal refundAmount = BigDecimal.ZERO;
-        for(OrderDetail detail : details) {
-            QualityResult qualityResult = detail.getQualityResult();
-            double percentage = 0;
-            if (qualityResult != null && qualityResult.getRejectedWeight() > 0) {
-                percentage = (double) (qualityResult.getRejectedWeight() * 100) / detail.getQuantity();
-            }
-            if (percentage > 5) {
-                refundAmount = refundAmount.add(detail.getUnitPrice().multiply(BigDecimal.valueOf(qualityResult.getRejectedWeight())));
-            }
-        }
-        return refundAmount;
 
-    }
+//    public Map<String,String> calculateRefundAmount(Order order) {
+//        List<OrderDetail> details = order.getOrderDetails();
+//        BigDecimal refundAmount = BigDecimal.ZERO;
+//        String message = "";
+//        for(OrderDetail detail : details) {
+//            QualityResult qualityResult = detail.getQualityResult();
+//            double percentage = 0;
+//            if (qualityResult != null && qualityResult.getRejectedWeight() != null &&   qualityResult.getRejectedWeight() > 0) {
+//                percentage = (double) (qualityResult.getRejectedWeight() * 100) / detail.getQuantity();
+//            }
+//            if (percentage > 5) {
+//                message+= "Sản phẩm " + detail.getProduct().getProductName() + " bị hư hỏng " + qualityResult.getRejectedWeight();
+//                refundAmount = refundAmount.add(detail.getUnitPrice().multiply(BigDecimal.valueOf(qualityResult.getRejectedWeight())));
+//            }
+//        }
+//        Map<String,String> map = new HashMap<>();
+//        map.put("message", message);
+//        map.put("refundAmount", refundAmount.toString());
+//        return map;
+//
+//    }
     @Override
     public List<ShipperOrderResponse> getMyOrders() {
         User shipper = getCurrentShipper();
@@ -374,6 +456,67 @@ public class ShipperServiceImpl implements ShipperService {
                 .destLongitude(order.getShippingLongitude())
                 // ✅ Pass-through isFake → FE Tracking dùng để trimRoute
                 .isFake(Boolean.TRUE.equals(request.getIsFake()))
+                .build();
+    }
+
+    @Override
+    public PageResponse<AvailableOrderResponse> getAllOrderCanShipper(int page, int size) {
+
+
+        List<Order> availableOrders = orderRepository.findByShipperIsNullAndStatus(OrderStatus.READY);
+
+        List<AvailableOrderResponse> availableOrderResponses = availableOrders.stream()
+                .map(order -> {
+                    // ✅ Geocode shop (điểm lấy hàng)
+                    LatLong shopLocation = getOrGeocodeShopLocation(order);
+
+                    // ✅ Geocode nhà buyer (điểm giao hàng)
+                    LatLong buyerLocation = getOrGeocodeShippingLocation(order);
+
+                    // ✅ Khoảng cách shop → nhà buyer (shipper biết tổng quãng đường)
+                    Double shopToBuyerKm = null;
+                    if (shopLocation != null && buyerLocation != null) {
+                        double d = goongMapService.getDistanceKm(shopLocation, buyerLocation);
+                        shopToBuyerKm = d == Double.MAX_VALUE ? null : d;
+                    }
+
+
+
+                    return AvailableOrderResponse.builder()
+                            .orderId(order.getId())
+                            .shopName("Kho tập kết hàng hóa") // Hiện tại để cố định tên shop vì shipper phải tới kho lấy hàng trước, sau đó mới giao đến buyer
+                            .shopAddress(warehouseAddress)
+                            .shopPhone(order.getShopOwner().getPhoneNumber())
+                            .shippingAddress(order.getShippingAddress())
+                            .recipientName(order.getRecipientName())
+                            .recipientPhone(order.getRecipientPhone())
+                            .shippingFee(order.getShippingFee() != null ? order.getShippingFee().multiply(BigDecimal.valueOf(0.9)) : BigDecimal.ZERO)
+                            .totalAmount(order.getTotalAmount())
+                            .status(order.getStatus())
+                            .createdAt(order.getCreatedAt())
+                            .estimatedDeliveryDate(order.getEstimatedDeliveryDate())
+                            .shopToBuyerKm(shopToBuyerKm)
+                            .distanceKm(shopToBuyerKm) // backward compat
+                            .build();
+                }).sorted(Comparator.comparing(AvailableOrderResponse::getCreatedAt)).
+                toList();
+
+
+
+        Long from = (long) page * size;
+        Long to = Math.min(from + size, availableOrderResponses.size());
+        List<AvailableOrderResponse> result = new ArrayList<>();
+        if(from < availableOrderResponses.size())
+        {
+            result = availableOrderResponses.subList(from.intValue(), to.intValue());
+        }
+        return PageResponse.<AvailableOrderResponse>builder()
+                .content(result)
+                .page(page)
+                .size(size)
+                .totalElements(availableOrderResponses.size())
+                .totalPages(((int) Math.ceil((double) availableOrderResponses.size() / size)))
+                .last((page + 1) * size >= availableOrderResponses.size())
                 .build();
     }
 

@@ -36,5 +36,7 @@ public class OrderResponse {
     Integer buyerId;
     List<TrackingResponse> trackings;
      boolean passedQualityCheck;
+    BigDecimal refundAmount;
+    String refundReason;
 
 }

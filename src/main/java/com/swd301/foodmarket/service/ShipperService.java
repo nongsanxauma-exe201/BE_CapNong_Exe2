@@ -3,8 +3,10 @@ package com.swd301.foodmarket.service;
 import com.swd301.foodmarket.dto.request.ShipperLocationRequest;
 import com.swd301.foodmarket.dto.request.UpdateOrderStatusRequest;
 import com.swd301.foodmarket.dto.response.AvailableOrderResponse;
+import com.swd301.foodmarket.dto.response.PageResponse;
 import com.swd301.foodmarket.dto.response.ShipperLocationResponse;
 import com.swd301.foodmarket.dto.response.ShipperOrderResponse;
+import org.springframework.data.domain.Page;
 
 import java.util.List;
 
@@ -29,4 +31,5 @@ public interface ShipperService {
 
     ShipperLocationResponse updateLocationByEmail(String email, ShipperLocationRequest request);
 
+    PageResponse<AvailableOrderResponse> getAllOrderCanShipper(int page, int size);
 }

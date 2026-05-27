@@ -247,17 +247,17 @@ public class PaymentServiceImpl implements PaymentService {
                 adminWallet.getCommissionWallet().add(platformFeeTotal)
         );
         
-        // Admin giữ phần tiền của Shop và Shipper (Held Money)
-        BigDecimal totalHeld = shopNet.add(shipperNet);
-        
-        adminWallet.setTotalBalance(
-                adminWallet.getTotalBalance().add(totalHeld)
-        );
-        
-        // Cộng luôn vào frozen_balance theo yêu cầu (để theo dõi tiền đang giữ)
-        adminWallet.setFrozenBalance(
-                adminWallet.getFrozenBalance().add(totalHeld)
-        );
+//        // Admin giữ phần tiền của Shop và Shipper (Held Money)
+//        BigDecimal totalHeld = shopNet.add(shipperNet);
+//
+//        adminWallet.setTotalBalance(
+//                adminWallet.getTotalBalance().add(totalHeld)
+//        );
+//
+//        // Cộng luôn vào frozen_balance theo yêu cầu (để theo dõi tiền đang giữ)
+//        adminWallet.setFrozenBalance(
+//                adminWallet.getFrozenBalance().add(totalHeld)
+//        );
 
         walletRepository.save(adminWallet);
 
@@ -278,9 +278,9 @@ public class PaymentServiceImpl implements PaymentService {
                 shopWallet.getFrozenBalance().add(shopNet)
         );
 
-        shopWallet.setTotalRevenueAllTime(
-                shopWallet.getTotalRevenueAllTime().add(shopNet)
-        );
+//        shopWallet.setTotalRevenueAllTime(
+//                shopWallet.getTotalRevenueAllTime().add(shopNet)
+//        );
 
         shopWallet.setUpdatedAt(LocalDateTime.now());
 
@@ -302,9 +302,9 @@ public class PaymentServiceImpl implements PaymentService {
                     shipperWallet.getFrozenBalance().add(shipperNet)
             );
 
-            shipperWallet.setTotalRevenueAllTime(
-                    shipperWallet.getTotalRevenueAllTime().add(shipperNet)
-            );
+//            shipperWallet.setTotalRevenueAllTime(
+//                    shipperWallet.getTotalRevenueAllTime().add(shipperNet)
+//            );
 
             shipperWallet.setUpdatedAt(LocalDateTime.now());
 

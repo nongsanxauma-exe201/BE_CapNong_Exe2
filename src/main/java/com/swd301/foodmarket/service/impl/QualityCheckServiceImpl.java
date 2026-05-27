@@ -23,7 +23,10 @@ import org.springframework.stereotype.Service;
 import org.springframework.util.MultiValueMap;
 import org.springframework.web.multipart.MultipartFile;
 
+import java.math.BigDecimal;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 
 @Slf4j
 @Service
@@ -95,8 +98,47 @@ public class QualityCheckServiceImpl implements QualityCheckService {
         }
         // update status order
         updateOrderStatus(orderDetail);
+        // update Reject quality
+
+        String message = "";
+        BigDecimal refundAmount = BigDecimal.ZERO;
+        if(qualityResult.getRejectedWeight() != null && qualityResult.getRejectedWeight() > 0){
+         double   percentage = (double) (qualityResult.getRejectedWeight() * 100) / orderDetail.getQuantity();
+            if (percentage > 5) {
+
+                refundAmount = refundAmount.add(orderDetail.getUnitPrice().multiply(BigDecimal.valueOf(qualityResult.getRejectedWeight())));
+                message+= "Sản phẩm " + orderDetail.getProduct().getProductName() + " bị hư hỏng " + qualityResult.getRejectedWeight()+"phải hoàn"+refundAmount+"đ";
+            }
+        }
+        Order order = orderDetail.getOrder();
+        BigDecimal currentRefund = order.getRefundAmount() != null
+                ? order.getRefundAmount()
+                : BigDecimal.ZERO;
+        order.setRefundAmount(currentRefund.add(refundAmount));        order.setRefundReason(order.getRefundReason() == null ? message : order.getRefundReason() + "\n" + message);
+        orderRepository.save(order);
         return qualityResultMapper.toQualityCheckResponse(qualityResult);
     }
+//    public Map<String,String> calculateRefundAmount(Order order) {
+//        List<OrderDetail> details = order.getOrderDetails();
+//        BigDecimal refundAmount = BigDecimal.ZERO;
+//        String message = "";
+//        for(OrderDetail detail : details) {
+//            QualityResult qualityResult = detail.getQualityResult();
+//            double percentage = 0;
+//            if (qualityResult != null && qualityResult.getRejectedWeight() != null &&   qualityResult.getRejectedWeight() > 0) {
+//                percentage = (double) (qualityResult.getRejectedWeight() * 100) / detail.getQuantity();
+//            }
+//            if (percentage > 5) {
+//                message+= "Sản phẩm " + detail.getProduct().getProductName() + " bị hư hỏng " + qualityResult.getRejectedWeight();
+//                refundAmount = refundAmount.add(detail.getUnitPrice().multiply(BigDecimal.valueOf(qualityResult.getRejectedWeight())));
+//            }
+//        }
+//        Map<String,String> map = new HashMap<>();
+//        map.put("message", message);
+//        map.put("refundAmount", refundAmount.toString());
+//        return map;
+//
+//    }
     // update status order
     public void updateOrderStatus(OrderDetail orderDetail){
         Order order = orderDetail.getOrder();

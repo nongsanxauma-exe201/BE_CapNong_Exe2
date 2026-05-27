@@ -4,6 +4,7 @@ import com.swd301.foodmarket.dto.request.WalletCreationRequest;
 import com.swd301.foodmarket.dto.request.WithdrawRequestCreationRequest;
 import com.swd301.foodmarket.dto.response.WalletResponse;
 import com.swd301.foodmarket.dto.response.WithdrawRequestResponse;
+import com.swd301.foodmarket.entity.User;
 import org.springframework.web.multipart.MultipartFile;
 
 import java.util.List;

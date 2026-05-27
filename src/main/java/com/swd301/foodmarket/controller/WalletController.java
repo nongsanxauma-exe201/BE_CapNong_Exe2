@@ -24,7 +24,7 @@ public class WalletController {
 
         // Shop owner xem ví
         @GetMapping("/me")
-        @PreAuthorize("hasRole('SHOP_OWNER')")
+        @PreAuthorize("hasAnyRole('SHOP_OWNER','BUYER')")
         public ApiResponse<WalletResponse> myWallet() {
                 return ApiResponse.<WalletResponse>builder()
                                 .result(walletService.getMyWallet())
@@ -33,7 +33,7 @@ public class WalletController {
 
         // Shipper xem ví
         @GetMapping("/shipper/me")
-        @PreAuthorize("hasRole('SHIPPER')")
+        @PreAuthorize("hasAnyRole('SHOP_OWNER')")
         public ApiResponse<WalletResponse> myShipperWallet() {
                 return ApiResponse.<WalletResponse>builder()
                                 .result(walletService.getMyShipperWallet())
@@ -52,7 +52,7 @@ public class WalletController {
 
         // Shipper xem lịch sử rút tiền
         @GetMapping("/shipper/withdraw-requests/my")
-        @PreAuthorize("hasRole('SHIPPER')")
+        @PreAuthorize("hasAnyRole('SHIPPER','BUYER')")
         public ApiResponse<List<WithdrawRequestResponse>> myShipperWithdrawRequests() {
                 return ApiResponse.<List<WithdrawRequestResponse>>builder()
                                 .result(walletService.getMyShipperWithdrawRequests())
@@ -111,7 +111,7 @@ public class WalletController {
         }
 
         @GetMapping("/withdraw-requests/my")
-        @PreAuthorize("hasRole('SHOP_OWNER')")
+        @PreAuthorize("hasAnyRole('SHOP_OWNER','BUYER')")
         public ApiResponse<List<WithdrawRequestResponse>> myWithdrawRequests() {
                 return ApiResponse.<List<WithdrawRequestResponse>>builder()
                                 .result(walletService.getMyWithdrawRequests())

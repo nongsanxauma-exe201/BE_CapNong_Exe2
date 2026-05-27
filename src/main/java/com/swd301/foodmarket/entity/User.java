@@ -141,6 +141,10 @@ public class User {
     @JsonIgnore
     List<UserNotification> userNotifications;
 
+    @OneToMany(mappedBy = "owner", cascade = CascadeType.ALL, orphanRemoval = true)
+    @JsonIgnore
+    List<Vehicle> vehicles;
+
     // SHIPPER
     @OneToMany(mappedBy = "shipper")
     @JsonIgnore
