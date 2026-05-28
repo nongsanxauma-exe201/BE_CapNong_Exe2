@@ -1,12 +1,12 @@
 package com.swd301.foodmarket.entity;
 
-import com.fasterxml.jackson.annotation.JsonIgnore;
 import com.swd301.foodmarket.enums.TripStatus;
 import jakarta.persistence.*;
 import lombok.*;
 import lombok.experimental.FieldDefaults;
 
 import java.time.LocalDateTime;
+import java.util.ArrayList;
 import java.util.List;
 
 @Entity
@@ -75,6 +75,9 @@ public class Trip {
     @Enumerated(EnumType.STRING)
             @Builder.Default
     TripStatus status = TripStatus.CREATED;
+    @OrderBy("createdAt DESC ")
+    @OneToMany(mappedBy = "trip")
+            List<TripTracking> tripTrackings = new ArrayList<>();
     Double basePrice;
     Double distanceRate;
     Double weightRate;

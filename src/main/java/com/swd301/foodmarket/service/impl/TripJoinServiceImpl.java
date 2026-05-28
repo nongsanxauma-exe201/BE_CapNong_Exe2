@@ -14,10 +14,7 @@ import com.swd301.foodmarket.repository.OrderRepository;
 import com.swd301.foodmarket.repository.TripJoinRequestRepository;
 import com.swd301.foodmarket.repository.TripRepository;
 import com.swd301.foodmarket.repository.UserRepository;
-import com.swd301.foodmarket.service.GoongMapService;
-import com.swd301.foodmarket.service.RouteOptimizationService;
-import com.swd301.foodmarket.service.TripJoinService;
-import com.swd301.foodmarket.service.TripService;
+import com.swd301.foodmarket.service.*;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.domain.Page;
@@ -44,6 +41,7 @@ public class TripJoinServiceImpl implements TripJoinService {
     private final OrderRepository orderRepository;
     private final TripRepository tripRepository;
     private final GoongMapService goongMapService;
+    private final NotificationService notificationService;
 
 
     @Override
@@ -80,6 +78,15 @@ public class TripJoinServiceImpl implements TripJoinService {
                 .pickupLng(latLong.getLongitude())
                 .pickupLat(latLong.getLatitude())
                 .build();
+
+        // Notification real time
+        Notification notification = Notification.builder()
+                .title("Yêu cầu ghép chuyến")
+                .message("Bạn có một yêu cầu ghép chuyến mới từ " + getCurrentUser().getShopName() + " cho chuyến đi của bạn. Vui lòng kiểm tra và phản hồi yêu cầu.")
+                .receiverType("SHOP_OWNER")
+                .build();
+        notificationService.sendNotificationWebsocket(trip.getOwner(), notification);
+
 
         return tripJoinRequestMapper.entityToResponse(tripJoinRequestRepository.save(joinRequest));
     }
@@ -152,6 +159,14 @@ public class TripJoinServiceImpl implements TripJoinService {
             order.setStatus(OrderStatus.READY_FOR_PICKUP);
             orderRepository.save(order);
         }
+        // Notification real time
+        Notification notification = Notification.builder()
+                .title("Yêu cầu ghép chuyến đã được chấp nhận")
+                .message("Bạn có một yêu cầu ghép chuyến đã được chấp nhận cho chuyến đi của bạn. Vui lòng chuẩn bị hàng hóa để giao.")
+                .receiverType("SHOP_OWNER")
+                .build();
+        notificationService.sendNotificationWebsocket(request.getFarmer(), notification);
+
         return tripJoinRequestMapper.entityToResponse( tripJoinRequestRepository.save(request));
     }
 
@@ -166,6 +181,13 @@ public class TripJoinServiceImpl implements TripJoinService {
         }
 
         request.setStatus(TripJoinStatus.REJECTED);
+        // Notification real time
+        Notification notification = Notification.builder()
+                .title("Yêu cầu ghép chuyến đã bị từ chối")
+                .message("Bạn có một yêu cầu ghép chuyến đã bị từ chối cho chuyến đi của bạn. Vui lòng kiểm tra lại thông tin và thử lại sau.")
+                .receiverType("SHOP_OWNER")
+                .build();
+        notificationService.sendNotificationWebsocket(request.getFarmer(), notification);
         return tripJoinRequestMapper.entityToResponse( tripJoinRequestRepository.save(request));
     }
 
