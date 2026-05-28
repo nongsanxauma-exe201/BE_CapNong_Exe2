@@ -1,6 +1,7 @@
 package com.swd301.foodmarket.repository;
 
 import com.swd301.foodmarket.dto.response.TripResponse;
+import com.swd301.foodmarket.entity.Order;
 import com.swd301.foodmarket.entity.TripJoinRequest;
 import com.swd301.foodmarket.entity.User;
 import com.swd301.foodmarket.enums.TripJoinStatus;
@@ -29,4 +30,6 @@ public interface TripJoinRequestRepository extends JpaRepository<TripJoinRequest
     List<TripJoinRequest> findByFarmerAndStatusOrderByCreatedAtAsc(User farmer, TripJoinStatus status);
 
     List<TripJoinRequest> findByFarmerAndStatusAndTrip_StatusOrderByCreatedAtDesc(User farmer, TripJoinStatus status, TripStatus tripStatus);
+
+    List<TripJoinRequest> findByStatus(TripJoinStatus status);
 }

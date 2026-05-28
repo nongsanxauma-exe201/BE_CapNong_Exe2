@@ -30,5 +30,6 @@ public class TripResponse {
     Double distanceRate;
     Double weightRate;
     List<TripStopResponse> tripStops;
+    TripTrackingResponse tripTrackingResponse;
 
 }

@@ -15,10 +15,7 @@ import com.swd301.foodmarket.mapper.OrderMapper;
 import com.swd301.foodmarket.mapper.TripMapper;
 import com.swd301.foodmarket.mapper.TripStropMapper;
 import com.swd301.foodmarket.repository.*;
-import com.swd301.foodmarket.service.GoongMapService;
-import com.swd301.foodmarket.service.RoutingService;
-import com.swd301.foodmarket.service.TripService;
-import com.swd301.foodmarket.service.WarehouseService;
+import com.swd301.foodmarket.service.*;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
@@ -50,6 +47,7 @@ public class TripServiceImpl implements TripService {
     private final OrderMapper orderMapper;
     private final TripJoinRequestRepository tripJoinRequestRepository;
     private final TripStropMapper tripStropMapper;
+    private final NotificationService notificationService;
 
     @Override
     @Transactional
@@ -102,7 +100,7 @@ public class TripServiceImpl implements TripService {
                 .build();
         tripStopRepository.saveAll(List.of(ownerStop,warehouseStop));
         updateTripAndOrder(ownerStop, request.getOrderIds());
-        //
+
 
         return tripMapper.entityToResponse(trip);
     }
@@ -185,7 +183,18 @@ public class TripServiceImpl implements TripService {
     public Page<OrderResponse> getOrdersForTrip(int page, int size) {
         User shopper = getCurrentUser();
         Pageable pageable = PageRequest.of(page, size, Sort.by("createdAt").descending());
-        Page<Order> orderPage = orderRepository.findByShopOwnerAndStatus(shopper,OrderStatus.CONFIRMED, pageable);
+
+        List<TripJoinRequest> orders = tripJoinRequestRepository.findByStatus(TripJoinStatus.PENDING);
+        List<Integer> orderID = new ArrayList<>();
+        for(TripJoinRequest request : orders)
+        {
+            if(request.getOrders() != null && !request.getOrders().isEmpty())
+            {
+                orderID.addAll(request.getOrders().stream().map(Order::getId).toList());
+            }
+
+        }
+        Page<Order> orderPage = orderRepository.getOrderForTrip(shopper,OrderStatus.CONFIRMED, orderID,pageable);
 
         return orderPage.map(orderMapper::toResponse);
     }

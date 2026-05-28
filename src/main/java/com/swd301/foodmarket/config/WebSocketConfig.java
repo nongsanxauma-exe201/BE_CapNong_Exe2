@@ -27,7 +27,7 @@ public class WebSocketConfig implements WebSocketMessageBrokerConfigurer {
     @Override
     public void configureMessageBroker(MessageBrokerRegistry config) {
         // Giữ nguyên từ file cũ
-        config.enableSimpleBroker("/topic");
+        config.enableSimpleBroker("/topic","/queue");
         config.setApplicationDestinationPrefixes("/app");
 
         // ← THÊM MỚI: prefix cho private message tới từng user

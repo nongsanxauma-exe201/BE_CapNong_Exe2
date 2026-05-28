@@ -54,9 +54,19 @@ public interface OrderRepository extends JpaRepository<Order, Integer> {
     Integer countDistinctShopOwnerIdByStatusIsIn(Collection<OrderStatus> statuses);
 
     Page<Order> findByShopOwner(User shopOwner, Pageable pageable);
-
-    Page<Order> findByShopOwnerAndStatus(User shopOwner, OrderStatus status, Pageable pageable);
-
+    @Query("""
+    SELECT o
+    FROM Order o
+    WHERE o.status = :status AND
+          ( o.shopOwner = :shopOwner) AND
+          (:orderIds IS NULL OR o.id NOT IN :orderIds)
+""")
+    Page<Order> getOrderForTrip(
+            @Param("shopOwner") User shopOwner,
+            @Param("status") OrderStatus status,
+            @Param("orderIds") List<Integer> orderIds, // Đổi từ List<Order> thành List<Integer>
+            Pageable pageable
+    );
     // Dùng bởi StaffServiceImpl để kiểm tra shipper đang giao đơn nào
     Optional<Order> findFirstByShipperIdAndStatus(Integer shipperId, OrderStatus status);
 
