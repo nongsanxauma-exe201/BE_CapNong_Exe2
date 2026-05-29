@@ -252,6 +252,14 @@ public class ShipperServiceImpl implements ShipperService {
 
         if (request.getStatus() == OrderStatus.DELIVERED) {
 
+            log.info("========== [DELIVERED PAYOUT START] Order #{} ==========", order.getId());
+            log.info("[ORDER] totalAmount={}, shippingFee={}, paymentMethod={}, refundAmount={}",
+                    order.getTotalAmount(),
+                    order.getShippingFee(),
+                    order.getPaymentMethod(),
+                    order.getRefundAmount()
+            );
+
             BigDecimal shippingFee = order.getShippingFee() != null
                     ? order.getShippingFee()
                     : BigDecimal.ZERO;
@@ -263,19 +271,23 @@ public class ShipperServiceImpl implements ShipperService {
 
                 // shipper nhận 90% tiền ship (trừ 10% phí sàn)
                 BigDecimal shipperFee = shippingFee.multiply(BigDecimal.valueOf(0.9));
-
+                log.info("[SHIPPER_PAYOUT_CALC] shippingFee={}, shipperFee=90%={}",
+                        shippingFee,
+                        shipperFee
+                );
                 // ======================
                 // SHIPPER WALLET
                 // ======================
 
                 Wallet shipperWallet = walletRepository.findByShipperIdForUpdate(shipper.getId())
                         .orElseThrow(() -> new AppException(ErrorCode.WALLET_NOT_FOUND));
-
-                log.info("Shipper wallet BEFORE: {}", shipperWallet.getFrozenBalance());
-
-                shipperWallet.setFrozenBalance(
-                        shipperWallet.getFrozenBalance().subtract(shipperFee)
+                log.info("[SHIPPER_WALLET_BEFORE] shipperId={}, totalBalance={}, frozenBalance={}, totalRevenueAllTime={}",
+                        shipper.getId(),
+                        shipperWallet.getTotalBalance(),
+                        shipperWallet.getFrozenBalance(),
+                        shipperWallet.getTotalRevenueAllTime()
                 );
+
                 shipperWallet.setTotalBalance(
                         shipperWallet.getTotalBalance().add(shipperFee)
                 );
@@ -283,87 +295,161 @@ public class ShipperServiceImpl implements ShipperService {
                 shipperWallet.setTotalRevenueAllTime(
                         shipperWallet.getTotalRevenueAllTime().add(shipperFee)
                 );
+
                 shipperWallet.setUpdatedAt(LocalDateTime.now());
 
                 walletRepository.save(shipperWallet);
 
-                log.info("Shipper wallet AFTER: {}", shipperWallet.getFrozenBalance());
-
-                // ======================
-                // TRỪ TIỀN ADMIN (vì đã giữ shipping trước đó)
-                // ======================
-
-//                Wallet adminWallet = walletRepository.findByTypeForUpdate(WalletType.PLATFORM)
-//                        .orElseThrow(() -> new AppException(ErrorCode.PLATFORM_WALLET_NOT_FOUND));
-//
-//                log.info("Admin wallet BEFORE: {}", adminWallet.getTotalBalance());
-//
-//                adminWallet.setTotalBalance(
-//                        adminWallet.getTotalBalance().subtract(shipperFee)
-//                );
-//
-//                walletRepository.save(adminWallet);
-
-//                log.info("Admin wallet AFTER: {}", adminWallet.getTotalBalance());
+                log.info("[SHIPPER_WALLET_AFTER] shipperId={}, totalBalance={}, frozenBalance={}, totalRevenueAllTime={}",
+                        shipper.getId(),
+                        shipperWallet.getTotalBalance(),
+                        shipperWallet.getFrozenBalance(),
+                        shipperWallet.getTotalRevenueAllTime()
+                );
             }
             BigDecimal shopGross = totalAmount.subtract(shippingFee);
-            BigDecimal shopRevenue = shopGross.multiply(BigDecimal.valueOf(0.9)); // trừ 10% phí sàn
+            BigDecimal shopRevenue = shopGross.multiply(BigDecimal.valueOf(0.9));
+            BigDecimal finalShopRevenue = shopRevenue;
+
             if (shopRevenue.compareTo(BigDecimal.ZERO) > 0) {
+
                 Wallet shopWallet = walletRepository.findByShopOwner_Id(order.getShopOwner().getId())
                         .orElseThrow(() -> new AppException(ErrorCode.WALLET_NOT_FOUND));
-                // tra tien cho buyer khi  ma don hang bi hu mot phan
-                if(order.getRefundAmount() != null && order.getRefundAmount().compareTo(BigDecimal.ZERO) > 0) {
-                    BigDecimal refundAmount =  order.getRefundAmount();
-                    shopRevenue = shopRevenue.subtract(order.getRefundAmount());
-                    shopRevenue = shopRevenue.subtract(refundAmount);
+                log.info("[SHOP_WALLET_BEFORE] shopOwnerId={}, totalBalance={}, frozenBalance={}, totalRevenueAllTime={}",
+                        order.getShopOwner().getId(),
+                        shopWallet.getTotalBalance(),
+                        shopWallet.getFrozenBalance(),
+                        shopWallet.getTotalRevenueAllTime()
+                );
+                BigDecimal refundAmount = order.getRefundAmount() != null
+                        ? order.getRefundAmount()
+                        : BigDecimal.ZERO;
 
-                if(order.getPaymentMethod().equalsIgnoreCase("PAYOS"))
-                {
-                    if(refundAmount.compareTo(BigDecimal.ZERO) > 0) {
+                log.info("[SHOP_PAYOUT_CALC] orderId={}, totalAmount={}, shippingFee={}, shopGross=total-shipping={}, shopRevenue=90%={}, refundAmount={}",
+                        orderId,
+                        totalAmount,
+                        shippingFee,
+                        shopGross,
+                        shopRevenue,
+
+                        refundAmount
+                );
+                if (refundAmount.compareTo(BigDecimal.ZERO) > 0) {
+
+                    if (refundAmount.compareTo(shopRevenue) > 0) {
+                        log.error("[REFUND_INVALID] orderId={}, refundAmount={}, shopRevenue={}",
+                                orderId,
+                                refundAmount,
+                                shopRevenue
+                        );
+                        throw new AppException(ErrorCode.INVALID_REFUND_AMOUNT);
+                    }
+
+                    finalShopRevenue = shopRevenue.subtract(refundAmount);
+                    log.info("[REFUND_CALC] orderId={}, refundAmount={}, finalShopRevenue=shopRevenue-refund={}",
+                            orderId,
+                            refundAmount,
+                            finalShopRevenue
+                    );
+                    if (refundAmount.compareTo(BigDecimal.ZERO) > 0) {
                         Wallet buyerWallet = walletRepository.findByBuyer(order.getBuyer());
-                        if(buyerWallet == null) {
-                            log.error("Buyer wallet not found for buyer {}", order.getBuyer().getId());
+
+                        if (buyerWallet == null) {
                             throw new AppException(ErrorCode.WALLET_NOT_FOUND);
                         }
 
-                        log.info("Buyer wallet BEFORE refund: {}", buyerWallet.getTotalBalance());
+                        log.info("[BUYER_WALLET_BEFORE_REFUND] buyerId={}, totalBalance={}, frozenBalance={}, refundAmount={}",
+                                order.getBuyer().getId(),
+                                buyerWallet.getTotalBalance(),
+                                buyerWallet.getFrozenBalance(),
+                                refundAmount
+                        );
+
+
                         buyerWallet.setTotalBalance(
                                 buyerWallet.getTotalBalance().add(refundAmount)
                         );
+
                         walletRepository.save(buyerWallet);
-                        log.info("Buyer wallet AFTER refund: {}", buyerWallet.getTotalBalance());
-                        // thong bao cho shop va buyer  khi don hang bi hu mot phan va da duoc tra tien lai
-                        Notification notification = Notification.builder()
+
+                        log.info("[BUYER_WALLET_AFTER_REFUND] buyerId={}, totalBalance={}, frozenBalance={}",
+                                order.getBuyer().getId(),
+                                buyerWallet.getTotalBalance(),
+                                buyerWallet.getFrozenBalance()
+                        );
+
+                        Notification buyerNotification = Notification.builder()
                                 .title("Hoàn tiền đơn hàng #" + order.getId())
-                                .message("Bạn đã nhận được " +refundAmount+ "đ từ "+order.getRefundAmount()+"từ đơn hang #" + order.getId())
-                                .receiverType("USER_"+order.getBuyer().toString())
+                                .message("Bạn đã nhận được " + refundAmount + "đ hoàn tiền từ đơn hàng #" + order.getId())
+                                .receiverType("USER_" + order.getBuyer().getId())
                                 .build();
-                        notificationService.createUserNotification(order.getBuyer(), notification);
-                        Notification notificatio = Notification.builder()
+
+                        notificationService.createUserNotification(order.getBuyer(), buyerNotification);
+
+                        Notification shopNotification = Notification.builder()
                                 .title("Hoàn tiền đơn hàng #" + order.getId())
-                                .message("Bạn đã bị trừ  " +refundAmount+ "đ lý do "+order.getRefundAmount()+ "từ đơn hàng #" + order.getId())
-                                .receiverType("USER_"+order.getShopOwner().toString())
+                                .message("Bạn đã bị trừ " + refundAmount + "đ do hoàn tiền đơn hàng #" + order.getId())
+                                .receiverType("USER_" + order.getShopOwner().getId())
                                 .build();
-                        notificationService.createUserNotification(order.getShopOwner(), notificatio);
+
+                        notificationService.createUserNotification(order.getShopOwner(), shopNotification);
                     }
                 }
+
+                if (shopWallet.getFrozenBalance().compareTo(shopRevenue) < 0) {
+                    log.error("[SHOP_FROZEN_NOT_ENOUGH] orderId={}, frozenBalance={}, needToUnfreeze={}",
+                            orderId,
+                            shopWallet.getFrozenBalance(),
+                            shopRevenue
+                    );
+                    throw new AppException(ErrorCode.WALLET_BALANCE_NOT_ENOUGH);
                 }
 
-
+                log.info("[SHOP_WALLET_OPERATION] orderId={}, frozenBalance - shopRevenue = {} - {}, totalBalance - refundAmount = {} - {}, revenueAllTime + finalShopRevenue = {} + {}",
+                        orderId,
+                        shopWallet.getFrozenBalance(),
+                        shopRevenue,
+                        shopWallet.getTotalBalance(),
+                        refundAmount,
+                        shopWallet.getTotalRevenueAllTime(),
+                        finalShopRevenue
+                );
                 shopWallet.setFrozenBalance(
-                        shopWallet.getFrozenBalance().subtract(shopGross)
+                        shopWallet.getFrozenBalance().subtract(shopRevenue)
                 );
-                shopWallet.setTotalBalance(
-                        shopWallet.getTotalBalance().add(shopRevenue)
-                );
+
+                if (refundAmount.compareTo(BigDecimal.ZERO) > 0) {
+                    shopWallet.setTotalBalance(
+                            shopWallet.getTotalBalance().subtract(refundAmount)
+                    );
+                }
+
                 shopWallet.setTotalRevenueAllTime(
-                        shopWallet.getTotalRevenueAllTime().add(shopRevenue)
+                        shopWallet.getTotalRevenueAllTime().add(finalShopRevenue)
                 );
 
                 shopWallet.setUpdatedAt(LocalDateTime.now());
+                log.info("[SHOP_WALLET_AFTER] shopOwnerId={}, totalBalance={}, frozenBalance={}, totalRevenueAllTime={}",
+                        order.getShopOwner().getId(),
+                        shopWallet.getTotalBalance(),
+                        shopWallet.getFrozenBalance(),
+                        shopWallet.getTotalRevenueAllTime()
+                );
                 walletRepository.save(shopWallet);
             }
 
+            log.info("[PAYOUT_SUMMARY] orderId={}, totalAmount={}, shippingFee={}, shopGross={}, shopRevenue={}, refundAmount={}, finalShopRevenue={}",
+                    orderId,
+                    totalAmount,
+                    shippingFee,
+                    shopGross,
+                    shopRevenue,
+                    order.getRefundAmount() != null
+                            ? order.getRefundAmount()
+                            : BigDecimal.ZERO,
+                    finalShopRevenue
+            );
+            log.info("========== [DELIVERED PAYOUT END] Order #{} ==========", order.getId());
         }
 
         // ====================================================

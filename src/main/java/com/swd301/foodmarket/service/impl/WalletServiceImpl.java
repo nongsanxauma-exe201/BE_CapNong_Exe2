@@ -89,9 +89,10 @@ public class WalletServiceImpl implements WalletService {
             throw new AppException(ErrorCode.INVALID_AMOUNT);
         }
 
-        if (wallet.getFrozenBalance().compareTo(request.getAmount()) < 0) {
+        if (availableBalance(wallet).compareTo(request.getAmount()) < 0) {
             throw new AppException(ErrorCode.INSUFFICIENT_BALANCE);
         }
+
 
         String bankName = request.getBankName() != null && !request.getBankName().isBlank()
                 ? request.getBankName() : shipper.getBankName();
@@ -123,7 +124,7 @@ public class WalletServiceImpl implements WalletService {
 
         withdrawRequestRepository.save(wr);
 
-        wallet.setFrozenBalance(wallet.getFrozenBalance().subtract(request.getAmount()));
+        wallet.setFrozenBalance(wallet.getFrozenBalance().add(request.getAmount()));
         walletRepository.save(wallet);
 
         return withdrawRequestMapper.toResponse(wr);
@@ -181,7 +182,7 @@ public class WalletServiceImpl implements WalletService {
        String qrUrl = vieQRService.generateVieQRCode(
                String.valueOf(BankBinConstants.getBankBinIgnoreCase(wr.getBankName())),
                 wr.getBankAccountNumber(),
-               wr.getAmount(),
+               wr.getReceiveAmount(),
                 null,
                 wr.getBankAccountHolder()
         );
@@ -217,41 +218,48 @@ public class WalletServiceImpl implements WalletService {
                 .orElseThrow(() -> new AppException(ErrorCode.PLATFORM_WALLET_NOT_FOUND));
 
         BigDecimal amount = wr.getAmount();
-
-        // 1. Cập nhật ví chủ sở hữu (Shop/Shipper)
-        if (wallet.getType() == WalletType.SHIPPER) {
-            // Khi Shipper tạo yêu cầu, tiền đã bị TRỪ khỏi frozenBalance rồi.
-            // Ở đây chỉ cần tăng totalWithdrawn để thống kê.
-            wallet.setTotalWithdrawn(wallet.getTotalWithdrawn().add(amount));
-        } else {
-            // Khi Shop tạo yêu cầu, tiền được GIỮ (add) vào frozenBalance.
-            // Ở đây cần kiểm tra và TRỪ khỏi frozenBalance.
-            if (wallet.getFrozenBalance().compareTo(amount) < 0) {
-                throw new AppException(ErrorCode.WALLET_BALANCE_NOT_ENOUGH);
-            }
-            wallet.setFrozenBalance(wallet.getFrozenBalance().subtract(amount));
-            wallet.setTotalWithdrawn(wallet.getTotalWithdrawn().add(amount));
+        if (wallet.getFrozenBalance().compareTo(amount) < 0) {
+            throw new AppException(ErrorCode.WALLET_BALANCE_NOT_ENOUGH);
         }
+
+        wallet.setFrozenBalance(wallet.getFrozenBalance().subtract(amount));
+        wallet.setTotalBalance(wallet.getTotalBalance().subtract(amount));
+        wallet.setTotalWithdrawn(wallet.getTotalWithdrawn().add(amount));
         walletRepository.save(wallet);
+
 
         // 2. Cập nhật ví hệ thống (Platform) - Luôn phải trừ đi phần tiền hệ thống đã bỏ ra trả
         log.error("Platform balance: {}", platformWallet.getTotalBalance());
         log.error("Receive amount: {}", wr.getReceiveAmount());
 
-        if (platformWallet.getTotalBalance().compareTo(wr.getReceiveAmount()) < 0) {
+        BigDecimal withdrawAmount = wr.getAmount();
+        BigDecimal receiveAmount = wr.getReceiveAmount();
+        BigDecimal fee = wr.getFee() != null ? wr.getFee() : BigDecimal.ZERO;
+
+        if (platformWallet.getTotalBalance().compareTo(receiveAmount) < 0) {
             throw new AppException(ErrorCode.PLATFORM_BALANCE_NOT_ENOUGH);
         }
 
-        platformWallet.setTotalWithdrawn(platformWallet.getTotalWithdrawn().add(amount));
+        if (platformWallet.getFrozenBalance().compareTo(withdrawAmount) < 0) {
+            throw new AppException(ErrorCode.PLATFORM_BALANCE_NOT_ENOUGH);
+        }
+
         platformWallet.setTotalBalance(
-                platformWallet.getTotalBalance().subtract(wr.getReceiveAmount())
+                platformWallet.getTotalBalance().subtract(receiveAmount)
         );
+
         platformWallet.setFrozenBalance(
-                platformWallet.getFrozenBalance().subtract(wr.getReceiveAmount())
+                platformWallet.getFrozenBalance().subtract(withdrawAmount)
         );
+
+        platformWallet.setTotalWithdrawn(
+                platformWallet.getTotalWithdrawn().add(receiveAmount)
+        );
+
         platformWallet.setCommissionWallet(
-                platformWallet.getCommissionWallet().add(wr.getFee())
+                platformWallet.getCommissionWallet().add(fee)
         );
+
         walletRepository.save(platformWallet);
 
         // 3. Update trạng thái yêu cầu
@@ -290,7 +298,7 @@ public class WalletServiceImpl implements WalletService {
             throw new AppException(ErrorCode.INVALID_AMOUNT);
         }
 log.info("Wallet balance: {}, request amount {}", wallet.getTotalBalance(),request.getAmount());
-        if (wallet.getTotalBalance().compareTo(request.getAmount()) < 0) {
+        if (availableBalance(wallet).compareTo(request.getAmount()) < 0) {
             throw new AppException(ErrorCode.INSUFFICIENT_BALANCE);
         }
 
@@ -335,7 +343,6 @@ log.info("Wallet balance: {}, request amount {}", wallet.getTotalBalance(),reque
 
         withdrawRequestRepository.save(wr);
 
-        wallet.setTotalBalance(wallet.getTotalBalance().subtract(request.getAmount()));
         wallet.setFrozenBalance(wallet.getFrozenBalance().add(request.getAmount()));
         walletRepository.save(wallet);
 
@@ -359,12 +366,15 @@ log.info("Wallet balance: {}, request amount {}", wallet.getTotalBalance(),reque
         wr.setProcessedAt(LocalDateTime.now());
 
         Wallet wallet = wr.getWallet();
-        if (wallet.getType() == WalletType.SHIPPER) {
-            wallet.setFrozenBalance(wallet.getFrozenBalance().add(wr.getAmount()));
-        } else {
-            wallet.setFrozenBalance(wallet.getFrozenBalance().subtract(wr.getAmount()));
-            wallet.setTotalBalance(wallet.getTotalBalance().add(wr.getAmount())); // trả tiền lại
+
+        if (wallet.getFrozenBalance().compareTo(wr.getAmount()) < 0) {
+            throw new AppException(ErrorCode.WALLET_BALANCE_NOT_ENOUGH);
         }
+
+        wallet.setFrozenBalance(
+                wallet.getFrozenBalance().subtract(wr.getAmount())
+        );
+
         walletRepository.save(wallet);
         // save image
         saveEvidnetFile(files,wr);
@@ -420,4 +430,10 @@ log.info("Wallet balance: {}, request amount {}", wallet.getTotalBalance(),reque
                 withdrawRequestRepository.findAllByOrderByIdDesc()
         );
     }
+    private BigDecimal availableBalance(Wallet wallet) {
+        BigDecimal total = wallet.getTotalBalance() != null ? wallet.getTotalBalance() : BigDecimal.ZERO;
+        BigDecimal frozen = wallet.getFrozenBalance() != null ? wallet.getFrozenBalance() : BigDecimal.ZERO;
+        return total.subtract(frozen);
+    }
+
 }

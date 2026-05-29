@@ -236,28 +236,24 @@ public class PaymentServiceImpl implements PaymentService {
                 .orElseThrow(() -> new AppException(ErrorCode.PLATFORM_WALLET_NOT_FOUND));
 
         log.info("Admin wallet BEFORE balance: {}", adminWallet.getTotalBalance());
+        BigDecimal totalHeld = shopNet.add(shipperNet);
 
-        // Doanh thu thực của Admin là tiền phí (10%)
-        adminWallet.setTotalRevenueAllTime(
-                adminWallet.getTotalRevenueAllTime().add(platformFeeTotal)
+        adminWallet.setTotalBalance(
+                adminWallet.getTotalBalance().add(totalAmount)
         );
-        
-        // Tiền Admin cầm trong ví hoa hồng (là lợi nhuận có thể rút/sử dụng)
+
+        adminWallet.setFrozenBalance(
+                adminWallet.getFrozenBalance().add(totalHeld)
+        );
+
         adminWallet.setCommissionWallet(
                 adminWallet.getCommissionWallet().add(platformFeeTotal)
         );
-        
-//        // Admin giữ phần tiền của Shop và Shipper (Held Money)
-//        BigDecimal totalHeld = shopNet.add(shipperNet);
-//
-//        adminWallet.setTotalBalance(
-//                adminWallet.getTotalBalance().add(totalHeld)
-//        );
-//
-//        // Cộng luôn vào frozen_balance theo yêu cầu (để theo dõi tiền đang giữ)
-//        adminWallet.setFrozenBalance(
-//                adminWallet.getFrozenBalance().add(totalHeld)
-//        );
+
+        adminWallet.setTotalRevenueAllTime(
+                adminWallet.getTotalRevenueAllTime().add(platformFeeTotal)
+        );
+
 
         walletRepository.save(adminWallet);
 
@@ -274,13 +270,13 @@ public class PaymentServiceImpl implements PaymentService {
 
         log.info("Shop wallet BEFORE frozen balance: {}", shopWallet.getFrozenBalance());
 
+        shopWallet.setTotalBalance(
+                shopWallet.getTotalBalance().add(shopNet)
+        );
+
         shopWallet.setFrozenBalance(
                 shopWallet.getFrozenBalance().add(shopNet)
         );
-
-//        shopWallet.setTotalRevenueAllTime(
-//                shopWallet.getTotalRevenueAllTime().add(shopNet)
-//        );
 
         shopWallet.setUpdatedAt(LocalDateTime.now());
 
@@ -292,26 +288,26 @@ public class PaymentServiceImpl implements PaymentService {
         // SHIPPER WALLET
         // ======================
 
-        if (order.getShipper() != null) {
-            Wallet shipperWallet = walletRepository.findByShipperIdForUpdate(order.getShipper().getId())
-                    .orElseThrow(() -> new AppException(ErrorCode.WALLET_NOT_FOUND));
-
-            log.info("Shipper wallet BEFORE frozen balance: {}", shipperWallet.getFrozenBalance());
-
-            shipperWallet.setFrozenBalance(
-                    shipperWallet.getFrozenBalance().add(shipperNet)
-            );
-
-//            shipperWallet.setTotalRevenueAllTime(
-//                    shipperWallet.getTotalRevenueAllTime().add(shipperNet)
+//        if (order.getShipper() != null) {
+//            Wallet shipperWallet = walletRepository.findByShipperIdForUpdate(order.getShipper().getId())
+//                    .orElseThrow(() -> new AppException(ErrorCode.WALLET_NOT_FOUND));
+//
+//            log.info("Shipper wallet BEFORE frozen balance: {}", shipperWallet.getFrozenBalance());
+//
+//            shipperWallet.setFrozenBalance(
+//                    shipperWallet.getFrozenBalance().add(shipperNet)
 //            );
-
-            shipperWallet.setUpdatedAt(LocalDateTime.now());
-
-            walletRepository.save(shipperWallet);
-
-            log.info("Shipper wallet AFTER frozen balance: {}", shipperWallet.getFrozenBalance());
-        }
+//
+////            shipperWallet.setTotalRevenueAllTime(
+////                    shipperWallet.getTotalRevenueAllTime().add(shipperNet)
+////            );
+//
+//            shipperWallet.setUpdatedAt(LocalDateTime.now());
+//
+//            walletRepository.save(shipperWallet);
+//
+//            log.info("Shipper wallet AFTER frozen balance: {}", shipperWallet.getFrozenBalance());
+//        }
 
         // ======================
         // TRANSACTION LOG

@@ -71,7 +71,7 @@ public enum ErrorCode {
     WALLET_FROZEN_BALANCE_NOT_ENOUGH(3011, "Frozen balance in wallet is not enough for this operation", HttpStatus.BAD_REQUEST),
     PLATFORM_BALANCE_NOT_ENOUGH(3012, "Platform balance is not enough for this operation", HttpStatus.INTERNAL_SERVER_ERROR),
     WALLET_BALANCE_NOT_ENOUGH(3013, "Wallet balance is not enough for this operation", HttpStatus.BAD_REQUEST),
-
+    INVALID_REFUND_AMOUNT(3014, "Invalid refund amount", HttpStatus.BAD_REQUEST),
     BLOG_NOT_FOUND(4001, "Blog not found", HttpStatus.NOT_FOUND),
     //PAYMENT
     PAYMENT_NOT_FOUND(5001, "Payment not found", HttpStatus.NOT_FOUND),

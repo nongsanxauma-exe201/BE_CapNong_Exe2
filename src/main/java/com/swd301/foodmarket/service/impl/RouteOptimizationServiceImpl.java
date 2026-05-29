@@ -88,7 +88,7 @@ public class RouteOptimizationServiceImpl implements RouteOptimizationService {
                     .stopType(TripStopType.PICKUP)
                     .order(new ArrayList<>(request.getOrders()))
                     .priceForStop(request.getPriceOffer())
-                    .isPickup(true) // Đổi thành true vì đây là điểm Pickup
+                    .isPickup(false)
                     .build();
 
             pickupStop = tripStopRepository.save(pickupStop);
@@ -170,79 +170,171 @@ public class RouteOptimizationServiceImpl implements RouteOptimizationService {
     /**
      * Hàm tìm chuỗi lộ trình tối ưu nhất bằng thuật toán hoán vị (TSP)
      */
-    private List<TripJoinRequest> findOptimalTSPRoute(TripStop start, Trip trip, List<TripJoinRequest> requests) {
-        if (requests.isEmpty()) return requests;
+    private List<TripJoinRequest> findOptimalTSPRoute(
+            TripStop start,
+            Trip trip,
+            List<TripJoinRequest> requests
+    ) {
+        if (requests == null || requests.isEmpty()) {
+            return requests;
+        }
 
-        // 1. Sinh tất cả các hoán vị của danh sách requests
-        List<List<TripJoinRequest>> allPermutations = new ArrayList<>();
-        generatePermutations(requests, 0, allPermutations);
+        int n = requests.size();
 
-        List<TripJoinRequest> bestRoute = null;
-        double minTotalDistance = Double.MAX_VALUE;
+        // index 0 = start
+        // index 1..n = pickup requests
+        // index n + 1 = warehouse
+        int warehouseIndex = n + 1;
 
-        // 2. Duyệt qua từng kịch bản để tìm lộ trình có TỔNG KHOẢNG CÁCH THỰC TẾ ngắn nhất
-        for (List<TripJoinRequest> permutation : allPermutations) {
-            double currentDistance = 0;
+        double[] lat = new double[n + 2];
+        double[] lng = new double[n + 2];
 
-            // Điểm bắt đầu (Điểm đầu của chủ xe)
-            double currentLat = start.getLat();
-            double currentLng = start.getLng();
+        lat[0] = start.getLat();
+        lng[0] = start.getLng();
 
-            boolean isValidRoute = true;
+        for (int i = 0; i < n; i++) {
+            lat[i + 1] = requests.get(i).getPickupLat();
+            lng[i + 1] = requests.get(i).getPickupLng();
+        }
 
-            // Tính qua từng điểm Pickup trong hoán vị hiện tại
-            for (TripJoinRequest req : permutation) {
-                // Gọi Routing Service để lấy khoảng cách thực tế trên đường đi thay vì chim bay
-                RouteData data = routingService.getRoute(currentLat, currentLng, req.getPickupLat(), req.getPickupLng());
-                if (data != null) {
-                    currentDistance += data.getDistanceKm();
-                } else {
-                    // Fallback sang chim bay nếu API lỗi
-                    currentDistance += calculateDistanceKm(currentLat, currentLng, req.getPickupLat(), req.getPickupLng());
-                }
+        lat[warehouseIndex] = trip.getWarehouse().getLatitude();
+        lng[warehouseIndex] = trip.getWarehouse().getLongitude();
 
-                currentLat = req.getPickupLat();
-                currentLng = req.getPickupLng();
-            }
+        double[][] dist = buildDistanceMatrix(lat, lng);
 
-            // Chặng cuối cùng: Từ điểm Pickup cuối cùng về Warehouse (Kho)
-            RouteData finalData = routingService.getRoute(currentLat, currentLng, trip.getWarehouse().getLatitude(), trip.getWarehouse().getLongitude());
-            if (finalData != null) {
-                currentDistance += finalData.getDistanceKm();
-            } else {
-                currentDistance += calculateDistanceKm(currentLat, currentLng, trip.getWarehouse().getLatitude(), trip.getWarehouse().getLongitude());
-            }
+        int totalMask = 1 << n;
 
-            // Cập nhật lộ trình tốt nhất tuyệt đối
-            if (currentDistance < minTotalDistance) {
-                minTotalDistance = currentDistance;
-                bestRoute = new ArrayList<>(permutation);
+        double[][] dp = new double[totalMask][n];
+        int[][] parent = new int[totalMask][n];
+
+        for (int mask = 0; mask < totalMask; mask++) {
+            for (int i = 0; i < n; i++) {
+                dp[mask][i] = Double.MAX_VALUE;
+                parent[mask][i] = -1;
             }
         }
 
-        return bestRoute;
-    }
+        // start -> pickup i
+        for (int i = 0; i < n; i++) {
+            int mask = 1 << i;
+            dp[mask][i] = dist[0][i + 1];
+        }
 
+        // DP qua các pickup
+        for (int mask = 0; mask < totalMask; mask++) {
+            for (int last = 0; last < n; last++) {
+                if (dp[mask][last] == Double.MAX_VALUE) {
+                    continue;
+                }
+
+                for (int next = 0; next < n; next++) {
+                    if ((mask & (1 << next)) != 0) {
+                        continue;
+                    }
+
+                    int nextMask = mask | (1 << next);
+                    double newCost = dp[mask][last] + dist[last + 1][next + 1];
+
+                    if (newCost < dp[nextMask][next]) {
+                        dp[nextMask][next] = newCost;
+                        parent[nextMask][next] = last;
+                    }
+                }
+            }
+        }
+
+        // Kết thúc: pickup cuối -> warehouse
+        int fullMask = totalMask - 1;
+        double bestCost = Double.MAX_VALUE;
+        int bestLast = -1;
+
+        for (int last = 0; last < n; last++) {
+            double totalCost = dp[fullMask][last] + dist[last + 1][warehouseIndex];
+
+            if (totalCost < bestCost) {
+                bestCost = totalCost;
+                bestLast = last;
+            }
+        }
+
+        // Dựng lại route tối ưu
+        List<Integer> routeIndexes = new ArrayList<>();
+
+        int mask = fullMask;
+        int current = bestLast;
+
+        while (current != -1) {
+            routeIndexes.add(current);
+
+            int prev = parent[mask][current];
+            mask = mask ^ (1 << current);
+            current = prev;
+        }
+
+        java.util.Collections.reverse(routeIndexes);
+
+        List<TripJoinRequest> optimalRoute = new ArrayList<>();
+        for (Integer index : routeIndexes) {
+            optimalRoute.add(requests.get(index));
+        }
+
+        log.info("Optimal TSP route found for {} pickup stops. Best cost: {}", n, bestCost);
+
+        return optimalRoute;
+    }
+    private double[][] buildDistanceMatrix(double[] lat, double[] lng) {
+        int size = lat.length;
+        double[][] dist = new double[size][size];
+
+        for (int i = 0; i < size; i++) {
+            for (int j = 0; j < size; j++) {
+                if (i == j) {
+                    dist[i][j] = 0;
+                    continue;
+                }
+
+                RouteData routeData = routingService.getRoute(
+                        lat[i],
+                        lng[i],
+                        lat[j],
+                        lng[j]
+                );
+
+                if (routeData != null) {
+                    dist[i][j] = routeData.getDistanceKm();
+                } else {
+                    dist[i][j] = calculateDistanceKm(
+                            lat[i],
+                            lng[i],
+                            lat[j],
+                            lng[j]
+                    );
+                }
+            }
+        }
+
+        return dist;
+    }
     /**
      * Hàm sinh hoán vị (Backtracking)
      */
-    private void generatePermutations(List<TripJoinRequest> list, int index, List<List<TripJoinRequest>> result) {
-        if (index >= list.size() - 1) {
-            result.add(new ArrayList<>(list));
-            return;
-        }
-        for (int i = index; i < list.size(); i++) {
-            swap(list, index, i);
-            generatePermutations(list, index + 1, result);
-            swap(list, index, i); // backtrack
-        }
-    }
+//    private void generatePermutations(List<TripJoinRequest> list, int index, List<List<TripJoinRequest>> result) {
+//        if (index >= list.size() - 1) {
+//            result.add(new ArrayList<>(list));
+//            return;
+//        }
+//        for (int i = index; i < list.size(); i++) {
+//            swap(list, index, i);
+//            generatePermutations(list, index + 1, result);
+//            swap(list, index, i); // backtrack
+//        }
+//    }
 
-    private void swap(List<TripJoinRequest> list, int i, int j) {
-        TripJoinRequest temp = list.get(i);
-        list.set(i, list.get(j));
-        list.set(j, temp);
-    }
+//    private void swap(List<TripJoinRequest> list, int i, int j) {
+//        TripJoinRequest temp = list.get(i);
+//        list.set(i, list.get(j));
+//        list.set(j, temp);
+//    }
 
     private double calculateDistanceKm(double lat1, double lng1, double lat2, double lng2) {
         final int EARTH_RADIUS_KM = 6371;
