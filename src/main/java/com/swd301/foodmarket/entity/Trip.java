@@ -25,17 +25,17 @@ public class Trip {
 
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "owner_id", nullable = false)
- 
+
     User owner;
 
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "vehicle_id")
- 
+
     Vehicle vehicle;
 
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "warehouse_id")
- 
+
     Warehouse warehouse;
 
     @Column(name = "start_lat")
@@ -73,11 +73,11 @@ public class Trip {
     List<TripJoinRequest> tripJoinRequests;
     @Column(name = "status", nullable = false)
     @Enumerated(EnumType.STRING)
-            @Builder.Default
+    @Builder.Default
     TripStatus status = TripStatus.CREATED;
-    @OrderBy("createdAt DESC ")
+    @OrderBy("createdAt ASC ")
     @OneToMany(mappedBy = "trip")
-            List<TripTracking> tripTrackings = new ArrayList<>();
+    List<TripTracking> tripTrackings = new ArrayList<>();
     Double basePrice;
     Double distanceRate;
     Double weightRate;

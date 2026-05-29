@@ -27,7 +27,7 @@ public class QualityResult {
     @JoinColumn(name = "order_detail_id")
     private OrderDetail orderDetail;
     @OneToOne
-    @JoinColumn(name = "mystery_box_id")
+    @JoinColumn(name = "order_mystery_box_id")
     private OrderMysteryBox orderMysteryBox;
     @OneToMany(mappedBy = "qualityResult")
     private List<QualityCheck> qualityChecks = new ArrayList<>();

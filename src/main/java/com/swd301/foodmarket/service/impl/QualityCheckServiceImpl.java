@@ -71,12 +71,14 @@ public class QualityCheckServiceImpl implements QualityCheckService {
         Order order = null;
         if (mysteryBox != null) {
             qualityResult.setOrderMysteryBox(mysteryBox);
+            mysteryBox.setQualityResult(qualityResult); // thêm dòng này
             order = mysteryBox.getOrder();
         } else if (orderDetail != null) {
             qualityResult.setOrderDetail(orderDetail);
+            orderDetail.setQualityResult(qualityResult); // nên thêm luôn cho product
             order = orderDetail.getOrder();
         }
-        qualityResutlRepository.save(qualityResult);
+        qualityResutlRepository.saveAndFlush(qualityResult);
         int count = 1;
         for (QualityCheckRequest.QualityCheckingRequest qualityCheckingRequest : qualityCheckRequest.getQualityChecks()) {
             com.swd301.foodmarket.entity.QualityCheck qualityCheck = com.swd301.foodmarket.entity.QualityCheck.builder()
@@ -121,15 +123,42 @@ public class QualityCheckServiceImpl implements QualityCheckService {
         // update status order
         updateOrderStatus(order);
         // update Reject quality
-        Integer qualityCheckCount = orderDetail != null ? orderDetail.getQuantity() : mysteryBox.getQuantity();
+        Integer qualityCheckCount = orderDetail != null
+                ? orderDetail.getQuantity()
+                : mysteryBox.getQuantity();
+
         String message = "";
         BigDecimal refundAmount = BigDecimal.ZERO;
-        if (qualityResult.getRejectedWeight() != null && qualityResult.getRejectedWeight() > 0) {
-            double percentage = (double) (qualityResult.getRejectedWeight() * 100) / qualityCheckCount;
+
+        if (qualityResult.getRejectedWeight() != null
+                && qualityResult.getRejectedWeight() > 0) {
+
+            double percentage =
+                    (double) (qualityResult.getRejectedWeight() * 100) / qualityCheckCount;
+
             if (percentage > 5) {
 
-                refundAmount = refundAmount.add(orderDetail.getUnitPrice().multiply(BigDecimal.valueOf(qualityResult.getRejectedWeight())));
-                message += "Sản phẩm " + orderDetail != null ? orderDetail.getProduct().getProductName() : mysteryBox.getMysteryBox().getDescription() + " bị hư hỏng " + qualityResult.getRejectedWeight() + "phải hoàn" + refundAmount + "đ";
+                BigDecimal unitPrice;
+
+                String itemName;
+
+                if (orderDetail != null) {
+                    unitPrice = orderDetail.getUnitPrice();
+                    itemName = orderDetail.getProduct().getProductName();
+                } else {
+                    unitPrice = mysteryBox.getMysteryBox().getPrice();
+                    itemName = mysteryBox.getMysteryBox().getDescription();
+                }
+
+                refundAmount = unitPrice.multiply(
+                        BigDecimal.valueOf(qualityResult.getRejectedWeight())
+                );
+
+                String rejectedUnit = orderDetail != null ? "kg/số lượng" : "túi";
+
+                message = "Sản phẩm " + itemName
+                        + " bị hư hỏng " + qualityResult.getRejectedWeight() + " " + rejectedUnit
+                        + ", phải hoàn " + refundAmount + "đ";
             }
         }
         BigDecimal currentRefund = order.getRefundAmount() != null
@@ -141,41 +170,67 @@ public class QualityCheckServiceImpl implements QualityCheckService {
         return qualityResultMapper.toQualityCheckResponse(qualityResult);
     }
 
-    //    public Map<String,String> calculateRefundAmount(Order order) {
-//        List<OrderDetail> details = order.getOrderDetails();
-//        BigDecimal refundAmount = BigDecimal.ZERO;
-//        String message = "";
-//        for(OrderDetail detail : details) {
-//            QualityResult qualityResult = detail.getQualityResult();
-//            double percentage = 0;
-//            if (qualityResult != null && qualityResult.getRejectedWeight() != null &&   qualityResult.getRejectedWeight() > 0) {
-//                percentage = (double) (qualityResult.getRejectedWeight() * 100) / detail.getQuantity();
-//            }
-//            if (percentage > 5) {
-//                message+= "Sản phẩm " + detail.getProduct().getProductName() + " bị hư hỏng " + qualityResult.getRejectedWeight();
-//                refundAmount = refundAmount.add(detail.getUnitPrice().multiply(BigDecimal.valueOf(qualityResult.getRejectedWeight())));
-//            }
-//        }
-//        Map<String,String> map = new HashMap<>();
-//        map.put("message", message);
-//        map.put("refundAmount", refundAmount.toString());
-//        return map;
-//
-//    }
     // update status order
     public void updateOrderStatus(Order order) {
+        int totalProductItems = order.getOrderDetails() != null
+                ? order.getOrderDetails().size()
+                : 0;
 
-        if (order.getStatus().equals(OrderStatus.ARRIVED_AT_WAREHOUSE) && order.getOrderDetails().size() > 1) {
-            orderService.updateOrder(order.getId(), OrderUpdateRequest.builder().status(OrderStatus.QUALITY_CHECKING).build(), null);
-        } else {
-            Integer totalItems = order.getOrderDetails().size();
-            Integer checkedItems = orderDetailRepository.countByOrderAndQualityResultNull(order);
-            log.info("Total items: {}, Checked items: {}", totalItems, checkedItems);
-            if (totalItems == checkedItems) {
-                orderService.updateOrder(order.getId(), OrderUpdateRequest.builder().status(OrderStatus.QUALITY_CHECKED).build(), null);
-            }
+        int totalMysteryItems = order.getMysteryBoxes() != null
+                ? order.getMysteryBoxes().size()
+                : 0;
+
+        int totalItems = totalProductItems + totalMysteryItems;
+
+        int uncheckedProductItems = order.getOrderDetails() == null
+                ? 0
+                : (int) order.getOrderDetails()
+                .stream()
+                .filter(item -> item.getQualityResult() == null)
+                .count();
+
+        int uncheckedMysteryItems = order.getMysteryBoxes() == null
+                ? 0
+                : (int) order.getMysteryBoxes()
+                .stream()
+                .filter(item -> item.getQualityResult() == null)
+                .count();
+
+        int uncheckedItems = uncheckedProductItems + uncheckedMysteryItems;
+
+        log.info(
+                "Order {} quality status: totalItems={}, uncheckedProductItems={}, uncheckedMysteryItems={}, uncheckedItems={}",
+                order.getId(),
+                totalItems,
+                uncheckedProductItems,
+                uncheckedMysteryItems,
+                uncheckedItems
+        );
+
+        if (totalItems <= 0) {
+            return;
         }
 
+        if (uncheckedItems == 0) {
+            orderService.updateOrder(
+                    order.getId(),
+                    OrderUpdateRequest.builder()
+                            .status(OrderStatus.QUALITY_CHECKED)
+                            .build(),
+                    null
+            );
+            return;
+        }
+
+        if (order.getStatus().equals(OrderStatus.ARRIVED_AT_WAREHOUSE)) {
+            orderService.updateOrder(
+                    order.getId(),
+                    OrderUpdateRequest.builder()
+                            .status(OrderStatus.QUALITY_CHECKING)
+                            .build(),
+                    null
+            );
+        }
     }
 
     @Override
@@ -194,7 +249,7 @@ public class QualityCheckServiceImpl implements QualityCheckService {
         OrderMysteryBox mysteryBox = orderMyteryRepository.findById(orderItemId).orElseThrow(
                 () -> new AppException(ErrorCode.MYSTERY_BOX_NOT_FOUND)
         );
-        if (mysteryBox.getOrder() == null) {
+        if (mysteryBox.getQualityResult() == null) {
             throw new AppException(ErrorCode.QUALITY_CHECK_NOT_FOUND);
 
         }
