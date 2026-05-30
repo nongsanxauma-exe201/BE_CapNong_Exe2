@@ -102,6 +102,18 @@ public class ProductController {
                 .message("PRODUCT_DELETED")
                 .build();
     }
+    @PutMapping("/active/{id}")
+    public ApiResponse<Void> activateProduct(
+            @PathVariable Integer id
+    ) {
+        log.info("active product id={}", id);
+
+        productService.activeProduct(id);
+
+        return ApiResponse.<Void>builder()
+                .message("Active product")
+                .build();
+    }
 
     @GetMapping("/{id}")
     public ApiResponse<ProductResponse> getById(@PathVariable Integer id) {

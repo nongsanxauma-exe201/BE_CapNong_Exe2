@@ -15,6 +15,7 @@ public interface ProductMapper {
     @Mapping(target = "sellingPrice", source = "sellingPrice")
     @Mapping(source = "status", target = "status")
     @Mapping(source = "expiryDate", target = "expiryDate")
+    @Mapping(target = "categoryName", source = "category.name")
     ProductResponse toResponse(Product product);
 
     @BeanMapping(nullValuePropertyMappingStrategy = NullValuePropertyMappingStrategy.IGNORE)
