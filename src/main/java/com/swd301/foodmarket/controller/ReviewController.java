@@ -7,6 +7,7 @@ import com.swd301.foodmarket.dto.request.ReviewUpdateRequest;
 import com.swd301.foodmarket.dto.response.ApiResponse;
 import com.swd301.foodmarket.dto.response.PageResponse;
 import com.swd301.foodmarket.dto.response.ReviewResponse;
+import com.swd301.foodmarket.dto.response.ReviewShopReport;
 import com.swd301.foodmarket.exception.AppException;
 import com.swd301.foodmarket.exception.ErrorCode;
 import com.swd301.foodmarket.service.ReviewService;
@@ -134,4 +135,12 @@ public class ReviewController {
                 .result(reviewService.getReviewsByShopPaged(shopId, page, size))
                 .build();
     }
+    @GetMapping("/shop/report")
+    public  ApiResponse<ReviewShopReport> getReport() {
+
+        return ApiResponse.<ReviewShopReport>builder()
+                .result(reviewService.getShopReport())
+                .build();
+    }
+
 }

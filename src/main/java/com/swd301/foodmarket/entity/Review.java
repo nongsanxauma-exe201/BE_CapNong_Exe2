@@ -6,6 +6,7 @@ import lombok.*;
 import lombok.experimental.FieldDefaults;
 
 import java.math.BigDecimal;
+import java.time.LocalDateTime;
 
 @Entity
 @Table(name = "reviews")
@@ -56,4 +57,5 @@ public class Review {
 
     @Column(length = 255)
     String replyFromShop;
+    LocalDateTime createAt;
 }

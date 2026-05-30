@@ -26,4 +26,7 @@ public class ProductResponse {
     Integer categoryId;
     LocalDate expiryDate;
     String status;
+    String categoryName;
+    Long sold;
+
 }
