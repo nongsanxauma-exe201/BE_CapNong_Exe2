@@ -57,7 +57,7 @@ public class ProductServiceImpl implements ProductService {
         product.setShopOwner(getCurrentUser());
 
         Category category = categoryRepository.findById(
-                Long.valueOf(request.getCategoryId())
+                Integer.valueOf(request.getCategoryId())
         ).orElseThrow(() -> new RuntimeException("Category not found"));
 
         product.setCategory(category);

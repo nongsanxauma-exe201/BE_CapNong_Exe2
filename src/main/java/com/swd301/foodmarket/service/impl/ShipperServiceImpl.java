@@ -396,32 +396,50 @@ public class ShipperServiceImpl implements ShipperService {
                     }
                 }
 
-                if (shopWallet.getFrozenBalance().compareTo(shopRevenue) < 0) {
-                    log.error("[SHOP_FROZEN_NOT_ENOUGH] orderId={}, frozenBalance={}, needToUnfreeze={}",
+                boolean isCOD = "COD".equals(order.getPaymentMethod());
+                log.info("[SHOP_PAYOUT_METHOD] orderId={}, isCOD={}", orderId, isCOD);
+
+                if (isCOD) {
+                    // COD: tiền mặt shipper thu từ khách, chưa từng freeze → cộng trực tiếp vào ví shop
+                    log.info("[SHOP_WALLET_OPERATION_COD] orderId={}, totalBalance + finalShopRevenue = {} + {}, revenueAllTime + finalShopRevenue = {} + {}",
+                            orderId,
+                            shopWallet.getTotalBalance(),
+                            finalShopRevenue,
+                            shopWallet.getTotalRevenueAllTime(),
+                            finalShopRevenue
+                    );
+                    shopWallet.setTotalBalance(
+                            shopWallet.getTotalBalance().add(finalShopRevenue)
+                    );
+                } else {
+                    // PAYOS: tiền đã freeze lúc thanh toán → unfreeze khi giao thành công
+                    if (shopWallet.getFrozenBalance().compareTo(shopRevenue) < 0) {
+                        log.error("[SHOP_FROZEN_NOT_ENOUGH] orderId={}, frozenBalance={}, needToUnfreeze={}",
+                                orderId,
+                                shopWallet.getFrozenBalance(),
+                                shopRevenue
+                        );
+                        throw new AppException(ErrorCode.WALLET_BALANCE_NOT_ENOUGH);
+                    }
+
+                    log.info("[SHOP_WALLET_OPERATION_PAYOS] orderId={}, frozenBalance - shopRevenue = {} - {}, totalBalance - refundAmount = {} - {}, revenueAllTime + finalShopRevenue = {} + {}",
                             orderId,
                             shopWallet.getFrozenBalance(),
-                            shopRevenue
+                            shopRevenue,
+                            shopWallet.getTotalBalance(),
+                            refundAmount,
+                            shopWallet.getTotalRevenueAllTime(),
+                            finalShopRevenue
                     );
-                    throw new AppException(ErrorCode.WALLET_BALANCE_NOT_ENOUGH);
-                }
-
-                log.info("[SHOP_WALLET_OPERATION] orderId={}, frozenBalance - shopRevenue = {} - {}, totalBalance - refundAmount = {} - {}, revenueAllTime + finalShopRevenue = {} + {}",
-                        orderId,
-                        shopWallet.getFrozenBalance(),
-                        shopRevenue,
-                        shopWallet.getTotalBalance(),
-                        refundAmount,
-                        shopWallet.getTotalRevenueAllTime(),
-                        finalShopRevenue
-                );
-                shopWallet.setFrozenBalance(
-                        shopWallet.getFrozenBalance().subtract(shopRevenue)
-                );
-
-                if (refundAmount.compareTo(BigDecimal.ZERO) > 0) {
-                    shopWallet.setTotalBalance(
-                            shopWallet.getTotalBalance().subtract(refundAmount)
+                    shopWallet.setFrozenBalance(
+                            shopWallet.getFrozenBalance().subtract(shopRevenue)
                     );
+
+                    if (refundAmount.compareTo(BigDecimal.ZERO) > 0) {
+                        shopWallet.setTotalBalance(
+                                shopWallet.getTotalBalance().subtract(refundAmount)
+                        );
+                    }
                 }
 
                 shopWallet.setTotalRevenueAllTime(

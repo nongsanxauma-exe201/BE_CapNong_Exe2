@@ -367,7 +367,13 @@ public class OrderServiceImpl implements OrderService {
                 }
                 orderDetailRepository.saveAll(orderDetails);
             }
-//            cartService.clearCart();
+            for (OrderItemRequest item : request.getItems()) {
+                try {
+                    if (item.getProductId() != null) cartService.removeItem(item.getProductId());
+                    else if (item.getMysteryBoxId() != null) cartService.removeMysteryBox(item.getMysteryBoxId());
+                    else if (item.getBuildComboId() != null) cartService.removeBuildCombo(item.getBuildComboId());
+                } catch (Exception ignored) {}
+            }
             return orderMapper.toResponse(savedOrder);
         }
 
