@@ -94,6 +94,8 @@ public interface OrderRepository extends JpaRepository<Order, Integer> {
             @Param("from") LocalDateTime from,
             @Param("to") LocalDateTime to
     );
+
+
     @Query("""
     SELECT COUNT(o)
     FROM Order o
@@ -136,4 +138,6 @@ public interface OrderRepository extends JpaRepository<Order, Integer> {
             @Param("from") LocalDateTime from,
             @Param("to") LocalDateTime to
     );
+
+    Long countAllByShopOwnerAndStatus(User shopOwner, OrderStatus status);
 }

@@ -155,4 +155,10 @@ public class ProductController {
                 .result(productService.rejectProduct(id, reason))
                 .build();
     }
+    @GetMapping("/buyer")
+    public ApiResponse<List<ProductResponse>> getByBuyer() {
+        return  ApiResponse.<List<ProductResponse>>builder()
+                .result(productService.getProductForBuyer())
+                .build();
+    }
 }

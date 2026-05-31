@@ -33,4 +33,6 @@ public interface UserService {
     UserResponse approveShopOwner(Integer userId);
 
     UserResponse approveShipper(Integer userId);
+
+    UserResponse updateStatusShop(Integer userId, boolean open);
 }

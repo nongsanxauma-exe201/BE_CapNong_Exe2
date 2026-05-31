@@ -79,4 +79,26 @@ public class MysteryBoxController {
                 .result(mysteryBoxService.getMyMysteryBoxes())
                 .build();
     }
+    @PatchMapping("/active/{mysteryBoxId}")
+    public ApiResponse<MysteryBoxResponse> activeBoxes(
+
+            @PathVariable Integer mysteryBoxId
+    ) {
+
+        return ApiResponse.<MysteryBoxResponse>builder()
+                .result(mysteryBoxService.updateStatusBox(mysteryBoxId,true))
+                .build();
+    }
+    @PatchMapping("/deactivate/{mysteryBoxId}")
+    public ApiResponse<MysteryBoxResponse> deactiveBoxes( @PathVariable Integer mysteryBoxId) {
+        return ApiResponse.<MysteryBoxResponse>builder()
+                .result(mysteryBoxService.updateStatusBox(mysteryBoxId,false))
+                .build();
+    }
+    @GetMapping("/buyer")
+    public ApiResponse<List<MysteryBoxResponse>> getForBuyers() {
+        return ApiResponse.<List<MysteryBoxResponse>>builder()
+                .result(mysteryBoxService.getForBuyer())
+                .build();
+    }
 }
