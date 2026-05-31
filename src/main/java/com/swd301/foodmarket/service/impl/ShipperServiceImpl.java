@@ -18,6 +18,7 @@ import com.swd301.foodmarket.repository.OrderRepository;
 import com.swd301.foodmarket.repository.ShipperLocationRepository;
 import com.swd301.foodmarket.repository.UserRepository;
 import com.swd301.foodmarket.repository.WalletRepository;
+import com.swd301.foodmarket.repository.WarehouseRepository;
 import com.swd301.foodmarket.service.GoongMapService;
 import com.swd301.foodmarket.service.NotificationService;
 import com.swd301.foodmarket.service.ShipperService;
@@ -49,14 +50,15 @@ import java.util.stream.Collectors;
 public class ShipperServiceImpl implements ShipperService {
 
     final OrderRepository orderRepository;
-    final  ShipperLocationRepository shipperLocationRepository;
-    final  UserRepository userRepository;
-    final  GoongMapService goongMapService;
-    final  WalletRepository walletRepository;
-    final  UserService userService;
+    final ShipperLocationRepository shipperLocationRepository;
+    final UserRepository userRepository;
+    final GoongMapService goongMapService;
+    final WalletRepository walletRepository;
+    final UserService userService;
     final NotificationService notificationService;
+    final WarehouseRepository warehouseRepository;
     @Value("${ADDRESS_WAREHOUSE}")
-     String warehouseAddress;
+    String warehouseAddress;
     private final RequestContextFilter requestContextFilter;
     private final OrderMapper orderMapper;
     // ===================== HELPERS =====================
@@ -113,7 +115,19 @@ public class ShipperServiceImpl implements ShipperService {
         return latLong;
     }
 
+    /**
+     * Lấy kho bãi đang active đầu tiên từ DB.
+     * Production chỉ có 1 kho; fake data có thể có nhiều nên lấy cái đầu tiên.
+     */
+    private Warehouse getActiveWarehouse() {
+        return warehouseRepository.findAllByActive(true)
+                .stream().findFirst().orElse(null);
+    }
+
     private ShipperOrderResponse toShipperOrderResponse(Order order) {
+        // Lấy kho từ DB — đây là điểm shipper phải đến để lấy hàng
+        Warehouse warehouse = getActiveWarehouse();
+
         return ShipperOrderResponse.builder()
                 .orderId(order.getId())
                 .buyerName(order.getBuyer().getFullName())
@@ -126,9 +140,17 @@ public class ShipperServiceImpl implements ShipperService {
                 .createdAt(order.getCreatedAt())
                 .estimatedDeliveryDate(order.getEstimatedDeliveryDate())
                 .note(order.getNote())
-                // ✅ Trả về tọa độ để FakeGPS dùng đúng điểm thật
-                .shopLatitude(order.getShopLatitude())
-                .shopLongitude(order.getShopLongitude())
+                // ── Kho bãi từ bảng warehouses DB ──────────────────────────────
+                // Nếu warehouse DB chưa có tọa độ (fake data) → fallback về
+                // order.shopLatitude/shopLongitude (đã geocode từ ADDRESS_WAREHOUSE)
+                .warehouseId(warehouse != null ? warehouse.getId() : null)
+                .warehouseName(warehouse != null ? warehouse.getName() : "Kho bãi")
+                .warehouseAddress(warehouse != null ? warehouse.getAddress() : warehouseAddress)
+                .warehouseLat(warehouse != null && warehouse.getLatitude() != null
+                        ? warehouse.getLatitude() : order.getShopLatitude())
+                .warehouseLng(warehouse != null && warehouse.getLongitude() != null
+                        ? warehouse.getLongitude() : order.getShopLongitude())
+                // ── Điểm giao hàng (nhà buyer) ─────────────────────────────────
                 .shippingLatitude(order.getShippingLatitude())
                 .shippingLongitude(order.getShippingLongitude())
                 .build();
@@ -161,28 +183,32 @@ public class ShipperServiceImpl implements ShipperService {
         log.info("[SHIPPER] Finding orders near ({}, {}), total READY: {}",
                 shipperLat, shipperLng, availableOrders.size());
 
+        // Lấy kho bãi một lần, dùng chung cho toàn bộ stream
+        Warehouse warehouse = getActiveWarehouse();
+
         return availableOrders.stream()
                 .map(order -> {
-                    LatLong shopLocation = getOrGeocodeShopLocation(order);
-                    LatLong buyerLocation = getOrGeocodeShippingLocation(order);
+                    LatLong warehouseLocation = getOrGeocodeShopLocation(order);
+                    LatLong buyerLocation     = getOrGeocodeShippingLocation(order);
 
                     Double shipToShopKm = null;
-                    if (shopLocation != null) {
-                        double d = goongMapService.getDistanceKm(shipperLocation, shopLocation);
+                    if (warehouseLocation != null) {
+                        double d = goongMapService.getDistanceKm(shipperLocation, warehouseLocation);
                         shipToShopKm = d == Double.MAX_VALUE ? null : d;
                     }
 
                     Double shopToBuyerKm = null;
-                    if (shopLocation != null && buyerLocation != null) {
-                        double d = goongMapService.getDistanceKm(shopLocation, buyerLocation);
+                    if (warehouseLocation != null && buyerLocation != null) {
+                        double d = goongMapService.getDistanceKm(warehouseLocation, buyerLocation);
                         shopToBuyerKm = d == Double.MAX_VALUE ? null : d;
                     }
 
                     return AvailableOrderResponse.builder()
                             .orderId(order.getId())
-                            .shopName(order.getShopOwner().getShopName())
-                            .shopAddress(order.getShopOwner().getAddress())
-                            .shopPhone(order.getShopOwner().getPhoneNumber())
+                            // ── Thông tin kho bãi từ DB (không phải shop owner) ──────────
+                            .shopName(warehouse != null ? warehouse.getName() : "Kho bãi")
+                            .shopAddress(warehouse != null ? warehouse.getAddress() : warehouseAddress)
+                            .shopPhone(null) // kho bãi không có SĐT riêng
                             .shippingAddress(order.getShippingAddress())
                             .recipientName(order.getRecipientName())
                             .recipientPhone(order.getRecipientPhone())
@@ -569,28 +595,26 @@ public class ShipperServiceImpl implements ShipperService {
 
         List<Order> availableOrders = orderRepository.findByShipperIsNullAndStatus(OrderStatus.READY);
 
+        // Lấy kho bãi một lần, dùng chung cho toàn bộ stream
+        Warehouse warehousePaged = getActiveWarehouse();
+
         List<AvailableOrderResponse> availableOrderResponses = availableOrders.stream()
                 .map(order -> {
-                    // ✅ Geocode shop (điểm lấy hàng)
-                    LatLong shopLocation = getOrGeocodeShopLocation(order);
+                    LatLong warehouseLocation = getOrGeocodeShopLocation(order);
+                    LatLong buyerLocation     = getOrGeocodeShippingLocation(order);
 
-                    // ✅ Geocode nhà buyer (điểm giao hàng)
-                    LatLong buyerLocation = getOrGeocodeShippingLocation(order);
-
-                    // ✅ Khoảng cách shop → nhà buyer (shipper biết tổng quãng đường)
                     Double shopToBuyerKm = null;
-                    if (shopLocation != null && buyerLocation != null) {
-                        double d = goongMapService.getDistanceKm(shopLocation, buyerLocation);
+                    if (warehouseLocation != null && buyerLocation != null) {
+                        double d = goongMapService.getDistanceKm(warehouseLocation, buyerLocation);
                         shopToBuyerKm = d == Double.MAX_VALUE ? null : d;
                     }
 
-
-
                     return AvailableOrderResponse.builder()
                             .orderId(order.getId())
-                            .shopName("Kho tập kết hàng hóa") // Hiện tại để cố định tên shop vì shipper phải tới kho lấy hàng trước, sau đó mới giao đến buyer
-                            .shopAddress(warehouseAddress)
-                            .shopPhone(order.getShopOwner().getPhoneNumber())
+                            // ── Thông tin kho bãi từ DB ──────────────────────────────────
+                            .shopName(warehousePaged != null ? warehousePaged.getName() : "Kho bãi")
+                            .shopAddress(warehousePaged != null ? warehousePaged.getAddress() : warehouseAddress)
+                            .shopPhone(null)
                             .shippingAddress(order.getShippingAddress())
                             .recipientName(order.getRecipientName())
                             .recipientPhone(order.getRecipientPhone())
