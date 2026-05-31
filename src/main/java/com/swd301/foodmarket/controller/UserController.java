@@ -210,4 +210,10 @@ public class UserController {
                 .message("Shipper approved successfully")
                 .build();
     }
+
+    @PatchMapping("/{shopId}/open-close")
+    public ApiResponse<UserResponse> openShop(@PathVariable Integer shopId,@RequestParam boolean open ) {
+
+        return  ApiResponse.<UserResponse>builder().result(userService.updateStatusShop(shopId,open)).build();
+    }
 }

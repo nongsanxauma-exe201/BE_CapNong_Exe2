@@ -34,4 +34,6 @@ public interface ProductService {
     ProductResponse approveProduct(Integer id);
 
     ProductResponse rejectProduct(Integer id, String reason);
+
+    List<ProductResponse> getProductForBuyer();
 }

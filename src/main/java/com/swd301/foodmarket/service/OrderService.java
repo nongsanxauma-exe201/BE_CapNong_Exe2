@@ -2,10 +2,7 @@ package com.swd301.foodmarket.service;
 
 import com.swd301.foodmarket.dto.request.OrderCreationRequest;
 import com.swd301.foodmarket.dto.request.OrderUpdateRequest;
-import com.swd301.foodmarket.dto.response.OrderResponse;
-import com.swd301.foodmarket.dto.response.OrderShopReport;
-import com.swd301.foodmarket.dto.response.PageResponse;
-import com.swd301.foodmarket.dto.response.StaffOrderReportResponse;
+import com.swd301.foodmarket.dto.response.*;
 import com.swd301.foodmarket.enums.OrderStatus;
 import jakarta.mail.Multipart;
 import org.springframework.data.domain.Page;
@@ -28,4 +25,5 @@ public interface OrderService {
     Page<OrderResponse> getOrdersForStaff(int page, int size, OrderStatus status);
     StaffOrderReportResponse generateStaffOrderReport();
     OrderShopReport  orderShopReport(String type);
+    OrderResponseReport orderReport();
 }

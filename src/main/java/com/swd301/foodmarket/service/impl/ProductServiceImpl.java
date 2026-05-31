@@ -209,4 +209,11 @@ public class ProductServiceImpl implements ProductService {
         }
         return productMapper.toResponse(productRepository.save(product));
     }
+
+    @Override
+    public List<ProductResponse> getProductForBuyer() {
+        return productRepository.findAllByStatusAndShopOwner_ShopActive(ProductStatus.AVAILABLE,true).stream()
+                .map(productMapper::toResponse)
+                .toList();
+    }
 }

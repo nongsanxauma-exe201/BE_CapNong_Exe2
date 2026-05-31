@@ -4,10 +4,7 @@ import com.swd301.foodmarket.dto.goong.LatLong;
 import com.swd301.foodmarket.dto.request.OrderCreationRequest;
 import com.swd301.foodmarket.dto.request.OrderItemRequest;
 import com.swd301.foodmarket.dto.request.OrderUpdateRequest;
-import com.swd301.foodmarket.dto.response.OrderResponse;
-import com.swd301.foodmarket.dto.response.OrderShopReport;
-import com.swd301.foodmarket.dto.response.PageResponse;
-import com.swd301.foodmarket.dto.response.StaffOrderReportResponse;
+import com.swd301.foodmarket.dto.response.*;
 import com.swd301.foodmarket.entity.*;
 import com.swd301.foodmarket.enums.OrderStatus;
 import com.swd301.foodmarket.exception.AppException;
@@ -243,6 +240,17 @@ public class OrderServiceImpl implements OrderService {
                 .topSold(getTopSold(from, to))
                 .build();
     }
+
+    @Override
+    public OrderResponseReport orderReport() {
+        User user = getCurrentUser();
+        return OrderResponseReport.builder()
+                .totalRevenua(user.getShopWallet().getTotalRevenueAllTime())
+                .totalCreated(orderRepository.countAllByShopOwnerAndStatus(user,OrderStatus.PENDING))
+                .totalComplete(orderRepository.countAllByShopOwnerAndStatus(user,OrderStatus.DELIVERED))
+                .build();
+    }
+
     public List<OrderShopReport.ReportOrderDay> reportOrderChart(
             String type,
             LocalDateTime reportFrom,

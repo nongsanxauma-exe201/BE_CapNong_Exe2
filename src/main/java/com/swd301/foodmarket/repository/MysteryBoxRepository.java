@@ -4,6 +4,7 @@ import com.swd301.foodmarket.entity.MysteryBox;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
 
+import java.util.Collection;
 import java.util.List;
 import java.util.Optional;
 
@@ -21,4 +22,7 @@ public interface MysteryBoxRepository extends JpaRepository<MysteryBox, Integer>
     Optional<MysteryBox> findByIdWithProducts(Integer id);
 
 
+    List<MysteryBox> findAllByShopOwner_ShopActive(boolean shopOwnerShopActive);
+
+    List<MysteryBox> findAllByShopOwner_ShopActiveAndIsActive(boolean shopOwnerShopActive, Boolean isActive);
 }
