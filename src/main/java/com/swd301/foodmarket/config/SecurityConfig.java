@@ -47,6 +47,7 @@ public class SecurityConfig {
             "/swagger-ui.html",
             "/auth/google",
             "/products/**",
+            "/categories/**",
             "/mystery-boxes/**",
             "/reviews/**",
             "/blogs/**",

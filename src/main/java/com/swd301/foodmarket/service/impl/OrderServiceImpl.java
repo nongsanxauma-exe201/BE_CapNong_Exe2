@@ -587,13 +587,11 @@ public class OrderServiceImpl implements OrderService {
             }
         }
 
-
         BigDecimal shippingFee = BigDecimal.valueOf(15_000); // fallback
         if (shopOwner != null) {
             String buyerAddress = getOrDefault(request.getShippingAddress(), buyer.getAddress());
             shippingFee = calculateShippingFee(buyerAddress, shopOwner.getId());
         }
-
 
         order.setShippingFee(shippingFee);
         if (shopOwner == null) {
@@ -612,7 +610,13 @@ public class OrderServiceImpl implements OrderService {
             }
             orderDetailRepository.saveAll(orderDetails);
         }
-//            cartService.clearCart();
+        for (OrderItemRequest item : request.getItems()) {
+            try {
+                if (item.getProductId() != null) cartService.removeItem(item.getProductId());
+                else if (item.getMysteryBoxId() != null) cartService.removeMysteryBox(item.getMysteryBoxId());
+                else if (item.getBuildComboId() != null) cartService.removeBuildCombo(item.getBuildComboId());
+            } catch (Exception ignored) {}
+        }
         return orderMapper.toResponse(savedOrder);
     }
 
