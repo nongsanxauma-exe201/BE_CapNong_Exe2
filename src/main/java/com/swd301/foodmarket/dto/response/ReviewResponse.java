@@ -4,6 +4,7 @@ import lombok.*;
 import lombok.experimental.FieldDefaults;
 
 import java.math.BigDecimal;
+import java.time.LocalDateTime;
 
 @Getter
 @Setter
@@ -24,6 +25,9 @@ public class ReviewResponse {
 
     Integer mysteryBoxId;
 
+
+    String boxType ; // name of mytery box
+
     BigDecimal ratingStar;
 
     Integer productId;
@@ -35,4 +39,8 @@ public class ReviewResponse {
     String evidence;
 
     String replyFromShop;
+
+    Long quantity;
+
+    LocalDateTime createAt;
 }

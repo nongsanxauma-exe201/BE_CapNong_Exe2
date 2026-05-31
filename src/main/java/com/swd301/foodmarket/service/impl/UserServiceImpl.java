@@ -96,7 +96,7 @@ public class UserServiceImpl implements UserService {
             user.setBankName(request.getBankName());
             user.setBankAccountHolder(request.getBankAccountHolder());
             user.setBankAccount(request.getBankAccount());
-
+            user.setShopActive(true);
             if (logoUrl != null && !logoUrl.isEmpty()) {
                 String logoCloudUrl = cloudinaryService.uploadImage(logoUrl);
                 user.setLogoUrl(logoCloudUrl);
@@ -445,6 +445,17 @@ public class UserServiceImpl implements UserService {
         log.info("Shipper approved successfully: {}", userId);
 
         return userMapper.toUserResponse(approvedUser);
+    }
+
+    @Override
+    public UserResponse updateStatusShop(Integer userId, boolean open) {
+
+        User user = userRepository.findById(userId).orElseThrow(
+                ()-> new AppException(ErrorCode.USER_NOT_EXISTED)
+        );
+        user.setShopActive(open);
+
+        return userMapper.toUserResponse(userRepository.save(user));
     }
 
 

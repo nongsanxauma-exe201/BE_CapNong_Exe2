@@ -5,6 +5,7 @@ import com.swd301.foodmarket.dto.request.ReviewReplyRequest;
 import com.swd301.foodmarket.dto.request.ReviewUpdateRequest;
 import com.swd301.foodmarket.dto.response.PageResponse;
 import com.swd301.foodmarket.dto.response.ReviewResponse;
+import com.swd301.foodmarket.dto.response.ReviewShopReport;
 import com.swd301.foodmarket.entity.MysteryBox;
 import com.swd301.foodmarket.entity.OrderDetail;
 import com.swd301.foodmarket.entity.Review;
@@ -30,6 +31,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.web.multipart.MultipartFile;
 
 import java.math.BigDecimal;
+import java.time.LocalDateTime;
 import java.util.List;
 
 @Service
@@ -50,6 +52,7 @@ public class ReviewServiceImpl implements ReviewService {
         Review review = reviewMapper.toReview(request);
 
         // ================= REVIEW PRODUCT =================
+        User shopOwner = null;
         if (request.getOrderDetailId() != null) {
 
             OrderDetail orderDetail = orderDetailRepository.findById(request.getOrderDetailId())
@@ -59,11 +62,13 @@ public class ReviewServiceImpl implements ReviewService {
                 throw new AppException(ErrorCode.REVIEW_ALREADY_EXISTS);
             }
 
-            User shopOwner = orderDetail.getProduct().getShopOwner();
+            shopOwner = orderDetail.getProduct().getShopOwner();
 
             review.setBuyer(buyer);
+            review.setCreateAt(LocalDateTime.now());
             review.setShopOwner(shopOwner);
             review.setOrderDetail(orderDetail);
+
         }
 
         // ================= REVIEW MYSTERY BOX =================
@@ -75,13 +80,11 @@ public class ReviewServiceImpl implements ReviewService {
             if (reviewRepository.existsByMysteryBoxId(request.getMysteryBoxId())) {
                 throw new AppException(ErrorCode.REVIEW_ALREADY_EXISTS);
             }
-
+            shopOwner = box.getShopOwner();
             review.setBuyer(buyer);
-            review.setShopOwner(box.getShopOwner());
+            review.setShopOwner(shopOwner);
             review.setMysteryBox(box);
-        }
-
-        else {
+        } else {
             throw new AppException(ErrorCode.INVALID_REVIEW_TARGET);
         }
 
@@ -90,8 +93,22 @@ public class ReviewServiceImpl implements ReviewService {
             String url = cloudinaryService.uploadImage(evidenceFile);
             review.setEvidence(url);
         }
+        Review reviewSave = reviewRepository.save(review);
 
-        return reviewMapper.toResponse(reviewRepository.save(review));
+        updateShopRating(shopOwner);
+
+
+        return reviewMapper.toResponse(reviewSave);
+    }
+
+    private void updateShopRating(User shopOwner) {
+        Double averageRating = reviewRepository.getAverageRatingByShopOwner(shopOwner);
+
+        shopOwner.setRatingAverage(
+                averageRating != null ? averageRating : 0.0
+        );
+
+        userRepository.save(shopOwner);
     }
 
     @Override
@@ -111,8 +128,9 @@ public class ReviewServiceImpl implements ReviewService {
             String url = cloudinaryService.uploadImage(evidenceFile);
             review.setEvidence(url);
         }
-
-        return reviewMapper.toResponse(reviewRepository.save(review));
+        Review review1 = reviewRepository.save(review);
+        updateShopRating(review1.getShopOwner());
+        return reviewMapper.toResponse(review1);
     }
 
     @Override
@@ -124,8 +142,9 @@ public class ReviewServiceImpl implements ReviewService {
         if (!review.getBuyer().getId().equals(getCurrentUser().getId())) {
             throw new AppException(ErrorCode.UNAUTHORIZED);
         }
-
+        User shopOwner = review.getShopOwner();
         reviewRepository.delete(review);
+        updateShopRating(shopOwner);
     }
 
     @Override
@@ -193,6 +212,21 @@ public class ReviewServiceImpl implements ReviewService {
         review.setReplyFromShop(request.getReplyFromShop());
 
         return reviewMapper.toResponse(reviewRepository.save(review));
+    }
+
+    @Override
+    public ReviewShopReport getShopReport() {
+        User shopOwner = getCurrentUser();
+        ReviewShopReport report = ReviewShopReport.builder()
+                .averageRating(shopOwner.getRatingAverage())
+                .fiveStarNumber(reviewRepository.countByShopOwnerAndRatingStar(shopOwner, BigDecimal.valueOf(5)))
+                .fourStarNumber(reviewRepository.countByShopOwnerAndRatingStar(shopOwner, BigDecimal.valueOf(4)))
+                .threeStarNumber(reviewRepository.countByShopOwnerAndRatingStar(shopOwner, BigDecimal.valueOf(3)))
+                .twoStarNumber(reviewRepository.countByShopOwnerAndRatingStar(shopOwner, BigDecimal.valueOf(2)))
+                .oneStarNumber(reviewRepository.countByShopOwnerAndRatingStar(shopOwner, BigDecimal.valueOf(1)))
+                .totalReviewers(reviewRepository.countByShopOwner(shopOwner))
+                .build();
+        return report;
     }
 
     private User getCurrentUser() {

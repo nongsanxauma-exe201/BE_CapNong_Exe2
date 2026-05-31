@@ -44,6 +44,9 @@ public class User {
 
     // ===== SHOP INFO =====
     String shopName;
+    @Builder.Default
+    @Column(nullable = false, columnDefinition = "BOOLEAN DEFAULT TRUE")
+    private boolean shopActive = true;
     // Thông tin ngân hàng
     String bankName;
     String bankAccount;

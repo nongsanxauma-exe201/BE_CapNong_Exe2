@@ -2,11 +2,7 @@ package com.swd301.foodmarket.controller;
 
 import com.swd301.foodmarket.dto.request.OrderCreationRequest;
 import com.swd301.foodmarket.dto.request.OrderUpdateRequest;
-import com.swd301.foodmarket.dto.response.ApiResponse;
-import com.swd301.foodmarket.dto.response.OrderResponse;
-import com.swd301.foodmarket.dto.response.PageResponse;
-import com.swd301.foodmarket.dto.response.StaffOrderReportResponse;
-import com.swd301.foodmarket.entity.Order;
+import com.swd301.foodmarket.dto.response.*;
 import com.swd301.foodmarket.enums.OrderStatus;
 import com.swd301.foodmarket.service.OrderService;
 import jakarta.validation.Valid;
@@ -136,6 +132,21 @@ public class OrderController {
     ) {
         return ApiResponse.<StaffOrderReportResponse>builder()
                 .result(orderService.generateStaffOrderReport())
+                .build();
+    }
+    @GetMapping("/shop/reports")
+    public ApiResponse<OrderShopReport> getReportForShopDashBoard(
+            @RequestParam String type
+    ) {
+        return ApiResponse.<OrderShopReport>builder()
+                .result(orderService.orderShopReport(type))
+                .build();
+    }
+    @GetMapping("/shop/statistic")
+    public ApiResponse<OrderResponseReport> getReportForShop(
+    ) {
+        return ApiResponse.<OrderResponseReport>builder()
+                .result(orderService.orderReport())
                 .build();
     }
 

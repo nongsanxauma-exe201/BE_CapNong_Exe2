@@ -9,6 +9,7 @@ import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
+import java.time.LocalDateTime;
 import java.util.Collection;
 import java.util.List;
 import java.util.Optional;
@@ -71,4 +72,72 @@ public interface OrderRepository extends JpaRepository<Order, Integer> {
     Optional<Order> findFirstByShipperIdAndStatus(Integer shipperId, OrderStatus status);
 
     List<Order> findByShipperIdAndStatus(Integer shipperId, OrderStatus status);
+
+    Long countAllByShopOwner(User shopOwner);
+
+    Long countAllByShopOwnerAndStatusAndCreatedAtBetween(User shopOwner, OrderStatus status, LocalDateTime createdAtAfter, LocalDateTime createdAtBefore);
+
+    Long countAllByShopOwnerAndStatusIsInAndCreatedAtBetweenAndCreatedAtBetween(User shopOwner, Collection<OrderStatus> statuses, LocalDateTime createdAtAfter, LocalDateTime createdAtBefore, LocalDateTime createdAtAfter1, LocalDateTime createdAtBefore1);
+
+    Long countAllByShopOwnerAndStatusIsInAndCreatedAtBetween(User shopOwner, Collection<OrderStatus> statuses, LocalDateTime createdAtAfter, LocalDateTime createdAtBefore);
+
+    Long countAllByShopOwnerAndCreatedAtBetween(User shopOwner, LocalDateTime createdAtAfter, LocalDateTime createdAtBefore);
+    @Query("""
+    SELECT COALESCE(SUM(o.totalAmount - o.shippingFee), 0)
+    FROM Order o
+    WHERE o.shopOwner = :shop
+      AND o.createdAt >= :from
+      AND o.createdAt < :to
+""")
+    Double sumPriceByShop(
+            @Param("shop") User shop,
+            @Param("from") LocalDateTime from,
+            @Param("to") LocalDateTime to
+    );
+
+
+    @Query("""
+    SELECT COUNT(o)
+    FROM Order o
+    WHERE o.shopOwner = :shopOwner
+      AND o.createdAt >= :from
+      AND o.createdAt < :to
+""")
+    Long countByShopOwnerFromTo(
+            @Param("shopOwner") User shopOwner,
+            @Param("from") LocalDateTime from,
+            @Param("to") LocalDateTime to
+    );
+
+    @Query("""
+    SELECT COUNT(o)
+    FROM Order o
+    WHERE o.shopOwner = :shopOwner
+      AND o.status = :status
+      AND o.createdAt >= :from
+      AND o.createdAt < :to
+""")
+    Long countByShopOwnerAndStatusFromTo(
+            @Param("shopOwner") User shopOwner,
+            @Param("status") OrderStatus status,
+            @Param("from") LocalDateTime from,
+            @Param("to") LocalDateTime to
+    );
+
+    @Query("""
+    SELECT COUNT(o)
+    FROM Order o
+    WHERE o.shopOwner = :shopOwner
+      AND o.status IN :statuses
+      AND o.createdAt >= :from
+      AND o.createdAt < :to
+""")
+    Long countByShopOwnerAndStatusInFromTo(
+            @Param("shopOwner") User shopOwner,
+            @Param("statuses") Collection<OrderStatus> statuses,
+            @Param("from") LocalDateTime from,
+            @Param("to") LocalDateTime to
+    );
+
+    Long countAllByShopOwnerAndStatus(User shopOwner, OrderStatus status);
 }

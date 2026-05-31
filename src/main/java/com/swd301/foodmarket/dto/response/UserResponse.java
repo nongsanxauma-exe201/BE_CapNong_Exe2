@@ -29,6 +29,7 @@ public class UserResponse {
     String description;
     String logoUrl;
     String achievement;
+    boolean shopActive;
 
     // Shipper specific
     String license;

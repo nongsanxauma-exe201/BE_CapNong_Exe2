@@ -20,4 +20,8 @@ public interface MysteryBoxService {
     List<MysteryBoxResponse> getMyMysteryBoxes();
 
     List<MysteryBoxResponse> getAll();
+
+    MysteryBoxResponse updateStatusBox(Integer id, boolean active);
+
+    List<MysteryBoxResponse> getForBuyer();
 }

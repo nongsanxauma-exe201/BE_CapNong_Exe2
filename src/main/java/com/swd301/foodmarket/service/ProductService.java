@@ -16,6 +16,8 @@ public interface ProductService {
 
     void deleteProduct(Integer id);
 
+    void activeProduct(Integer id);
+
     List<ProductResponse> getAll();
 
     PageResponse<ProductResponse> getAllPaged(int page, int size);
@@ -32,4 +34,6 @@ public interface ProductService {
     ProductResponse approveProduct(Integer id);
 
     ProductResponse rejectProduct(Integer id, String reason);
+
+    List<ProductResponse> getProductForBuyer();
 }

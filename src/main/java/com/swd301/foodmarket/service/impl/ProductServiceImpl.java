@@ -7,13 +7,12 @@ import com.swd301.foodmarket.dto.response.ProductResponse;
 import com.swd301.foodmarket.entity.Category;
 import com.swd301.foodmarket.entity.Product;
 import com.swd301.foodmarket.entity.User;
+import com.swd301.foodmarket.enums.OrderStatus;
 import com.swd301.foodmarket.enums.ProductStatus;
 import com.swd301.foodmarket.exception.AppException;
 import com.swd301.foodmarket.exception.ErrorCode;
 import com.swd301.foodmarket.mapper.ProductMapper;
-import com.swd301.foodmarket.repository.CategoryRepository;
-import com.swd301.foodmarket.repository.ProductRepository;
-import com.swd301.foodmarket.repository.UserRepository;
+import com.swd301.foodmarket.repository.*;
 import com.swd301.foodmarket.service.CloudinaryService;
 import com.swd301.foodmarket.service.ProductService;
 import com.swd301.foodmarket.service.UserService;
@@ -30,6 +29,7 @@ import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.stereotype.Service;
 import org.springframework.web.multipart.MultipartFile;
 
+import java.util.ArrayList;
 import java.util.List;
 
 @Service
@@ -42,6 +42,8 @@ public class ProductServiceImpl implements ProductService {
     private UserRepository userRepository;
     private CategoryRepository categoryRepository;
     private final CloudinaryService cloudinaryService;
+    private final OrderRepository orderRepository;
+    private final OrderDetailRepository orderDetailRepository;
 
     @Override
     public ProductResponse createProduct(ProductCreationRequest request, MultipartFile image){
@@ -93,12 +95,25 @@ public class ProductServiceImpl implements ProductService {
         if (!product.getShopOwner().getId().equals(getCurrentUser().getId())) {
             throw new AppException(ErrorCode.UNAUTHORIZED);
         }
+        product.setStatus(ProductStatus.INACTIVE);
+        productRepository.save(product);
+//        try {
+//            productRepository.delete(product);
+//        } catch (DataIntegrityViolationException e) {
+//            throw new AppException(ErrorCode.PRODUCT_IN_USE);
+//        }
+    }
 
-        try {
-            productRepository.delete(product);
-        } catch (DataIntegrityViolationException e) {
-            throw new AppException(ErrorCode.PRODUCT_IN_USE);
+    @Override
+    public void activeProduct(Integer id) {
+        Product product = productRepository.findById(Integer.valueOf(id))
+                .orElseThrow(() -> new AppException(ErrorCode.PRODUCT_NOT_FOUND));
+
+        if (!product.getShopOwner().getId().equals(getCurrentUser().getId())) {
+            throw new AppException(ErrorCode.UNAUTHORIZED);
         }
+        product.setStatus(ProductStatus.AVAILABLE);
+        productRepository.save(product);
     }
 
     @Override
@@ -112,7 +127,7 @@ public class ProductServiceImpl implements ProductService {
     @Override
     public PageResponse<ProductResponse> getAllPaged(int page, int size) {
         Pageable pageable = PageRequest.of(page, size, Sort.by("id").descending());
-        Page<Product> pageResult = productRepository.findAll(pageable);
+        Page<Product> pageResult = productRepository.findAllByStatus(ProductStatus.AVAILABLE,pageable);
         return PageResponse.<ProductResponse>builder()
                 .content(pageResult.getContent().stream().map(productMapper::toResponse).toList())
                 .page(pageResult.getNumber())
@@ -144,8 +159,14 @@ public class ProductServiceImpl implements ProductService {
     public PageResponse<ProductResponse> getByShopIdPaged(Integer shopId, int page, int size) {
         Pageable pageable = PageRequest.of(page, size, Sort.by("id").descending());
         Page<Product> pageResult = productRepository.findByShopOwnerId(shopId, pageable);
+        List<ProductResponse> productResponses =  new ArrayList<>();
+        for(Product p : pageResult.getContent()) {
+            ProductResponse productResponse1 = productMapper.toResponse(p);
+            productResponse1.setSold(orderDetailRepository.calculateSold( p.getId(), OrderStatus.DELIVERED));
+            productResponses.add(productResponse1);
+        }
         return PageResponse.<ProductResponse>builder()
-                .content(pageResult.getContent().stream().map(productMapper::toResponse).toList())
+                .content(productResponses)
                 .page(pageResult.getNumber())
                 .size(pageResult.getSize())
                 .totalElements(pageResult.getTotalElements())
@@ -187,5 +208,12 @@ public class ProductServiceImpl implements ProductService {
             product.setDescription("[TỪ CHỐI: " + reason + "] " + existing);
         }
         return productMapper.toResponse(productRepository.save(product));
+    }
+
+    @Override
+    public List<ProductResponse> getProductForBuyer() {
+        return productRepository.findAllByStatusAndShopOwner_ShopActive(ProductStatus.AVAILABLE,true).stream()
+                .map(productMapper::toResponse)
+                .toList();
     }
 }

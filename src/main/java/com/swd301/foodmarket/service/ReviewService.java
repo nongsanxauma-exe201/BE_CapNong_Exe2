@@ -5,6 +5,7 @@ import com.swd301.foodmarket.dto.request.ReviewReplyRequest;
 import com.swd301.foodmarket.dto.request.ReviewUpdateRequest;
 import com.swd301.foodmarket.dto.response.PageResponse;
 import com.swd301.foodmarket.dto.response.ReviewResponse;
+import com.swd301.foodmarket.dto.response.ReviewShopReport;
 import org.springframework.web.multipart.MultipartFile;
 
 import java.util.List;
@@ -25,4 +26,5 @@ public interface ReviewService {
     PageResponse<ReviewResponse> getReviewsByShopPaged(Integer shopId, int page, int size);
 
     ReviewResponse replyReview(Integer reviewId, ReviewReplyRequest request);
+    ReviewShopReport getShopReport();
 }
