@@ -292,13 +292,13 @@ public class UserServiceImpl implements UserService {
         User user = userRepository.findByEmail(email)
                 .orElseThrow(() -> new AppException(ErrorCode.USER_NOT_EXISTED));
 
-        // Update password if provided
+        // Update other fields using mapper
+        userMapper.updateUser(user, request);
+
+        // Encode password AFTER mapper (mapper overwrites with plain text if done before)
         if (request.getPassword() != null && !request.getPassword().isEmpty()) {
             user.setPassword(passwordEncoder.encode(request.getPassword()));
         }
-
-        // Update other fields using mapper
-        userMapper.updateUser(user, request);
 
         User updatedUser = userRepository.save(user);
         log.info("My info updated successfully");
