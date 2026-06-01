@@ -164,16 +164,23 @@ VALUES (@shop1_id,'ACTIVE',640600,353700,414900,128000,8040,'SHOP'),
        (@shop2_id,'ACTIVE',878400,272700,605700,0,11370,'SHOP'),
        (@shop3_id,'ACTIVE',0,0,0,0,0,'SHOP');
 
+-- shipper1: 12 đơn DELIVERED × 15000 = 180000đ; đã rút 55000; đang chờ rút 50000
+-- totalBalance = 180000 - 55000 = 125000; frozenBalance = 50000 (pending)
 INSERT INTO wallets (shipper_id,status,total_balance,frozen_balance,total_revenue_all_time,total_withdrawn,commission_wallet,type)
-VALUES (@shipper1_id,'ACTIVE',60000,0,60000,0,0,'SHIPPER'),
+VALUES (@shipper1_id,'ACTIVE',125000,50000,180000,55000,0,'SHIPPER'),
        (@shipper2_id,'ACTIVE',0,0,0,0,0,'SHIPPER');
 
 SET @wallet_shop1_id=(SELECT wallet_id FROM wallets WHERE shop_id=@shop1_id);
 SET @wallet_shop2_id=(SELECT wallet_id FROM wallets WHERE shop_id=@shop2_id);
 SET @wallet_shop3_id=(SELECT wallet_id FROM wallets WHERE shop_id=@shop3_id);
 
+-- shipper3: 4 đơn DELIVERED × 15000 = 60000đ; đã rút 30000
+-- totalBalance = 60000 - 30000 = 30000
 INSERT INTO wallets (shipper_id, status, total_balance, frozen_balance, total_revenue_all_time, total_withdrawn, commission_wallet, type)
-VALUES (@shipper3_id, 'ACTIVE', 0, 0, 0, 0, 0, 'SHIPPER');
+VALUES (@shipper3_id, 'ACTIVE', 30000, 0, 60000, 30000, 0, 'SHIPPER');
+
+SET @wallet_shipper1_id=(SELECT wallet_id FROM wallets WHERE shipper_id=@shipper1_id);
+SET @wallet_shipper3_id=(SELECT wallet_id FROM wallets WHERE shipper_id=@shipper3_id);
 
 -- ============================================================
 -- 5. PRODUCTS
@@ -554,6 +561,12 @@ INSERT INTO withdraw_requests (admin_id,wallet_id,reason,admin_note,created_at,p
 (@admin_id,@wallet_shop2_id,'Rút tiền tuần',NULL,DATE_SUB(NOW(),INTERVAL 2 HOUR),NULL,'PENDING',150000,3750,146250,'Techcombank','19034567890123','LE THI NGOC','PAYOS','CREATED'),
 (@admin_id,@wallet_shop1_id,'Rút tiền tuần trước','Đã chuyển khoản thành công',DATE_SUB(NOW(),INTERVAL 7 DAY),DATE_SUB(NOW(),INTERVAL 6 DAY),'SUCCESS',128000,3200,124800,'Vietcombank','0071000123456','TRAN VAN KIET','PAYOS','SUCCESS');
 
+-- Shipper rút tiền
+INSERT INTO withdraw_requests (admin_id,wallet_id,reason,admin_note,created_at,processed_at,status,amount,fee,receive_amount,bank_name,bank_account_number,bank_account_holder,payout_provider,payout_status) VALUES
+(@admin_id,@wallet_shipper1_id,'Rút lương tuần 1','Đã chuyển khoản thành công',DATE_SUB(NOW(),INTERVAL 10 DAY),DATE_SUB(NOW(),INTERVAL 9 DAY),'SUCCESS',55000,0,55000,'Vietcombank','0071000999888','NGUYEN VAN HOANG','PAYOS','SUCCESS'),
+(@admin_id,@wallet_shipper1_id,'Rút tiền cuối tháng',NULL,DATE_SUB(NOW(),INTERVAL 1 DAY),NULL,'PENDING',50000,0,50000,'Vietcombank','0071000999888','NGUYEN VAN HOANG','PAYOS','PENDING'),
+(@admin_id,@wallet_shipper3_id,'Rút lương tháng trước','Đã chuyển khoản thành công',DATE_SUB(NOW(),INTERVAL 15 DAY),DATE_SUB(NOW(),INTERVAL 14 DAY),'SUCCESS',30000,0,30000,'MB Bank','0987654321098','PHAM THI BICH THUY','PAYOS','SUCCESS');
+
 -- ============================================================
 -- 12. NOTIFICATIONS
 -- ============================================================
@@ -823,6 +836,26 @@ INSERT INTO orders (buyer_id,shop_owner_id,shipper_id,shipping_fee,recipient_nam
 VALUES (@buyer1_id,@shop2_id,@shipper1_id,15000,'Ngô Gia Sang','0911111111','A15 Tiền Giang, Đông Hòa, Dĩ An, Bình Dương',10.8978,106.7731,10.9021,106.7698,'Trái cây nhiệt đới bí ẩn!','DELIVERED',164000,'COD',DATE_SUB(NOW(),INTERVAL 6 DAY));
 SET @od_box2=(SELECT order_id FROM orders WHERE status='DELIVERED' AND shop_owner_id=@shop2_id AND note='Trái cây nhiệt đới bí ẩn!' LIMIT 1);
 INSERT INTO order_mystery_boxes (order_id,mystery_box_id,quantity) VALUES (@od_box2,@box2_s2,1);
+
+-- ============================================================
+-- 20b. THÊM ĐƠN DELIVERED LỊCH SỬ CHO SHIPPER (dùng cho màn Thu nhập)
+-- ============================================================
+-- 5 đơn thêm cho shipper1 (tổng cộng 12 đơn × 15000 = 180000đ)
+INSERT INTO orders (buyer_id,shop_owner_id,shipper_id,shipping_fee,recipient_name,recipient_phone,shipping_address,shipping_latitude,shipping_longitude,shop_latitude,shop_longitude,note,status,total_amount,payment_method,created_at)
+VALUES
+(@buyer1_id,@shop1_id,@shipper1_id,15000,'Ngô Gia Sang','0911111111','Đ. Võ Trường Toản, Linh Trung, Thủ Đức, TP.HCM',10.8651,106.7752,10.8697,106.7717,'Cà rốt hữu cơ, rau cải sạch','DELIVERED',98000,'COD',DATE_SUB(NOW(),INTERVAL 1 DAY)),
+(@buyer1_id,@shop2_id,@shipper1_id,15000,'Ngô Gia Sang','0911111111','A15 Tiền Giang, Đông Hòa, Dĩ An, Bình Dương',10.8978,106.7731,10.9021,106.7698,'Xoài cát Hòa Lộc ngon tuyệt','DELIVERED',145000,'PAYOS',DATE_SUB(NOW(),INTERVAL 2 DAY)),
+(@buyer1_id,@shop1_id,@shipper1_id,15000,'Ngô Gia Sang','0911111111','Đ. Võ Trường Toản, Linh Trung, Thủ Đức, TP.HCM',10.8651,106.7752,10.8697,106.7717,'Khoai lang mật siêu ngọt','DELIVERED',112000,'COD',DATE_SUB(NOW(),INTERVAL 3 DAY)),
+(@buyer1_id,@shop2_id,@shipper1_id,15000,'Ngô Gia Sang','0911111111','A15 Tiền Giang, Đông Hòa, Dĩ An, Bình Dương',10.8978,106.7731,10.9021,106.7698,'Bưởi da xanh, cam sành tươi','DELIVERED',178000,'PAYOS',DATE_SUB(NOW(),INTERVAL 4 DAY)),
+(@buyer1_id,@shop1_id,@shipper1_id,15000,'Ngô Gia Sang','0911111111','Đ. Võ Trường Toản, Linh Trung, Thủ Đức, TP.HCM',10.8651,106.7752,10.8697,106.7717,'Giao đúng giờ, rất hài lòng','DELIVERED',135000,'COD',DATE_SUB(NOW(),INTERVAL 7 DAY));
+
+-- 4 đơn cho shipper3 (tổng 4 đơn × 15000 = 60000đ)
+INSERT INTO orders (buyer_id,shop_owner_id,shipper_id,shipping_fee,recipient_name,recipient_phone,shipping_address,shipping_latitude,shipping_longitude,shop_latitude,shop_longitude,note,status,total_amount,payment_method,created_at)
+VALUES
+(@buyer1_id,@shop1_id,@shipper3_id,15000,'Ngô Gia Sang','0911111111','Đ. Võ Trường Toản, Linh Trung, Thủ Đức, TP.HCM',10.8651,106.7752,10.8697,106.7717,'Rau củ tươi ngon','DELIVERED',89000,'COD',DATE_SUB(NOW(),INTERVAL 8 DAY)),
+(@buyer1_id,@shop2_id,@shipper3_id,15000,'Ngô Gia Sang','0911111111','A15 Tiền Giang, Đông Hòa, Dĩ An, Bình Dương',10.8978,106.7731,10.9021,106.7698,'Trái cây nhiệt đới ngon','DELIVERED',125000,'PAYOS',DATE_SUB(NOW(),INTERVAL 10 DAY)),
+(@buyer1_id,@shop1_id,@shipper3_id,15000,'Ngô Gia Sang','0911111111','Đ. Võ Trường Toản, Linh Trung, Thủ Đức, TP.HCM',10.8651,106.7752,10.8697,106.7717,'Hàng tươi sạch như mô tả','DELIVERED',97000,'COD',DATE_SUB(NOW(),INTERVAL 12 DAY)),
+(@buyer1_id,@shop2_id,@shipper3_id,15000,'Ngô Gia Sang','0911111111','A15 Tiền Giang, Đông Hòa, Dĩ An, Bình Dương',10.8978,106.7731,10.9021,106.7698,'Dứa mật siêu thơm','DELIVERED',110000,'PAYOS',DATE_SUB(NOW(),INTERVAL 14 DAY));
 
 -- ============================================================
 -- 21. TRANSACTIONS
