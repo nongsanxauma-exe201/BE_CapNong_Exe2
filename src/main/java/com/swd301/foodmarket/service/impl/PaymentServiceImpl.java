@@ -181,6 +181,11 @@ public class PaymentServiceImpl implements PaymentService {
 
         Order order = payment.getOrder();
 
+        if (!"PAYOS".equalsIgnoreCase(order.getPaymentMethod())) {
+            throw new AppException(ErrorCode.INVALID_PAYMENT_METHOD);
+        }
+
+
         log.info("Order found: id={}, status={}", order.getId(), order.getStatus());
 
         payment.setStatus(PaymentStatus.SUCCESS);
@@ -202,29 +207,35 @@ public class PaymentServiceImpl implements PaymentService {
                 ? order.getShippingFee()
                 : BigDecimal.ZERO;
 
-        // tiền hàng (chưa trừ phí)
         BigDecimal shopGross = totalAmount.subtract(shippingFee);
+
+        log.info("[PAYOS_PAYMENT_SUCCESS] orderId={}, totalAmount={}, shippingFee={}, shopGross={}",
+                order.getId(),
+                totalAmount,
+                shippingFee,
+                shopGross
+        );
 
         log.info("Total amount: {}", totalAmount);
         log.info("Shipping fee: {}", shippingFee);
         log.info("Shop gross: {}", shopGross);
         
-        // Phí nền tảng 10% cho toàn bộ đơn hàng
-        BigDecimal platformFeeTotal = totalAmount.multiply(BigDecimal.valueOf(0.1));
-        
-        // Phí lấy từ phía Shop (10% của shopGross)
-        BigDecimal platformFeeFromShop = shopGross.multiply(BigDecimal.valueOf(0.1));
-        
-        // Phí lấy từ phía Ship (10% của shippingFee)
-        BigDecimal platformFeeFromShip = shippingFee.multiply(BigDecimal.valueOf(0.1));
-
-        // Tiền thực nhận
-        BigDecimal shopNet = shopGross.subtract(platformFeeFromShop);
-        BigDecimal shipperNet = shippingFee.subtract(platformFeeFromShip);
-
-        log.info("Platform Fee Total (10%): {}", platformFeeTotal);
-        log.info("Shop Net: {}", shopNet);
-        log.info("Shipper Net: {}", shipperNet);
+//        // Phí nền tảng 10% cho toàn bộ đơn hàng
+//        BigDecimal platformFeeTotal = totalAmount.multiply(BigDecimal.valueOf(0.1));
+//
+//        // Phí lấy từ phía Shop (10% của shopGross)
+//        BigDecimal platformFeeFromShop = shopGross.multiply(BigDecimal.valueOf(0.1));
+//
+//        // Phí lấy từ phía Ship (10% của shippingFee)
+//        BigDecimal platformFeeFromShip = shippingFee.multiply(BigDecimal.valueOf(0.1));
+//
+//        // Tiền thực nhận
+//        BigDecimal shopNet = shopGross.subtract(platformFeeFromShop);
+//        BigDecimal shipperNet = shippingFee.subtract(platformFeeFromShip);
+//
+//        log.info("Platform Fee Total (10%): {}", platformFeeTotal);
+//        log.info("Shop Net: {}", shopNet);
+//        log.info("Shipper Net: {}", shipperNet);
 
         // ======================
         // ADMIN WALLET
@@ -233,30 +244,24 @@ public class PaymentServiceImpl implements PaymentService {
         Wallet adminWallet = walletRepository.findByTypeForUpdate(WalletType.PLATFORM)
                 .orElseThrow(() -> new AppException(ErrorCode.PLATFORM_WALLET_NOT_FOUND));
 
-        log.info("Admin wallet BEFORE balance: {}", adminWallet.getTotalBalance());
-        BigDecimal totalHeld = shopNet.add(shipperNet);
-
         adminWallet.setTotalBalance(
                 adminWallet.getTotalBalance().add(totalAmount)
         );
 
+// Khóa toàn bộ tiền PayOS đang nằm trong hệ thống.
+// Đến DELIVERED mới tách: shop, shipper, commission, refund.
         adminWallet.setFrozenBalance(
-                adminWallet.getFrozenBalance().add(totalHeld)
+                adminWallet.getFrozenBalance().add(totalAmount)
         );
-
-        adminWallet.setCommissionWallet(
-                adminWallet.getCommissionWallet().add(platformFeeTotal)
-        );
-
-        adminWallet.setTotalRevenueAllTime(
-                adminWallet.getTotalRevenueAllTime().add(platformFeeTotal)
-        );
-
 
         walletRepository.save(adminWallet);
 
-        log.info("Admin wallet AFTER balance: {}", adminWallet.getTotalBalance());
-
+        log.info("[PAYOS_PLATFORM_AFTER_PAYMENT] totalBalance={}, frozenBalance={}, commissionWallet={}, totalRevenueAllTime={}",
+                adminWallet.getTotalBalance(),
+                adminWallet.getFrozenBalance(),
+                adminWallet.getCommissionWallet(),
+                adminWallet.getTotalRevenueAllTime()
+        );
         // ======================
         // SHOP WALLET
         // ======================
@@ -266,22 +271,25 @@ public class PaymentServiceImpl implements PaymentService {
         Wallet shopWallet = walletRepository.findByShopOwnerIdForUpdate(shop.getId())
                 .orElseThrow(() -> new AppException(ErrorCode.WALLET_NOT_FOUND));
 
-        log.info("Shop wallet BEFORE frozen balance: {}", shopWallet.getFrozenBalance());
-
+// Ghi nhận tiền hàng gốc cho shop nhưng khóa lại.
+// Đến DELIVERED mới trừ refund + phí sàn.
         shopWallet.setTotalBalance(
-                shopWallet.getTotalBalance().add(shopNet)
+                shopWallet.getTotalBalance().add(shopGross)
         );
 
         shopWallet.setFrozenBalance(
-                shopWallet.getFrozenBalance().add(shopNet)
+                shopWallet.getFrozenBalance().add(shopGross)
         );
 
         shopWallet.setUpdatedAt(LocalDateTime.now());
 
         walletRepository.save(shopWallet);
 
-        log.info("Shop wallet AFTER frozen balance: {}", shopWallet.getFrozenBalance());
-
+        log.info("[PAYOS_SHOP_AFTER_PAYMENT] shopOwnerId={}, totalBalance={}, frozenBalance={}",
+                shop.getId(),
+                shopWallet.getTotalBalance(),
+                shopWallet.getFrozenBalance()
+        );
         // ======================
         // SHIPPER WALLET
         // ======================

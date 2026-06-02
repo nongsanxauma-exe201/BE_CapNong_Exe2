@@ -278,224 +278,14 @@ public class ShipperServiceImpl implements ShipperService {
 
         if (request.getStatus() == OrderStatus.DELIVERED) {
 
-            log.info("========== [DELIVERED PAYOUT START] Order #{} ==========", order.getId());
-            log.info("[ORDER] totalAmount={}, shippingFee={}, paymentMethod={}, refundAmount={}",
-                    order.getTotalAmount(),
-                    order.getShippingFee(),
-                    order.getPaymentMethod(),
-                    order.getRefundAmount()
-            );
-
-            BigDecimal shippingFee = order.getShippingFee() != null
-                    ? order.getShippingFee()
-                    : BigDecimal.ZERO;
-
-            log.info("Processing shipping payout for order {}", orderId);
-            log.info("Shipping fee: {}", shippingFee);
-
-            if (shippingFee.compareTo(BigDecimal.ZERO) > 0) {
-
-                // shipper nhận 90% tiền ship (trừ 10% phí sàn)
-                BigDecimal shipperFee = shippingFee.multiply(BigDecimal.valueOf(0.9));
-                log.info("[SHIPPER_PAYOUT_CALC] shippingFee={}, shipperFee=90%={}",
-                        shippingFee,
-                        shipperFee
-                );
-                // ======================
-                // SHIPPER WALLET
-                // ======================
-
-                Wallet shipperWallet = walletRepository.findByShipperIdForUpdate(shipper.getId())
-                        .orElseThrow(() -> new AppException(ErrorCode.WALLET_NOT_FOUND));
-                log.info("[SHIPPER_WALLET_BEFORE] shipperId={}, totalBalance={}, frozenBalance={}, totalRevenueAllTime={}",
-                        shipper.getId(),
-                        shipperWallet.getTotalBalance(),
-                        shipperWallet.getFrozenBalance(),
-                        shipperWallet.getTotalRevenueAllTime()
-                );
-
-                shipperWallet.setTotalBalance(
-                        shipperWallet.getTotalBalance().add(shipperFee)
-                );
-
-                shipperWallet.setTotalRevenueAllTime(
-                        shipperWallet.getTotalRevenueAllTime().add(shipperFee)
-                );
-
-                shipperWallet.setUpdatedAt(LocalDateTime.now());
-
-                walletRepository.save(shipperWallet);
-
-                log.info("[SHIPPER_WALLET_AFTER] shipperId={}, totalBalance={}, frozenBalance={}, totalRevenueAllTime={}",
-                        shipper.getId(),
-                        shipperWallet.getTotalBalance(),
-                        shipperWallet.getFrozenBalance(),
-                        shipperWallet.getTotalRevenueAllTime()
-                );
-            }
-            BigDecimal shopGross = totalAmount.subtract(shippingFee);
-            BigDecimal shopRevenue = shopGross.multiply(BigDecimal.valueOf(0.9));
-            BigDecimal finalShopRevenue = shopRevenue;
-
-            if (shopRevenue.compareTo(BigDecimal.ZERO) > 0) {
-
-                Wallet shopWallet = walletRepository.findByShopOwner_Id(order.getShopOwner().getId())
-                        .orElseThrow(() -> new AppException(ErrorCode.WALLET_NOT_FOUND));
-                log.info("[SHOP_WALLET_BEFORE] shopOwnerId={}, totalBalance={}, frozenBalance={}, totalRevenueAllTime={}",
-                        order.getShopOwner().getId(),
-                        shopWallet.getTotalBalance(),
-                        shopWallet.getFrozenBalance(),
-                        shopWallet.getTotalRevenueAllTime()
-                );
-                BigDecimal refundAmount = order.getRefundAmount() != null
-                        ? order.getRefundAmount()
-                        : BigDecimal.ZERO;
-
-                log.info("[SHOP_PAYOUT_CALC] orderId={}, totalAmount={}, shippingFee={}, shopGross=total-shipping={}, shopRevenue=90%={}, refundAmount={}",
-                        orderId,
-                        totalAmount,
-                        shippingFee,
-                        shopGross,
-                        shopRevenue,
-
-                        refundAmount
-                );
-                if (refundAmount.compareTo(BigDecimal.ZERO) > 0) {
-
-                    if (refundAmount.compareTo(shopRevenue) > 0) {
-                        log.error("[REFUND_INVALID] orderId={}, refundAmount={}, shopRevenue={}",
-                                orderId,
-                                refundAmount,
-                                shopRevenue
-                        );
-                        throw new AppException(ErrorCode.INVALID_REFUND_AMOUNT);
-                    }
-
-                    finalShopRevenue = shopRevenue.subtract(refundAmount);
-                    log.info("[REFUND_CALC] orderId={}, refundAmount={}, finalShopRevenue=shopRevenue-refund={}",
-                            orderId,
-                            refundAmount,
-                            finalShopRevenue
-                    );
-                    if (refundAmount.compareTo(BigDecimal.ZERO) > 0) {
-                        Wallet buyerWallet = walletRepository.findByBuyer(order.getBuyer());
-
-                        if (buyerWallet == null) {
-                            throw new AppException(ErrorCode.WALLET_NOT_FOUND);
-                        }
-
-                        log.info("[BUYER_WALLET_BEFORE_REFUND] buyerId={}, totalBalance={}, frozenBalance={}, refundAmount={}",
-                                order.getBuyer().getId(),
-                                buyerWallet.getTotalBalance(),
-                                buyerWallet.getFrozenBalance(),
-                                refundAmount
-                        );
-
-
-                        buyerWallet.setTotalBalance(
-                                buyerWallet.getTotalBalance().add(refundAmount)
-                        );
-
-                        walletRepository.save(buyerWallet);
-
-                        log.info("[BUYER_WALLET_AFTER_REFUND] buyerId={}, totalBalance={}, frozenBalance={}",
-                                order.getBuyer().getId(),
-                                buyerWallet.getTotalBalance(),
-                                buyerWallet.getFrozenBalance()
-                        );
-
-                        Notification buyerNotification = Notification.builder()
-                                .title("Hoàn tiền đơn hàng #" + order.getId())
-                                .message("Bạn đã nhận được " + refundAmount + "đ hoàn tiền từ đơn hàng #" + order.getId())
-                                .receiverType("USER_" + order.getBuyer().getId())
-                                .build();
-
-                        notificationService.createUserNotification(order.getBuyer(), buyerNotification);
-
-                        Notification shopNotification = Notification.builder()
-                                .title("Hoàn tiền đơn hàng #" + order.getId())
-                                .message("Bạn đã bị trừ " + refundAmount + "đ do hoàn tiền đơn hàng #" + order.getId())
-                                .receiverType("USER_" + order.getShopOwner().getId())
-                                .build();
-
-                        notificationService.createUserNotification(order.getShopOwner(), shopNotification);
-                    }
-                }
-
-                boolean isCOD = "COD".equals(order.getPaymentMethod());
-                log.info("[SHOP_PAYOUT_METHOD] orderId={}, isCOD={}", orderId, isCOD);
-
-                if (isCOD) {
-                    // COD: tiền mặt shipper thu từ khách, chưa từng freeze → cộng trực tiếp vào ví shop
-                    log.info("[SHOP_WALLET_OPERATION_COD] orderId={}, totalBalance + finalShopRevenue = {} + {}, revenueAllTime + finalShopRevenue = {} + {}",
-                            orderId,
-                            shopWallet.getTotalBalance(),
-                            finalShopRevenue,
-                            shopWallet.getTotalRevenueAllTime(),
-                            finalShopRevenue
-                    );
-                    shopWallet.setTotalBalance(
-                            shopWallet.getTotalBalance().add(finalShopRevenue)
-                    );
-                } else {
-                    // PAYOS: tiền đã freeze lúc thanh toán → unfreeze khi giao thành công
-                    if (shopWallet.getFrozenBalance().compareTo(shopRevenue) < 0) {
-                        log.error("[SHOP_FROZEN_NOT_ENOUGH] orderId={}, frozenBalance={}, needToUnfreeze={}",
-                                orderId,
-                                shopWallet.getFrozenBalance(),
-                                shopRevenue
-                        );
-                        throw new AppException(ErrorCode.WALLET_BALANCE_NOT_ENOUGH);
-                    }
-
-                    log.info("[SHOP_WALLET_OPERATION_PAYOS] orderId={}, frozenBalance - shopRevenue = {} - {}, totalBalance - refundAmount = {} - {}, revenueAllTime + finalShopRevenue = {} + {}",
-                            orderId,
-                            shopWallet.getFrozenBalance(),
-                            shopRevenue,
-                            shopWallet.getTotalBalance(),
-                            refundAmount,
-                            shopWallet.getTotalRevenueAllTime(),
-                            finalShopRevenue
-                    );
-                    shopWallet.setFrozenBalance(
-                            shopWallet.getFrozenBalance().subtract(shopRevenue)
-                    );
-
-                    if (refundAmount.compareTo(BigDecimal.ZERO) > 0) {
-                        shopWallet.setTotalBalance(
-                                shopWallet.getTotalBalance().subtract(refundAmount)
-                        );
-                    }
-                }
-
-                shopWallet.setTotalRevenueAllTime(
-                        shopWallet.getTotalRevenueAllTime().add(finalShopRevenue)
-                );
-
-                shopWallet.setUpdatedAt(LocalDateTime.now());
-                log.info("[SHOP_WALLET_AFTER] shopOwnerId={}, totalBalance={}, frozenBalance={}, totalRevenueAllTime={}",
-                        order.getShopOwner().getId(),
-                        shopWallet.getTotalBalance(),
-                        shopWallet.getFrozenBalance(),
-                        shopWallet.getTotalRevenueAllTime()
-                );
-                walletRepository.save(shopWallet);
+            if ("PAYOS".equalsIgnoreCase(order.getPaymentMethod())) {
+                processPayosDeliveredPayout(order, shipper);
             }
 
-            log.info("[PAYOUT_SUMMARY] orderId={}, totalAmount={}, shippingFee={}, shopGross={}, shopRevenue={}, refundAmount={}, finalShopRevenue={}",
-                    orderId,
-                    totalAmount,
-                    shippingFee,
-                    shopGross,
-                    shopRevenue,
-                    order.getRefundAmount() != null
-                            ? order.getRefundAmount()
-                            : BigDecimal.ZERO,
-                    finalShopRevenue
-            );
-            log.info("========== [DELIVERED PAYOUT END] Order #{} ==========", order.getId());
+            if ("COD".equalsIgnoreCase(order.getPaymentMethod())) {
+                processCodDelivered(order);
+            }
         }
-
         // ====================================================
         // CLEAR CURRENT ORDER FROM SHIPPER LOCATION
         // ====================================================
@@ -524,6 +314,322 @@ public class ShipperServiceImpl implements ShipperService {
         log.info("Order {} → {} by shipper {}", orderId, request.getStatus(), shipper.getId());
 
         return toShipperOrderResponse(order);
+    }
+    private void processPayosDeliveredPayout(Order order, User shipper) {
+        BigDecimal totalAmount = order.getTotalAmount() != null
+                ? order.getTotalAmount()
+                : BigDecimal.ZERO;
+
+        BigDecimal shippingFee = order.getShippingFee() != null
+                ? order.getShippingFee()
+                : BigDecimal.ZERO;
+
+        BigDecimal refundAmount = order.getRefundAmount() != null
+                ? order.getRefundAmount()
+                : BigDecimal.ZERO;
+
+        BigDecimal shopGross = totalAmount.subtract(shippingFee);
+
+        if (refundAmount.compareTo(shopGross) > 0) {
+            throw new AppException(ErrorCode.INVALID_REFUND_AMOUNT);
+        }
+
+        // Phí sàn shop tính sau refund
+        BigDecimal shopChargeable = shopGross.subtract(refundAmount);
+
+        BigDecimal platformFeeFromShop = shopChargeable.multiply(BigDecimal.valueOf(0.1));
+        BigDecimal platformFeeFromShip = shippingFee.multiply(BigDecimal.valueOf(0.1));
+        BigDecimal platformFeeTotal = platformFeeFromShop.add(platformFeeFromShip);
+
+        BigDecimal finalShopRevenue = shopChargeable.subtract(platformFeeFromShop);
+        BigDecimal shipperNet = shippingFee.subtract(platformFeeFromShip);
+
+        log.info("========== [PAYOS DELIVERED PAYOUT START] Order #{} ==========", order.getId());
+
+        log.info("[PAYOS_AMOUNT_INPUT] totalAmount={}, shippingFee={}, shopGross={}, refundAmount={}",
+                totalAmount,
+                shippingFee,
+                shopGross,
+                refundAmount
+        );
+
+        log.info("[PAYOS_AFTER_REFUND] shopChargeable=shopGross-refundAmount => {} - {} = {}",
+                shopGross,
+                refundAmount,
+                shopChargeable
+        );
+
+        log.info("[PAYOS_FEE] platformFeeFromShop={}, platformFeeFromShip={}, platformFeeTotal={}",
+                platformFeeFromShop,
+                platformFeeFromShip,
+                platformFeeTotal
+        );
+
+        log.info("[PAYOS_NET] finalShopRevenue={}, shipperNet={}, refundAmount={}",
+                finalShopRevenue,
+                shipperNet,
+                refundAmount
+        );
+
+        Wallet platformWallet = walletRepository.findByTypeForUpdate(WalletType.PLATFORM)
+                .orElseThrow(() -> new AppException(ErrorCode.PLATFORM_WALLET_NOT_FOUND));
+
+        Wallet shopWallet = walletRepository.findByShopOwner_Id(order.getShopOwner().getId())
+                .orElseThrow(() -> new AppException(ErrorCode.WALLET_NOT_FOUND));
+
+        Wallet shipperWallet = walletRepository.findByShipperIdForUpdate(shipper.getId())
+                .orElseThrow(() -> new AppException(ErrorCode.WALLET_NOT_FOUND));
+///  Log to check
+        BigDecimal platformTotalBefore = platformWallet.getTotalBalance();
+        BigDecimal platformFrozenBefore = platformWallet.getFrozenBalance();
+        BigDecimal platformCommissionBefore = platformWallet.getCommissionWallet();
+        BigDecimal platformRevenueBefore = platformWallet.getTotalRevenueAllTime();
+
+        BigDecimal shopTotalBefore = shopWallet.getTotalBalance();
+        BigDecimal shopFrozenBefore = shopWallet.getFrozenBalance();
+        BigDecimal shopRevenueBefore = shopWallet.getTotalRevenueAllTime();
+
+        BigDecimal shipperTotalBefore = shipperWallet.getTotalBalance();
+        BigDecimal shipperFrozenBefore = shipperWallet.getFrozenBalance();
+        BigDecimal shipperRevenueBefore = shipperWallet.getTotalRevenueAllTime();
+
+        log.info("[PAYOS_PLATFORM_BEFORE] totalBalance={}, frozenBalance={}, commissionWallet={}, totalRevenueAllTime={}",
+                platformTotalBefore,
+                platformFrozenBefore,
+                platformCommissionBefore,
+                platformRevenueBefore
+        );
+
+        log.info("[PAYOS_SHOP_BEFORE] shopOwnerId={}, totalBalance={}, frozenBalance={}, totalRevenueAllTime={}",
+                order.getShopOwner().getId(),
+                shopTotalBefore,
+                shopFrozenBefore,
+                shopRevenueBefore
+        );
+
+        log.info("[PAYOS_SHIPPER_BEFORE] shipperId={}, totalBalance={}, frozenBalance={}, totalRevenueAllTime={}",
+                shipper.getId(),
+                shipperTotalBefore,
+                shipperFrozenBefore,
+                shipperRevenueBefore
+        );
+
+
+        // Payment success đã add platform.frozenBalance += totalAmount.
+        // Khi delivered, commission trở thành tiền lời admin nên không còn là tiền giữ hộ.
+        if (platformWallet.getFrozenBalance().compareTo(platformFeeTotal) < 0) {
+            throw new AppException(ErrorCode.PLATFORM_BALANCE_NOT_ENOUGH);
+        }
+
+        platformWallet.setFrozenBalance(
+                platformWallet.getFrozenBalance().subtract(platformFeeTotal)
+        );
+
+        platformWallet.setCommissionWallet(
+                platformWallet.getCommissionWallet().add(platformFeeTotal)
+        );
+
+        platformWallet.setTotalRevenueAllTime(
+                platformWallet.getTotalRevenueAllTime().add(platformFeeTotal)
+        );
+
+        // Payment success đã add shop.totalBalance += shopGross và shop.frozenBalance += shopGross.
+        // Delivered thì mở khóa shopGross, sau đó trừ refund + phí sàn shop khỏi totalBalance.
+        if (shopWallet.getFrozenBalance().compareTo(shopGross) < 0) {
+            throw new AppException(ErrorCode.WALLET_BALANCE_NOT_ENOUGH);
+        }
+
+        shopWallet.setFrozenBalance(
+                shopWallet.getFrozenBalance().subtract(shopGross)
+        );
+
+        BigDecimal shopDeduction = refundAmount.add(platformFeeFromShop);
+
+        shopWallet.setTotalBalance(
+                shopWallet.getTotalBalance().subtract(shopDeduction)
+        );
+
+        shopWallet.setTotalRevenueAllTime(
+                shopWallet.getTotalRevenueAllTime().add(finalShopRevenue)
+        );
+
+        shopWallet.setUpdatedAt(LocalDateTime.now());
+
+        // Shipper nhận 90% phí ship khi delivered
+        shipperWallet.setTotalBalance(
+                shipperWallet.getTotalBalance().add(shipperNet)
+        );
+
+        shipperWallet.setTotalRevenueAllTime(
+                shipperWallet.getTotalRevenueAllTime().add(shipperNet)
+        );
+
+        shipperWallet.setUpdatedAt(LocalDateTime.now());
+
+        // PayOS refund về ví buyer
+        if (refundAmount.compareTo(BigDecimal.ZERO) > 0) {
+            Wallet buyerWallet = walletRepository.findByBuyer(order.getBuyer());
+
+            if (buyerWallet == null) {
+                throw new AppException(ErrorCode.WALLET_NOT_FOUND);
+            }
+            BigDecimal buyerTotalBefore = buyerWallet.getTotalBalance();
+            BigDecimal buyerFrozenBefore = buyerWallet.getFrozenBalance();
+            BigDecimal buyerRevenueBefore = buyerWallet.getTotalRevenueAllTime();
+
+            log.info("[PAYOS_BUYER_BEFORE] buyerId={}, totalBalance={}, frozenBalance={}, totalRevenueAllTime={}",
+                    order.getBuyer().getId(),
+                    buyerTotalBefore,
+                    buyerFrozenBefore,
+                    buyerRevenueBefore
+            );
+
+            buyerWallet.setTotalBalance(
+                    buyerWallet.getTotalBalance().add(refundAmount)
+            );
+
+            walletRepository.save(buyerWallet);
+            log.info("[PAYOS_BUYER_AFTER] buyerId={}, totalBalance={} -> {}, frozenBalance={} -> {}, totalRevenueAllTime={} -> {}",
+                    order.getBuyer().getId(),
+                    buyerTotalBefore,
+                    buyerWallet.getTotalBalance(),
+                    buyerFrozenBefore,
+                    buyerWallet.getFrozenBalance(),
+                    buyerRevenueBefore,
+                    buyerWallet.getTotalRevenueAllTime()
+            );
+            BigDecimal expectedBuyerTotalAfter = buyerTotalBefore.add(refundAmount);
+
+            log.info("[PAYOS_VERIFY] expectedBuyerTotalAfter={}, actualBuyerTotalAfter={}, match={}",
+                    expectedBuyerTotalAfter,
+                    buyerWallet.getTotalBalance(),
+                    expectedBuyerTotalAfter.compareTo(buyerWallet.getTotalBalance()) == 0
+            );
+            Notification buyerNotification = Notification.builder()
+                    .title("Hoàn tiền đơn hàng #" + order.getId())
+                    .message("Bạn đã nhận được " + refundAmount + "đ hoàn tiền từ đơn hàng #" + order.getId())
+                    .receiverType("USER_" + order.getBuyer().getId())
+                    .build();
+
+            notificationService.createUserNotification(order.getBuyer(), buyerNotification);
+
+            Notification shopNotification = Notification.builder()
+                    .title("Hoàn tiền đơn hàng #" + order.getId())
+                    .message("Bạn đã bị trừ " + refundAmount + "đ do hoàn tiền đơn hàng #" + order.getId())
+                    .receiverType("USER_" + order.getShopOwner().getId())
+                    .build();
+
+            notificationService.createUserNotification(order.getShopOwner(), shopNotification);
+        }
+
+        walletRepository.save(platformWallet);
+        walletRepository.save(shopWallet);
+        walletRepository.save(shipperWallet);
+
+        log.info("[PAYOS_PLATFORM_AFTER] totalBalance={} -> {}, frozenBalance={} -> {}, commissionWallet={} -> {}, totalRevenueAllTime={} -> {}",
+                platformTotalBefore,
+                platformWallet.getTotalBalance(),
+                platformFrozenBefore,
+                platformWallet.getFrozenBalance(),
+                platformCommissionBefore,
+                platformWallet.getCommissionWallet(),
+                platformRevenueBefore,
+                platformWallet.getTotalRevenueAllTime()
+        );
+
+        log.info("[PAYOS_SHOP_AFTER] shopOwnerId={}, totalBalance={} -> {}, frozenBalance={} -> {}, totalRevenueAllTime={} -> {}",
+                order.getShopOwner().getId(),
+                shopTotalBefore,
+                shopWallet.getTotalBalance(),
+                shopFrozenBefore,
+                shopWallet.getFrozenBalance(),
+                shopRevenueBefore,
+                shopWallet.getTotalRevenueAllTime()
+        );
+
+        log.info("[PAYOS_SHIPPER_AFTER] shipperId={}, totalBalance={} -> {}, frozenBalance={} -> {}, totalRevenueAllTime={} -> {}",
+                shipper.getId(),
+                shipperTotalBefore,
+                shipperWallet.getTotalBalance(),
+                shipperFrozenBefore,
+                shipperWallet.getFrozenBalance(),
+                shipperRevenueBefore,
+                shipperWallet.getTotalRevenueAllTime()
+        );
+        BigDecimal expectedPlatformFrozenAfter = platformFrozenBefore.subtract(platformFeeTotal);
+        BigDecimal expectedPlatformCommissionAfter = platformCommissionBefore.add(platformFeeTotal);
+        BigDecimal expectedPlatformRevenueAfter = platformRevenueBefore.add(platformFeeTotal);
+
+        BigDecimal expectedShopTotalAfter = shopTotalBefore.subtract(refundAmount.add(platformFeeFromShop));
+        BigDecimal expectedShopFrozenAfter = shopFrozenBefore.subtract(shopGross);
+        BigDecimal expectedShopRevenueAfter = shopRevenueBefore.add(finalShopRevenue);
+
+        BigDecimal expectedShipperTotalAfter = shipperTotalBefore.add(shipperNet);
+        BigDecimal expectedShipperRevenueAfter = shipperRevenueBefore.add(shipperNet);
+
+        log.info("[PAYOS_VERIFY] expectedPlatformFrozenAfter={}, actualPlatformFrozenAfter={}, match={}",
+                expectedPlatformFrozenAfter,
+                platformWallet.getFrozenBalance(),
+                expectedPlatformFrozenAfter.compareTo(platformWallet.getFrozenBalance()) == 0
+        );
+
+        log.info("[PAYOS_VERIFY] expectedPlatformCommissionAfter={}, actualPlatformCommissionAfter={}, match={}",
+                expectedPlatformCommissionAfter,
+                platformWallet.getCommissionWallet(),
+                expectedPlatformCommissionAfter.compareTo(platformWallet.getCommissionWallet()) == 0
+        );
+
+        log.info("[PAYOS_VERIFY] expectedPlatformRevenueAfter={}, actualPlatformRevenueAfter={}, match={}",
+                expectedPlatformRevenueAfter,
+                platformWallet.getTotalRevenueAllTime(),
+                expectedPlatformRevenueAfter.compareTo(platformWallet.getTotalRevenueAllTime()) == 0
+        );
+
+        log.info("[PAYOS_VERIFY] expectedShopTotalAfter={}, actualShopTotalAfter={}, match={}",
+                expectedShopTotalAfter,
+                shopWallet.getTotalBalance(),
+                expectedShopTotalAfter.compareTo(shopWallet.getTotalBalance()) == 0
+        );
+
+        log.info("[PAYOS_VERIFY] expectedShopFrozenAfter={}, actualShopFrozenAfter={}, match={}",
+                expectedShopFrozenAfter,
+                shopWallet.getFrozenBalance(),
+                expectedShopFrozenAfter.compareTo(shopWallet.getFrozenBalance()) == 0
+        );
+
+        log.info("[PAYOS_VERIFY] expectedShopRevenueAfter={}, actualShopRevenueAfter={}, match={}",
+                expectedShopRevenueAfter,
+                shopWallet.getTotalRevenueAllTime(),
+                expectedShopRevenueAfter.compareTo(shopWallet.getTotalRevenueAllTime()) == 0
+        );
+
+        log.info("[PAYOS_VERIFY] expectedShipperTotalAfter={}, actualShipperTotalAfter={}, match={}",
+                expectedShipperTotalAfter,
+                shipperWallet.getTotalBalance(),
+                expectedShipperTotalAfter.compareTo(shipperWallet.getTotalBalance()) == 0
+        );
+
+        log.info("[PAYOS_VERIFY] expectedShipperRevenueAfter={}, actualShipperRevenueAfter={}, match={}",
+                expectedShipperRevenueAfter,
+                shipperWallet.getTotalRevenueAllTime(),
+                expectedShipperRevenueAfter.compareTo(shipperWallet.getTotalRevenueAllTime()) == 0
+        );
+
+
+        log.info("========== [PAYOS DELIVERED PAYOUT END] Order #{} ==========", order.getId());
+    }
+    private void processCodDelivered(Order order) {
+        if (order.getCodAmount() == null || order.getCodAmount().compareTo(BigDecimal.ZERO) <= 0) {
+            order.setCodAmount(order.getTotalAmount());
+        }
+
+        if (order.getCodSettled() == null) {
+            order.setCodSettled(false);
+        }
+
+        // Không cộng ví ở đây.
+        // Shipper đã giao và đã thu tiền mặt từ buyer.
+        // Admin đối soát COD xong mới cộng ví ở CodSettlementService.
     }
 
 

@@ -123,4 +123,11 @@ public class Order {
     @ManyToOne
     @JoinColumn(name="trip_stop_id")
     TripStop tripStop;
+
+    @Column(precision = 19, scale = 2)
+    private BigDecimal codAmount;
+
+    private Boolean codSettled = false;
+
+    private LocalDateTime codSettledAt;
 }

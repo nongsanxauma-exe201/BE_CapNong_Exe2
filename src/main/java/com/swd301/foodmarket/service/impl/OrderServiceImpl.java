@@ -216,7 +216,7 @@ public class OrderServiceImpl implements OrderService {
         Long totalOrder = orderRepository.countByShopOwnerFromTo(shopOwner, from, to);
         if (totalOrder == null) totalOrder = 0L;
 
-        Double totalPrice = orderRepository.sumPriceByShop(shopOwner, from, to);
+        Double totalPrice = orderRepository.sumPriceByShop(shopOwner, from, to,OrderStatus.DELIVERED);
         if (totalPrice == null) totalPrice = 0D;
 
         Double averagePrice = totalOrder > 0 ? totalPrice / totalOrder : 0D;
@@ -481,7 +481,13 @@ public class OrderServiceImpl implements OrderService {
         order.setRecipientPhone(getOrDefault(request.getRecipientPhone(), buyer.getPhoneNumber()));
         order.setShippingAddress(getOrDefault(request.getShippingAddress(), buyer.getAddress()));
         order.setNote(request.getNote());
-        order.setPaymentMethod(request.getPaymentMethod());
+
+        order.setPaymentMethod(
+                request.getPaymentMethod() != null
+                        ? request.getPaymentMethod()
+                        : "PAYOS"
+        );
+//        order.setPaymentMethod(request.getPaymentMethod());
         order.setStatus(OrderStatus.PENDING);
 
         List<OrderDetail> orderDetails = new ArrayList<>();
@@ -601,7 +607,17 @@ public class OrderServiceImpl implements OrderService {
         order.setTotalAmount(totalAmount.add(shippingFee));
         order.setOrderDetails(orderDetails);
         order.setMysteryBoxes(mysteryBoxes);
-
+        if ("COD".equalsIgnoreCase(order.getPaymentMethod())) {
+            order.setStatus(OrderStatus.PENDING);
+            order.setCodAmount(order.getTotalAmount());
+            order.setCodSettled(false);
+            order.setCodSettledAt(null);
+        } else {
+            order.setStatus(OrderStatus.PENDING);
+            order.setCodAmount(BigDecimal.ZERO);
+            order.setCodSettled(false);
+            order.setCodSettledAt(null);
+        }
         Order savedOrder = orderRepository.save(order);
 
         if (!orderDetails.isEmpty()) {

@@ -112,7 +112,7 @@ public class TripServiceImpl implements TripService {
         for (Integer orderId : orderIds) {
             Order order = orderRepository.findById(orderId).orElseThrow(() -> new AppException(ErrorCode.ORDER_NOT_FOUND));
             order.setTripStop(tripStop);
-            order.setStatus(OrderStatus.SHIPPING_TO_WAREHOUSE);
+            order.setStatus(OrderStatus.READY_FOR_PICKUP);
             orders.add(order);
 
         }

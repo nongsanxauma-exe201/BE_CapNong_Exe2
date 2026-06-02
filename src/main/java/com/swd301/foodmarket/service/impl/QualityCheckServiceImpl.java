@@ -50,6 +50,11 @@ public class QualityCheckServiceImpl implements QualityCheckService {
     public QualityCheckResponse checkQuality(QualityCheckRequest qualityCheckRequest, MultiValueMap<String, MultipartFile> fileMap) {
         OrderDetail orderDetail = null;
         OrderMysteryBox mysteryBox = null;
+        log.info("[QC_REQUEST] orderDetailId={}, orderMysteryBoxId={}, qualityResult={}, rejectedWeight={}"                , qualityCheckRequest.getOrderDetailId()
+                , qualityCheckRequest.getOrderMysteryBoxId()
+                , qualityCheckRequest.getQualityResult()
+                , qualityCheckRequest.getRejectedWeight()
+        );
         if (qualityCheckRequest.getOrderDetailId() != null) {
             orderDetail = orderDetailRepository.findById(qualityCheckRequest.getOrderDetailId()).orElseThrow(
                     () -> new AppException(ErrorCode.ORDER_DETAIL_NOT_FOUND)
@@ -165,6 +170,23 @@ public class QualityCheckServiceImpl implements QualityCheckService {
                 ? order.getRefundAmount()
                 : BigDecimal.ZERO;
         order.setRefundAmount(currentRefund.add(refundAmount));
+        if ("COD".equalsIgnoreCase(order.getPaymentMethod())) {
+            BigDecimal totalAmount = order.getTotalAmount() != null
+                    ? order.getTotalAmount()
+                    : BigDecimal.ZERO;
+
+            BigDecimal newRefundAmount = order.getRefundAmount() != null
+                    ? order.getRefundAmount()
+                    : BigDecimal.ZERO;
+
+            BigDecimal codAmount = totalAmount.subtract(newRefundAmount);
+
+            if (codAmount.compareTo(BigDecimal.ZERO) < 0) {
+                throw new AppException(ErrorCode.INVALID_AMOUNT);
+            }
+
+            order.setCodAmount(codAmount);
+        }
         order.setRefundReason(order.getRefundReason() == null ? message : order.getRefundReason() + "\n" + message);
         orderRepository.save(order);
         return qualityResultMapper.toQualityCheckResponse(qualityResult);
