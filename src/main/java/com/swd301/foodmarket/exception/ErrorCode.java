@@ -112,8 +112,11 @@ public enum ErrorCode {
     //Warehouse
     WAREHOUSE_NOT_FOUND(14001, "Warehouse not found", HttpStatus.NOT_FOUND),
     // trip stop
-    TRIP_STOP_NOT_FOUND(15001, "Trip stop not found", HttpStatus.NOT_FOUND)
-
+    TRIP_STOP_NOT_FOUND(15001, "Trip stop not found", HttpStatus.NOT_FOUND),
+  ///  cost
+    INVALID_PAYMENT_METHOD(16001, "Invalid payment method", HttpStatus.BAD_REQUEST),
+    COD_ALREADY_SETTLED(16002, "COD amount has already been settled for this order", HttpStatus.BAD_REQUEST),
+    SHIPPER_NOT_FOUND(16003, "Shipper not found for this order",HttpStatus.BAD_REQUEST),
     ;
 
     private final int code;

@@ -33,10 +33,21 @@ public class OrderResponse {
     LocalDateTime createdAt;
 
     List<OrderItemResponse> items;
+
     Integer buyerId;
+
     List<TrackingResponse> trackings;
-     boolean passedQualityCheck;
+
+    boolean passedQualityCheck;
+
     BigDecimal refundAmount;
+
     String refundReason;
+
+    BigDecimal codAmount;
+
+    Boolean codSettled;
+
+    LocalDateTime codSettledAt;
 
 }

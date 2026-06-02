@@ -83,16 +83,18 @@ public interface OrderRepository extends JpaRepository<Order, Integer> {
 
     Long countAllByShopOwnerAndCreatedAtBetween(User shopOwner, LocalDateTime createdAtAfter, LocalDateTime createdAtBefore);
     @Query("""
-    SELECT COALESCE(SUM(o.totalAmount - o.shippingFee), 0)
+    SELECT COALESCE(SUM(o.totalAmount - o.shippingFee- COALESCE(o.refundAmount, 0)), 0)
     FROM Order o
     WHERE o.shopOwner = :shop
       AND o.createdAt >= :from
       AND o.createdAt < :to
+      AND o.status = :status
 """)
     Double sumPriceByShop(
             @Param("shop") User shop,
             @Param("from") LocalDateTime from,
-            @Param("to") LocalDateTime to
+            @Param("to") LocalDateTime to,
+            @Param("status") OrderStatus status
     );
 
 
@@ -140,4 +142,7 @@ public interface OrderRepository extends JpaRepository<Order, Integer> {
     );
 
     Long countAllByShopOwnerAndStatus(User shopOwner, OrderStatus status);
+
+
+    List<Order>  findByPaymentMethodIgnoreCaseAndStatusAndCodSettled(String paymentMethod, OrderStatus status, Boolean codSettled);
 }
