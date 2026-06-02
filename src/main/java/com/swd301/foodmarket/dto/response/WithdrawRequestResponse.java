@@ -1,10 +1,12 @@
 package com.swd301.foodmarket.dto.response;
 
+import com.swd301.foodmarket.entity.Image;
 import com.swd301.foodmarket.enums.WithdrawRequestStatus;
 import lombok.Data;
 
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
+import java.util.List;
 
 @Data
 public class WithdrawRequestResponse {
@@ -37,4 +39,5 @@ public class WithdrawRequestResponse {
 
     private String qrCodeUrl;
     private String checkoutUrl;
+    List<ImageResponse> images;
 }

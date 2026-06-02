@@ -4,50 +4,63 @@ import com.swd301.foodmarket.dto.goong.LatLong;
 import com.swd301.foodmarket.dto.request.ShipperLocationRequest;
 import com.swd301.foodmarket.dto.request.UpdateOrderStatusRequest;
 import com.swd301.foodmarket.dto.response.AvailableOrderResponse;
+import com.swd301.foodmarket.dto.response.PageResponse;
 import com.swd301.foodmarket.dto.response.ShipperLocationResponse;
 import com.swd301.foodmarket.dto.response.ShipperOrderResponse;
-import com.swd301.foodmarket.entity.Order;
-import com.swd301.foodmarket.entity.ShipperLocation;
-import com.swd301.foodmarket.entity.User;
-import com.swd301.foodmarket.entity.Wallet;
+import com.swd301.foodmarket.entity.*;
 import com.swd301.foodmarket.enums.OrderStatus;
 import com.swd301.foodmarket.enums.RoleName;
 import com.swd301.foodmarket.enums.WalletType;
 import com.swd301.foodmarket.exception.AppException;
 import com.swd301.foodmarket.exception.ErrorCode;
+import com.swd301.foodmarket.mapper.OrderMapper;
 import com.swd301.foodmarket.repository.OrderRepository;
 import com.swd301.foodmarket.repository.ShipperLocationRepository;
 import com.swd301.foodmarket.repository.UserRepository;
 import com.swd301.foodmarket.repository.WalletRepository;
+import com.swd301.foodmarket.repository.WarehouseRepository;
 import com.swd301.foodmarket.service.GoongMapService;
+import com.swd301.foodmarket.service.NotificationService;
 import com.swd301.foodmarket.service.ShipperService;
 import com.swd301.foodmarket.service.UserService;
 import lombok.AccessLevel;
 import lombok.RequiredArgsConstructor;
 import lombok.experimental.FieldDefaults;
 import lombok.extern.slf4j.Slf4j;
+import org.aspectj.weaver.ast.Or;
+import org.springframework.beans.factory.annotation.Value;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Pageable;
+import org.springframework.data.domain.Sort;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.web.filter.RequestContextFilter;
 
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
-import java.util.Comparator;
-import java.util.List;
+import java.util.*;
 import java.util.stream.Collectors;
 
 @Service
 @RequiredArgsConstructor
-@FieldDefaults(level = AccessLevel.PRIVATE, makeFinal = true)
+@FieldDefaults(level = AccessLevel.PRIVATE)
 @Slf4j
 public class ShipperServiceImpl implements ShipperService {
 
-    OrderRepository orderRepository;
-    ShipperLocationRepository shipperLocationRepository;
-    UserRepository userRepository;
-    GoongMapService goongMapService;
-    WalletRepository walletRepository;
-    UserService userService;
+    final OrderRepository orderRepository;
+    final ShipperLocationRepository shipperLocationRepository;
+    final UserRepository userRepository;
+    final GoongMapService goongMapService;
+    final WalletRepository walletRepository;
+    final UserService userService;
+    final NotificationService notificationService;
+    final WarehouseRepository warehouseRepository;
+    @Value("${ADDRESS_WAREHOUSE}")
+    String warehouseAddress;
+    private final RequestContextFilter requestContextFilter;
+    private final OrderMapper orderMapper;
     // ===================== HELPERS =====================
 
     private User getCurrentShipper() {
@@ -89,7 +102,9 @@ public class ShipperServiceImpl implements ShipperService {
         if (order.getShopLatitude() != null && order.getShopLongitude() != null) {
             return new LatLong(order.getShopLatitude(), order.getShopLongitude());
         }
-        String shopAddress = order.getShopOwner().getAddress();
+//        String shopAddress = order.getShopOwner().getAddress();
+        // Lấy địa chỉ kho làm shopAddress vì shipper phải tới kho lấy hàng trước, sau đó mới giao đến buyer
+        String shopAddress = warehouseAddress;
         log.info("[Goong] Geocode shopAddress order {}: '{}'", order.getId(), shopAddress);
         LatLong latLong = goongMapService.geocodeAddress(shopAddress);
         if (latLong != null) {
@@ -100,7 +115,19 @@ public class ShipperServiceImpl implements ShipperService {
         return latLong;
     }
 
+    /**
+     * Lấy kho bãi đang active đầu tiên từ DB.
+     * Production chỉ có 1 kho; fake data có thể có nhiều nên lấy cái đầu tiên.
+     */
+    private Warehouse getActiveWarehouse() {
+        return warehouseRepository.findAllByActive(true)
+                .stream().findFirst().orElse(null);
+    }
+
     private ShipperOrderResponse toShipperOrderResponse(Order order) {
+        // Lấy kho từ DB — đây là điểm shipper phải đến để lấy hàng
+        Warehouse warehouse = getActiveWarehouse();
+
         return ShipperOrderResponse.builder()
                 .orderId(order.getId())
                 .buyerName(order.getBuyer().getFullName())
@@ -113,9 +140,17 @@ public class ShipperServiceImpl implements ShipperService {
                 .createdAt(order.getCreatedAt())
                 .estimatedDeliveryDate(order.getEstimatedDeliveryDate())
                 .note(order.getNote())
-                // ✅ Trả về tọa độ để FakeGPS dùng đúng điểm thật
-                .shopLatitude(order.getShopLatitude())
-                .shopLongitude(order.getShopLongitude())
+                // ── Kho bãi từ bảng warehouses DB ──────────────────────────────
+                // Nếu warehouse DB chưa có tọa độ (fake data) → fallback về
+                // order.shopLatitude/shopLongitude (đã geocode từ ADDRESS_WAREHOUSE)
+                .warehouseId(warehouse != null ? warehouse.getId() : null)
+                .warehouseName(warehouse != null ? warehouse.getName() : "Kho bãi")
+                .warehouseAddress(warehouse != null ? warehouse.getAddress() : warehouseAddress)
+                .warehouseLat(warehouse != null && warehouse.getLatitude() != null
+                        ? warehouse.getLatitude() : order.getShopLatitude())
+                .warehouseLng(warehouse != null && warehouse.getLongitude() != null
+                        ? warehouse.getLongitude() : order.getShopLongitude())
+                // ── Điểm giao hàng (nhà buyer) ─────────────────────────────────
                 .shippingLatitude(order.getShippingLatitude())
                 .shippingLongitude(order.getShippingLongitude())
                 .build();
@@ -137,41 +172,43 @@ public class ShipperServiceImpl implements ShipperService {
     @Override
     @Transactional
     public List<AvailableOrderResponse> getAvailableOrdersNearby(Double shipperLat, Double shipperLng) {
-        getCurrentShipper();
+        User shipper = getCurrentShipper();
 
         LatLong shipperLocation = new LatLong(shipperLat, shipperLng);
-        List<Order> availableOrders = orderRepository.findByShipperIsNullAndStatus(OrderStatus.CONFIRMED);
 
-        log.info("[SHIPPER] Finding orders near ({}, {}), total CONFIRMED: {}",
+        // Chỉ query READY + chưa có shipper (tự pick)
+        List<Order> availableOrders = orderRepository
+                .findByShipperIsNullAndStatus(OrderStatus.READY);
+
+        log.info("[SHIPPER] Finding orders near ({}, {}), total READY: {}",
                 shipperLat, shipperLng, availableOrders.size());
+
+        // Lấy kho bãi một lần, dùng chung cho toàn bộ stream
+        Warehouse warehouse = getActiveWarehouse();
 
         return availableOrders.stream()
                 .map(order -> {
-                    // ✅ Geocode shop (điểm lấy hàng)
-                    LatLong shopLocation = getOrGeocodeShopLocation(order);
+                    LatLong warehouseLocation = getOrGeocodeShopLocation(order);
+                    LatLong buyerLocation     = getOrGeocodeShippingLocation(order);
 
-                    // ✅ Geocode nhà buyer (điểm giao hàng)
-                    LatLong buyerLocation = getOrGeocodeShippingLocation(order);
-
-                    // ✅ Khoảng cách shipper → shop (dùng để sort, quan trọng nhất)
                     Double shipToShopKm = null;
-                    if (shopLocation != null) {
-                        double d = goongMapService.getDistanceKm(shipperLocation, shopLocation);
+                    if (warehouseLocation != null) {
+                        double d = goongMapService.getDistanceKm(shipperLocation, warehouseLocation);
                         shipToShopKm = d == Double.MAX_VALUE ? null : d;
                     }
 
-                    // ✅ Khoảng cách shop → nhà buyer (shipper biết tổng quãng đường)
                     Double shopToBuyerKm = null;
-                    if (shopLocation != null && buyerLocation != null) {
-                        double d = goongMapService.getDistanceKm(shopLocation, buyerLocation);
+                    if (warehouseLocation != null && buyerLocation != null) {
+                        double d = goongMapService.getDistanceKm(warehouseLocation, buyerLocation);
                         shopToBuyerKm = d == Double.MAX_VALUE ? null : d;
                     }
 
                     return AvailableOrderResponse.builder()
                             .orderId(order.getId())
-                            .shopName(order.getShopOwner().getShopName())
-                            .shopAddress(order.getShopOwner().getAddress())
-                            .shopPhone(order.getShopOwner().getPhoneNumber())
+                            // ── Thông tin kho bãi từ DB (không phải shop owner) ──────────
+                            .shopName(warehouse != null ? warehouse.getName() : "Kho bãi")
+                            .shopAddress(warehouse != null ? warehouse.getAddress() : warehouseAddress)
+                            .shopPhone(null) // kho bãi không có SĐT riêng
                             .shippingAddress(order.getShippingAddress())
                             .recipientName(order.getRecipientName())
                             .recipientPhone(order.getRecipientPhone())
@@ -182,10 +219,9 @@ public class ShipperServiceImpl implements ShipperService {
                             .estimatedDeliveryDate(order.getEstimatedDeliveryDate())
                             .shipToShopKm(shipToShopKm)
                             .shopToBuyerKm(shopToBuyerKm)
-                            .distanceKm(shipToShopKm) // backward compat
+                            .distanceKm(shipToShopKm)
                             .build();
                 })
-                // ✅ Sort theo shipper → shop (gần shop nhất trước)
                 .sorted(Comparator.comparingDouble(o ->
                         o.getShipToShopKm() != null ? o.getShipToShopKm() : Double.MAX_VALUE))
                 .limit(6)
@@ -199,11 +235,12 @@ public class ShipperServiceImpl implements ShipperService {
         Order order = orderRepository.findById(orderId)
                 .orElseThrow(() -> new AppException(ErrorCode.ORDER_NOT_FOUND));
         if (order.getShipper() != null) throw new AppException(ErrorCode.ORDER_ALREADY_TAKEN);
-        if (order.getStatus() != OrderStatus.CONFIRMED) throw new AppException(ErrorCode.INVALID_ORDER_STATUS);
+        if (order.getStatus() != OrderStatus.READY) throw new AppException(ErrorCode.INVALID_ORDER_STATUS);
         order.setShipper(shipper);
         order.setStatus(OrderStatus.SHIPPING);
         orderRepository.save(order);
-        log.info("Shipper {} accepted order {}", shipper.getId(), orderId);
+
+        log.info("Shipper {} accepted order {} (self-pick)", shipper.getId(), orderId);
         return toShipperOrderResponse(order);
     }
 
@@ -230,66 +267,25 @@ public class ShipperServiceImpl implements ShipperService {
         if (request.getNote() != null && !request.getNote().isBlank()) {
             order.setNote(request.getNote());
         }
+        BigDecimal totalAmount = order.getTotalAmount();
+
+
+        // tiền hàng (chưa trừ phí)
 
         // ====================================================
-        // TRẢ TIỀN SHIPPER (3% SHIPPING FEE)
+        // TRẢ TIỀN SHIPPER
         // ====================================================
 
         if (request.getStatus() == OrderStatus.DELIVERED) {
 
-            BigDecimal shippingFee = order.getShippingFee() != null
-                    ? order.getShippingFee()
-                    : BigDecimal.ZERO;
+            if ("PAYOS".equalsIgnoreCase(order.getPaymentMethod())) {
+                processPayosDeliveredPayout(order, shipper);
+            }
 
-            log.info("Processing shipping payout for order {}", orderId);
-            log.info("Shipping fee: {}", shippingFee);
-
-            if (shippingFee.compareTo(BigDecimal.ZERO) > 0) {
-
-                // shipper nhận 90% tiền ship (trừ 10% phí sàn)
-                BigDecimal shipperFee = shippingFee.multiply(BigDecimal.valueOf(0.9));
-
-                // ======================
-                // SHIPPER WALLET
-                // ======================
-
-                Wallet shipperWallet = walletRepository.findByShipperIdForUpdate(shipper.getId())
-                        .orElseThrow(() -> new AppException(ErrorCode.WALLET_NOT_FOUND));
-
-                log.info("Shipper wallet BEFORE: {}", shipperWallet.getFrozenBalance());
-
-                shipperWallet.setFrozenBalance(
-                        shipperWallet.getFrozenBalance().add(shipperFee)
-                );
-
-                shipperWallet.setTotalRevenueAllTime(
-                        shipperWallet.getTotalRevenueAllTime().add(shipperFee)
-                );
-                shipperWallet.setUpdatedAt(LocalDateTime.now());
-
-                walletRepository.save(shipperWallet);
-
-                log.info("Shipper wallet AFTER: {}", shipperWallet.getFrozenBalance());
-
-                // ======================
-                // TRỪ TIỀN ADMIN (vì đã giữ shipping trước đó)
-                // ======================
-
-//                Wallet adminWallet = walletRepository.findByTypeForUpdate(WalletType.PLATFORM)
-//                        .orElseThrow(() -> new AppException(ErrorCode.PLATFORM_WALLET_NOT_FOUND));
-//
-//                log.info("Admin wallet BEFORE: {}", adminWallet.getTotalBalance());
-//
-//                adminWallet.setTotalBalance(
-//                        adminWallet.getTotalBalance().subtract(shipperFee)
-//                );
-//
-//                walletRepository.save(adminWallet);
-
-//                log.info("Admin wallet AFTER: {}", adminWallet.getTotalBalance());
+            if ("COD".equalsIgnoreCase(order.getPaymentMethod())) {
+                processCodDelivered(order);
             }
         }
-
         // ====================================================
         // CLEAR CURRENT ORDER FROM SHIPPER LOCATION
         // ====================================================
@@ -319,8 +315,345 @@ public class ShipperServiceImpl implements ShipperService {
 
         return toShipperOrderResponse(order);
     }
+    private void processPayosDeliveredPayout(Order order, User shipper) {
+        BigDecimal totalAmount = order.getTotalAmount() != null
+                ? order.getTotalAmount()
+                : BigDecimal.ZERO;
+
+        BigDecimal shippingFee = order.getShippingFee() != null
+                ? order.getShippingFee()
+                : BigDecimal.ZERO;
+
+        BigDecimal refundAmount = order.getRefundAmount() != null
+                ? order.getRefundAmount()
+                : BigDecimal.ZERO;
+
+        BigDecimal shopGross = totalAmount.subtract(shippingFee);
+
+        if (refundAmount.compareTo(shopGross) > 0) {
+            throw new AppException(ErrorCode.INVALID_REFUND_AMOUNT);
+        }
+
+        // Phí sàn shop tính sau refund
+        BigDecimal shopChargeable = shopGross.subtract(refundAmount);
+
+        BigDecimal platformFeeFromShop = shopChargeable.multiply(BigDecimal.valueOf(0.1));
+        BigDecimal platformFeeFromShip = shippingFee.multiply(BigDecimal.valueOf(0.1));
+        BigDecimal platformFeeTotal = platformFeeFromShop.add(platformFeeFromShip);
+
+        BigDecimal finalShopRevenue = shopChargeable.subtract(platformFeeFromShop);
+        BigDecimal shipperNet = shippingFee.subtract(platformFeeFromShip);
+
+        log.info("========== [PAYOS DELIVERED PAYOUT START] Order #{} ==========", order.getId());
+
+        log.info("[PAYOS_AMOUNT_INPUT] totalAmount={}, shippingFee={}, shopGross={}, refundAmount={}",
+                totalAmount,
+                shippingFee,
+                shopGross,
+                refundAmount
+        );
+
+        log.info("[PAYOS_AFTER_REFUND] shopChargeable=shopGross-refundAmount => {} - {} = {}",
+                shopGross,
+                refundAmount,
+                shopChargeable
+        );
+
+        log.info("[PAYOS_FEE] platformFeeFromShop={}, platformFeeFromShip={}, platformFeeTotal={}",
+                platformFeeFromShop,
+                platformFeeFromShip,
+                platformFeeTotal
+        );
+
+        log.info("[PAYOS_NET] finalShopRevenue={}, shipperNet={}, refundAmount={}",
+                finalShopRevenue,
+                shipperNet,
+                refundAmount
+        );
+
+        Wallet platformWallet = walletRepository.findByTypeForUpdate(WalletType.PLATFORM)
+                .orElseThrow(() -> new AppException(ErrorCode.PLATFORM_WALLET_NOT_FOUND));
+
+        Wallet shopWallet = walletRepository.findByShopOwner_Id(order.getShopOwner().getId())
+                .orElseThrow(() -> new AppException(ErrorCode.WALLET_NOT_FOUND));
+
+        Wallet shipperWallet = walletRepository.findByShipperIdForUpdate(shipper.getId())
+                .orElseThrow(() -> new AppException(ErrorCode.WALLET_NOT_FOUND));
+///  Log to check
+        BigDecimal platformTotalBefore = platformWallet.getTotalBalance();
+        BigDecimal platformFrozenBefore = platformWallet.getFrozenBalance();
+        BigDecimal platformCommissionBefore = platformWallet.getCommissionWallet();
+        BigDecimal platformRevenueBefore = platformWallet.getTotalRevenueAllTime();
+
+        BigDecimal shopTotalBefore = shopWallet.getTotalBalance();
+        BigDecimal shopFrozenBefore = shopWallet.getFrozenBalance();
+        BigDecimal shopRevenueBefore = shopWallet.getTotalRevenueAllTime();
+
+        BigDecimal shipperTotalBefore = shipperWallet.getTotalBalance();
+        BigDecimal shipperFrozenBefore = shipperWallet.getFrozenBalance();
+        BigDecimal shipperRevenueBefore = shipperWallet.getTotalRevenueAllTime();
+
+        log.info("[PAYOS_PLATFORM_BEFORE] totalBalance={}, frozenBalance={}, commissionWallet={}, totalRevenueAllTime={}",
+                platformTotalBefore,
+                platformFrozenBefore,
+                platformCommissionBefore,
+                platformRevenueBefore
+        );
+
+        log.info("[PAYOS_SHOP_BEFORE] shopOwnerId={}, totalBalance={}, frozenBalance={}, totalRevenueAllTime={}",
+                order.getShopOwner().getId(),
+                shopTotalBefore,
+                shopFrozenBefore,
+                shopRevenueBefore
+        );
+
+        log.info("[PAYOS_SHIPPER_BEFORE] shipperId={}, totalBalance={}, frozenBalance={}, totalRevenueAllTime={}",
+                shipper.getId(),
+                shipperTotalBefore,
+                shipperFrozenBefore,
+                shipperRevenueBefore
+        );
 
 
+        // Payment success đã add platform.frozenBalance += totalAmount.
+        // Khi delivered, commission trở thành tiền lời admin nên không còn là tiền giữ hộ.
+        if (platformWallet.getFrozenBalance().compareTo(platformFeeTotal) < 0) {
+            throw new AppException(ErrorCode.PLATFORM_BALANCE_NOT_ENOUGH);
+        }
+
+        platformWallet.setFrozenBalance(
+                platformWallet.getFrozenBalance().subtract(platformFeeTotal)
+        );
+
+        platformWallet.setCommissionWallet(
+                platformWallet.getCommissionWallet().add(platformFeeTotal)
+        );
+
+        platformWallet.setTotalRevenueAllTime(
+                platformWallet.getTotalRevenueAllTime().add(platformFeeTotal)
+        );
+
+        // Payment success đã add shop.totalBalance += shopGross và shop.frozenBalance += shopGross.
+        // Delivered thì mở khóa shopGross, sau đó trừ refund + phí sàn shop khỏi totalBalance.
+        if (shopWallet.getFrozenBalance().compareTo(shopGross) < 0) {
+            throw new AppException(ErrorCode.WALLET_BALANCE_NOT_ENOUGH);
+        }
+
+        shopWallet.setFrozenBalance(
+                shopWallet.getFrozenBalance().subtract(shopGross)
+        );
+
+        BigDecimal shopDeduction = refundAmount.add(platformFeeFromShop);
+
+        shopWallet.setTotalBalance(
+                shopWallet.getTotalBalance().subtract(shopDeduction)
+        );
+
+        shopWallet.setTotalRevenueAllTime(
+                shopWallet.getTotalRevenueAllTime().add(finalShopRevenue)
+        );
+
+        shopWallet.setUpdatedAt(LocalDateTime.now());
+
+        // Shipper nhận 90% phí ship khi delivered
+        shipperWallet.setTotalBalance(
+                shipperWallet.getTotalBalance().add(shipperNet)
+        );
+
+        shipperWallet.setTotalRevenueAllTime(
+                shipperWallet.getTotalRevenueAllTime().add(shipperNet)
+        );
+
+        shipperWallet.setUpdatedAt(LocalDateTime.now());
+
+        // PayOS refund về ví buyer
+        if (refundAmount.compareTo(BigDecimal.ZERO) > 0) {
+            Wallet buyerWallet = walletRepository.findByBuyer(order.getBuyer());
+
+            if (buyerWallet == null) {
+                throw new AppException(ErrorCode.WALLET_NOT_FOUND);
+            }
+            BigDecimal buyerTotalBefore = buyerWallet.getTotalBalance();
+            BigDecimal buyerFrozenBefore = buyerWallet.getFrozenBalance();
+            BigDecimal buyerRevenueBefore = buyerWallet.getTotalRevenueAllTime();
+
+            log.info("[PAYOS_BUYER_BEFORE] buyerId={}, totalBalance={}, frozenBalance={}, totalRevenueAllTime={}",
+                    order.getBuyer().getId(),
+                    buyerTotalBefore,
+                    buyerFrozenBefore,
+                    buyerRevenueBefore
+            );
+
+            buyerWallet.setTotalBalance(
+                    buyerWallet.getTotalBalance().add(refundAmount)
+            );
+
+            walletRepository.save(buyerWallet);
+            log.info("[PAYOS_BUYER_AFTER] buyerId={}, totalBalance={} -> {}, frozenBalance={} -> {}, totalRevenueAllTime={} -> {}",
+                    order.getBuyer().getId(),
+                    buyerTotalBefore,
+                    buyerWallet.getTotalBalance(),
+                    buyerFrozenBefore,
+                    buyerWallet.getFrozenBalance(),
+                    buyerRevenueBefore,
+                    buyerWallet.getTotalRevenueAllTime()
+            );
+            BigDecimal expectedBuyerTotalAfter = buyerTotalBefore.add(refundAmount);
+
+            log.info("[PAYOS_VERIFY] expectedBuyerTotalAfter={}, actualBuyerTotalAfter={}, match={}",
+                    expectedBuyerTotalAfter,
+                    buyerWallet.getTotalBalance(),
+                    expectedBuyerTotalAfter.compareTo(buyerWallet.getTotalBalance()) == 0
+            );
+            Notification buyerNotification = Notification.builder()
+                    .title("Hoàn tiền đơn hàng #" + order.getId())
+                    .message("Bạn đã nhận được " + refundAmount + "đ hoàn tiền từ đơn hàng #" + order.getId())
+                    .receiverType("USER_" + order.getBuyer().getId())
+                    .build();
+
+            notificationService.createUserNotification(order.getBuyer(), buyerNotification);
+
+            Notification shopNotification = Notification.builder()
+                    .title("Hoàn tiền đơn hàng #" + order.getId())
+                    .message("Bạn đã bị trừ " + refundAmount + "đ do hoàn tiền đơn hàng #" + order.getId())
+                    .receiverType("USER_" + order.getShopOwner().getId())
+                    .build();
+
+            notificationService.createUserNotification(order.getShopOwner(), shopNotification);
+        }
+
+        walletRepository.save(platformWallet);
+        walletRepository.save(shopWallet);
+        walletRepository.save(shipperWallet);
+
+        log.info("[PAYOS_PLATFORM_AFTER] totalBalance={} -> {}, frozenBalance={} -> {}, commissionWallet={} -> {}, totalRevenueAllTime={} -> {}",
+                platformTotalBefore,
+                platformWallet.getTotalBalance(),
+                platformFrozenBefore,
+                platformWallet.getFrozenBalance(),
+                platformCommissionBefore,
+                platformWallet.getCommissionWallet(),
+                platformRevenueBefore,
+                platformWallet.getTotalRevenueAllTime()
+        );
+
+        log.info("[PAYOS_SHOP_AFTER] shopOwnerId={}, totalBalance={} -> {}, frozenBalance={} -> {}, totalRevenueAllTime={} -> {}",
+                order.getShopOwner().getId(),
+                shopTotalBefore,
+                shopWallet.getTotalBalance(),
+                shopFrozenBefore,
+                shopWallet.getFrozenBalance(),
+                shopRevenueBefore,
+                shopWallet.getTotalRevenueAllTime()
+        );
+
+        log.info("[PAYOS_SHIPPER_AFTER] shipperId={}, totalBalance={} -> {}, frozenBalance={} -> {}, totalRevenueAllTime={} -> {}",
+                shipper.getId(),
+                shipperTotalBefore,
+                shipperWallet.getTotalBalance(),
+                shipperFrozenBefore,
+                shipperWallet.getFrozenBalance(),
+                shipperRevenueBefore,
+                shipperWallet.getTotalRevenueAllTime()
+        );
+        BigDecimal expectedPlatformFrozenAfter = platformFrozenBefore.subtract(platformFeeTotal);
+        BigDecimal expectedPlatformCommissionAfter = platformCommissionBefore.add(platformFeeTotal);
+        BigDecimal expectedPlatformRevenueAfter = platformRevenueBefore.add(platformFeeTotal);
+
+        BigDecimal expectedShopTotalAfter = shopTotalBefore.subtract(refundAmount.add(platformFeeFromShop));
+        BigDecimal expectedShopFrozenAfter = shopFrozenBefore.subtract(shopGross);
+        BigDecimal expectedShopRevenueAfter = shopRevenueBefore.add(finalShopRevenue);
+
+        BigDecimal expectedShipperTotalAfter = shipperTotalBefore.add(shipperNet);
+        BigDecimal expectedShipperRevenueAfter = shipperRevenueBefore.add(shipperNet);
+
+        log.info("[PAYOS_VERIFY] expectedPlatformFrozenAfter={}, actualPlatformFrozenAfter={}, match={}",
+                expectedPlatformFrozenAfter,
+                platformWallet.getFrozenBalance(),
+                expectedPlatformFrozenAfter.compareTo(platformWallet.getFrozenBalance()) == 0
+        );
+
+        log.info("[PAYOS_VERIFY] expectedPlatformCommissionAfter={}, actualPlatformCommissionAfter={}, match={}",
+                expectedPlatformCommissionAfter,
+                platformWallet.getCommissionWallet(),
+                expectedPlatformCommissionAfter.compareTo(platformWallet.getCommissionWallet()) == 0
+        );
+
+        log.info("[PAYOS_VERIFY] expectedPlatformRevenueAfter={}, actualPlatformRevenueAfter={}, match={}",
+                expectedPlatformRevenueAfter,
+                platformWallet.getTotalRevenueAllTime(),
+                expectedPlatformRevenueAfter.compareTo(platformWallet.getTotalRevenueAllTime()) == 0
+        );
+
+        log.info("[PAYOS_VERIFY] expectedShopTotalAfter={}, actualShopTotalAfter={}, match={}",
+                expectedShopTotalAfter,
+                shopWallet.getTotalBalance(),
+                expectedShopTotalAfter.compareTo(shopWallet.getTotalBalance()) == 0
+        );
+
+        log.info("[PAYOS_VERIFY] expectedShopFrozenAfter={}, actualShopFrozenAfter={}, match={}",
+                expectedShopFrozenAfter,
+                shopWallet.getFrozenBalance(),
+                expectedShopFrozenAfter.compareTo(shopWallet.getFrozenBalance()) == 0
+        );
+
+        log.info("[PAYOS_VERIFY] expectedShopRevenueAfter={}, actualShopRevenueAfter={}, match={}",
+                expectedShopRevenueAfter,
+                shopWallet.getTotalRevenueAllTime(),
+                expectedShopRevenueAfter.compareTo(shopWallet.getTotalRevenueAllTime()) == 0
+        );
+
+        log.info("[PAYOS_VERIFY] expectedShipperTotalAfter={}, actualShipperTotalAfter={}, match={}",
+                expectedShipperTotalAfter,
+                shipperWallet.getTotalBalance(),
+                expectedShipperTotalAfter.compareTo(shipperWallet.getTotalBalance()) == 0
+        );
+
+        log.info("[PAYOS_VERIFY] expectedShipperRevenueAfter={}, actualShipperRevenueAfter={}, match={}",
+                expectedShipperRevenueAfter,
+                shipperWallet.getTotalRevenueAllTime(),
+                expectedShipperRevenueAfter.compareTo(shipperWallet.getTotalRevenueAllTime()) == 0
+        );
+
+
+        log.info("========== [PAYOS DELIVERED PAYOUT END] Order #{} ==========", order.getId());
+    }
+    private void processCodDelivered(Order order) {
+        if (order.getCodAmount() == null || order.getCodAmount().compareTo(BigDecimal.ZERO) <= 0) {
+            order.setCodAmount(order.getTotalAmount());
+        }
+
+        if (order.getCodSettled() == null) {
+            order.setCodSettled(false);
+        }
+
+        // Không cộng ví ở đây.
+        // Shipper đã giao và đã thu tiền mặt từ buyer.
+        // Admin đối soát COD xong mới cộng ví ở CodSettlementService.
+    }
+
+
+//    public Map<String,String> calculateRefundAmount(Order order) {
+//        List<OrderDetail> details = order.getOrderDetails();
+//        BigDecimal refundAmount = BigDecimal.ZERO;
+//        String message = "";
+//        for(OrderDetail detail : details) {
+//            QualityResult qualityResult = detail.getQualityResult();
+//            double percentage = 0;
+//            if (qualityResult != null && qualityResult.getRejectedWeight() != null &&   qualityResult.getRejectedWeight() > 0) {
+//                percentage = (double) (qualityResult.getRejectedWeight() * 100) / detail.getQuantity();
+//            }
+//            if (percentage > 5) {
+//                message+= "Sản phẩm " + detail.getProduct().getProductName() + " bị hư hỏng " + qualityResult.getRejectedWeight();
+//                refundAmount = refundAmount.add(detail.getUnitPrice().multiply(BigDecimal.valueOf(qualityResult.getRejectedWeight())));
+//            }
+//        }
+//        Map<String,String> map = new HashMap<>();
+//        map.put("message", message);
+//        map.put("refundAmount", refundAmount.toString());
+//        return map;
+//
+//    }
     @Override
     public List<ShipperOrderResponse> getMyOrders() {
         User shipper = getCurrentShipper();
@@ -359,6 +692,65 @@ public class ShipperServiceImpl implements ShipperService {
                 .destLongitude(order.getShippingLongitude())
                 // ✅ Pass-through isFake → FE Tracking dùng để trimRoute
                 .isFake(Boolean.TRUE.equals(request.getIsFake()))
+                .build();
+    }
+
+    @Override
+    public PageResponse<AvailableOrderResponse> getAllOrderCanShipper(int page, int size) {
+
+
+        List<Order> availableOrders = orderRepository.findByShipperIsNullAndStatus(OrderStatus.READY);
+
+        // Lấy kho bãi một lần, dùng chung cho toàn bộ stream
+        Warehouse warehousePaged = getActiveWarehouse();
+
+        List<AvailableOrderResponse> availableOrderResponses = availableOrders.stream()
+                .map(order -> {
+                    LatLong warehouseLocation = getOrGeocodeShopLocation(order);
+                    LatLong buyerLocation     = getOrGeocodeShippingLocation(order);
+
+                    Double shopToBuyerKm = null;
+                    if (warehouseLocation != null && buyerLocation != null) {
+                        double d = goongMapService.getDistanceKm(warehouseLocation, buyerLocation);
+                        shopToBuyerKm = d == Double.MAX_VALUE ? null : d;
+                    }
+
+                    return AvailableOrderResponse.builder()
+                            .orderId(order.getId())
+                            // ── Thông tin kho bãi từ DB ──────────────────────────────────
+                            .shopName(warehousePaged != null ? warehousePaged.getName() : "Kho bãi")
+                            .shopAddress(warehousePaged != null ? warehousePaged.getAddress() : warehouseAddress)
+                            .shopPhone(null)
+                            .shippingAddress(order.getShippingAddress())
+                            .recipientName(order.getRecipientName())
+                            .recipientPhone(order.getRecipientPhone())
+                            .shippingFee(order.getShippingFee() != null ? order.getShippingFee().multiply(BigDecimal.valueOf(0.9)) : BigDecimal.ZERO)
+                            .totalAmount(order.getTotalAmount())
+                            .status(order.getStatus())
+                            .createdAt(order.getCreatedAt())
+                            .estimatedDeliveryDate(order.getEstimatedDeliveryDate())
+                            .shopToBuyerKm(shopToBuyerKm)
+                            .distanceKm(shopToBuyerKm) // backward compat
+                            .build();
+                }).sorted(Comparator.comparing(AvailableOrderResponse::getCreatedAt)).
+                toList();
+
+
+
+        Long from = (long) page * size;
+        Long to = Math.min(from + size, availableOrderResponses.size());
+        List<AvailableOrderResponse> result = new ArrayList<>();
+        if(from < availableOrderResponses.size())
+        {
+            result = availableOrderResponses.subList(from.intValue(), to.intValue());
+        }
+        return PageResponse.<AvailableOrderResponse>builder()
+                .content(result)
+                .page(page)
+                .size(size)
+                .totalElements(availableOrderResponses.size())
+                .totalPages(((int) Math.ceil((double) availableOrderResponses.size() / size)))
+                .last((page + 1) * size >= availableOrderResponses.size())
                 .build();
     }
 

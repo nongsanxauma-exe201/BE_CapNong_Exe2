@@ -17,4 +17,6 @@ public interface WithdrawRequestRepository extends JpaRepository<WithdrawRequest
     List<WithdrawRequest> findByWallet_ShopOwner_IdOrderByIdDesc(Integer shopOwnerId);
 
     List<WithdrawRequest> findAllByOrderByIdDesc();
+
+    List<WithdrawRequest> findByWallet_Buyer_IdOrderByIdDesc(Integer walletBuyerId);
 }

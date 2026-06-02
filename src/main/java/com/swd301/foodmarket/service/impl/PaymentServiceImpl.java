@@ -17,7 +17,7 @@ import com.swd301.foodmarket.repository.OrderRepository;
 import com.swd301.foodmarket.repository.PaymentRepository;
 import com.swd301.foodmarket.repository.TransactionRepository;
 import com.swd301.foodmarket.repository.WalletRepository;
-import com.swd301.foodmarket.service.CartService;
+import com.swd301.foodmarket.service.NotificationService;
 import com.swd301.foodmarket.service.PaymentService;
 import com.swd301.foodmarket.service.PayosService;
 import jakarta.transaction.Transactional;
@@ -28,6 +28,7 @@ import org.springframework.stereotype.Service;
 
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
+import java.util.List;
 
 @Service
 @RequiredArgsConstructor
@@ -39,8 +40,8 @@ public class PaymentServiceImpl implements PaymentService {
     private final PaymentMapper paymentMapper;
     private final PayosService payosService;
     private final TransactionRepository transactionRepository;
-    private final CartService cartService;
     private final WalletRepository walletRepository;
+    private final NotificationService notificationService;
 
     @Override
     public PaymentResponse createPayment(CreatePaymentRequest request) {
@@ -180,6 +181,11 @@ public class PaymentServiceImpl implements PaymentService {
 
         Order order = payment.getOrder();
 
+        if (!"PAYOS".equalsIgnoreCase(order.getPaymentMethod())) {
+            throw new AppException(ErrorCode.INVALID_PAYMENT_METHOD);
+        }
+
+
         log.info("Order found: id={}, status={}", order.getId(), order.getStatus());
 
         payment.setStatus(PaymentStatus.SUCCESS);
@@ -201,29 +207,35 @@ public class PaymentServiceImpl implements PaymentService {
                 ? order.getShippingFee()
                 : BigDecimal.ZERO;
 
-        // tiền hàng (chưa trừ phí)
         BigDecimal shopGross = totalAmount.subtract(shippingFee);
+
+        log.info("[PAYOS_PAYMENT_SUCCESS] orderId={}, totalAmount={}, shippingFee={}, shopGross={}",
+                order.getId(),
+                totalAmount,
+                shippingFee,
+                shopGross
+        );
 
         log.info("Total amount: {}", totalAmount);
         log.info("Shipping fee: {}", shippingFee);
         log.info("Shop gross: {}", shopGross);
         
-        // Phí nền tảng 10% cho toàn bộ đơn hàng
-        BigDecimal platformFeeTotal = totalAmount.multiply(BigDecimal.valueOf(0.1));
-        
-        // Phí lấy từ phía Shop (10% của shopGross)
-        BigDecimal platformFeeFromShop = shopGross.multiply(BigDecimal.valueOf(0.1));
-        
-        // Phí lấy từ phía Ship (10% của shippingFee)
-        BigDecimal platformFeeFromShip = shippingFee.multiply(BigDecimal.valueOf(0.1));
-
-        // Tiền thực nhận
-        BigDecimal shopNet = shopGross.subtract(platformFeeFromShop);
-        BigDecimal shipperNet = shippingFee.subtract(platformFeeFromShip);
-
-        log.info("Platform Fee Total (10%): {}", platformFeeTotal);
-        log.info("Shop Net: {}", shopNet);
-        log.info("Shipper Net: {}", shipperNet);
+//        // Phí nền tảng 10% cho toàn bộ đơn hàng
+//        BigDecimal platformFeeTotal = totalAmount.multiply(BigDecimal.valueOf(0.1));
+//
+//        // Phí lấy từ phía Shop (10% của shopGross)
+//        BigDecimal platformFeeFromShop = shopGross.multiply(BigDecimal.valueOf(0.1));
+//
+//        // Phí lấy từ phía Ship (10% của shippingFee)
+//        BigDecimal platformFeeFromShip = shippingFee.multiply(BigDecimal.valueOf(0.1));
+//
+//        // Tiền thực nhận
+//        BigDecimal shopNet = shopGross.subtract(platformFeeFromShop);
+//        BigDecimal shipperNet = shippingFee.subtract(platformFeeFromShip);
+//
+//        log.info("Platform Fee Total (10%): {}", platformFeeTotal);
+//        log.info("Shop Net: {}", shopNet);
+//        log.info("Shipper Net: {}", shipperNet);
 
         // ======================
         // ADMIN WALLET
@@ -232,34 +244,24 @@ public class PaymentServiceImpl implements PaymentService {
         Wallet adminWallet = walletRepository.findByTypeForUpdate(WalletType.PLATFORM)
                 .orElseThrow(() -> new AppException(ErrorCode.PLATFORM_WALLET_NOT_FOUND));
 
-        log.info("Admin wallet BEFORE balance: {}", adminWallet.getTotalBalance());
-
-        // Doanh thu thực của Admin là tiền phí (10%)
-        adminWallet.setTotalRevenueAllTime(
-                adminWallet.getTotalRevenueAllTime().add(platformFeeTotal)
-        );
-        
-        // Tiền Admin cầm trong ví hoa hồng (là lợi nhuận có thể rút/sử dụng)
-        adminWallet.setCommissionWallet(
-                adminWallet.getCommissionWallet().add(platformFeeTotal)
-        );
-        
-        // Admin giữ phần tiền của Shop và Shipper (Held Money)
-        BigDecimal totalHeld = shopNet.add(shipperNet);
-        
         adminWallet.setTotalBalance(
-                adminWallet.getTotalBalance().add(totalHeld)
+                adminWallet.getTotalBalance().add(totalAmount)
         );
-        
-        // Cộng luôn vào frozen_balance theo yêu cầu (để theo dõi tiền đang giữ)
+
+// Khóa toàn bộ tiền PayOS đang nằm trong hệ thống.
+// Đến DELIVERED mới tách: shop, shipper, commission, refund.
         adminWallet.setFrozenBalance(
-                adminWallet.getFrozenBalance().add(totalHeld)
+                adminWallet.getFrozenBalance().add(totalAmount)
         );
 
         walletRepository.save(adminWallet);
 
-        log.info("Admin wallet AFTER balance: {}", adminWallet.getTotalBalance());
-
+        log.info("[PAYOS_PLATFORM_AFTER_PAYMENT] totalBalance={}, frozenBalance={}, commissionWallet={}, totalRevenueAllTime={}",
+                adminWallet.getTotalBalance(),
+                adminWallet.getFrozenBalance(),
+                adminWallet.getCommissionWallet(),
+                adminWallet.getTotalRevenueAllTime()
+        );
         // ======================
         // SHOP WALLET
         // ======================
@@ -269,46 +271,49 @@ public class PaymentServiceImpl implements PaymentService {
         Wallet shopWallet = walletRepository.findByShopOwnerIdForUpdate(shop.getId())
                 .orElseThrow(() -> new AppException(ErrorCode.WALLET_NOT_FOUND));
 
-        log.info("Shop wallet BEFORE frozen balance: {}", shopWallet.getFrozenBalance());
-
-        shopWallet.setFrozenBalance(
-                shopWallet.getFrozenBalance().add(shopNet)
+// Ghi nhận tiền hàng gốc cho shop nhưng khóa lại.
+// Đến DELIVERED mới trừ refund + phí sàn.
+        shopWallet.setTotalBalance(
+                shopWallet.getTotalBalance().add(shopGross)
         );
 
-        shopWallet.setTotalRevenueAllTime(
-                shopWallet.getTotalRevenueAllTime().add(shopNet)
+        shopWallet.setFrozenBalance(
+                shopWallet.getFrozenBalance().add(shopGross)
         );
 
         shopWallet.setUpdatedAt(LocalDateTime.now());
 
         walletRepository.save(shopWallet);
 
-        log.info("Shop wallet AFTER frozen balance: {}", shopWallet.getFrozenBalance());
-
+        log.info("[PAYOS_SHOP_AFTER_PAYMENT] shopOwnerId={}, totalBalance={}, frozenBalance={}",
+                shop.getId(),
+                shopWallet.getTotalBalance(),
+                shopWallet.getFrozenBalance()
+        );
         // ======================
         // SHIPPER WALLET
         // ======================
 
-        if (order.getShipper() != null) {
-            Wallet shipperWallet = walletRepository.findByShipperIdForUpdate(order.getShipper().getId())
-                    .orElseThrow(() -> new AppException(ErrorCode.WALLET_NOT_FOUND));
-
-            log.info("Shipper wallet BEFORE frozen balance: {}", shipperWallet.getFrozenBalance());
-
-            shipperWallet.setFrozenBalance(
-                    shipperWallet.getFrozenBalance().add(shipperNet)
-            );
-
-            shipperWallet.setTotalRevenueAllTime(
-                    shipperWallet.getTotalRevenueAllTime().add(shipperNet)
-            );
-
-            shipperWallet.setUpdatedAt(LocalDateTime.now());
-
-            walletRepository.save(shipperWallet);
-
-            log.info("Shipper wallet AFTER frozen balance: {}", shipperWallet.getFrozenBalance());
-        }
+//        if (order.getShipper() != null) {
+//            Wallet shipperWallet = walletRepository.findByShipperIdForUpdate(order.getShipper().getId())
+//                    .orElseThrow(() -> new AppException(ErrorCode.WALLET_NOT_FOUND));
+//
+//            log.info("Shipper wallet BEFORE frozen balance: {}", shipperWallet.getFrozenBalance());
+//
+//            shipperWallet.setFrozenBalance(
+//                    shipperWallet.getFrozenBalance().add(shipperNet)
+//            );
+//
+////            shipperWallet.setTotalRevenueAllTime(
+////                    shipperWallet.getTotalRevenueAllTime().add(shipperNet)
+////            );
+//
+//            shipperWallet.setUpdatedAt(LocalDateTime.now());
+//
+//            walletRepository.save(shipperWallet);
+//
+//            log.info("Shipper wallet AFTER frozen balance: {}", shipperWallet.getFrozenBalance());
+//        }
 
         // ======================
         // TRANSACTION LOG
@@ -328,9 +333,6 @@ public class PaymentServiceImpl implements PaymentService {
         log.info("Transaction created: id={}, amount={}", transaction.getId(), totalAmount);
 
         paymentRepository.save(payment);
-
-        // clear cart
-        cartService.clearCart();
 
         log.info("===== CONFIRM PAYMENT COMPLETED =====");
     }

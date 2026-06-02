@@ -8,13 +8,14 @@ import org.mapstruct.*;
 import java.util.ArrayList;
 import java.util.List;
 
-@Mapper(componentModel = "spring")
+@Mapper(componentModel = "spring", uses = {TrackingMapper.class, UserMapper.class, QualityResultMapper.class})
 public interface OrderMapper {
 
     // ================== ORDER ==================
     @Mapping(target = "status", source = "status")
     @Mapping(target = "items", expression = "java(mapItems(order))")
     @Mapping(target = "buyerId", source = "buyer.id")
+    @Mapping(target = "passedQualityCheck", expression = "java(allPassQualityChecks(order))")
     OrderResponse toResponse(Order order);
 
     // ================== PRODUCT ==================
@@ -26,6 +27,7 @@ public interface OrderMapper {
     @Mapping(target = "imageUrl", source = "product.imageUrl")
     @Mapping(target = "itemType", constant = "PRODUCT")
     @Mapping(target = "isRequestedReturn", source = "isRequestedReturn")
+    @Mapping(target = "unit", source = "product.unit")
     OrderItemResponse toItemResponse(OrderDetail detail);
 
     @AfterMapping
@@ -38,6 +40,18 @@ public interface OrderMapper {
         }
     }
 
+    default boolean allPassQualityChecks(Order order) {
+        if (order.getOrderDetails() == null) return true; // Nếu không có sản phẩm nào, coi như đã qua QC
+
+        int count = 0;
+        for (OrderDetail detail : order.getOrderDetails()) {
+            if (detail.getQualityResult() != null && detail.getQualityResult().getQualityResult().equals(com.swd301.foodmarket.enums.QualityResult.APPROVED)) {
+                count++;
+            }
+        }
+        return  count == order.getOrderDetails().size();
+    }
+
     // ================== MYSTERY BOX ==================
     @Mapping(target = "mysteryBoxId", source = "mysteryBox.id")
     @Mapping(target = "productName", source = "mysteryBox.boxType")
@@ -45,6 +59,7 @@ public interface OrderMapper {
     @Mapping(target = "unitPrice", source = "mysteryBox.price")
     @Mapping(target = "imageUrl", source = "mysteryBox.imageUrl")
     @Mapping(target = "itemType", constant = "MYSTERY_BOX")
+    @Mapping(target = "orderMysteryBoxId", source = "id")
     OrderItemResponse toMysteryBoxItemResponse(OrderMysteryBox orderBox);
 
     // ================== AFTER MAPPING ==================

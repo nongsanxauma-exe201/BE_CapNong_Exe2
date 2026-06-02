@@ -128,3 +128,4 @@ gemini:
   api:
     key: ${GEMINI_API_KEY}
 FRONTEND_URL: ${FE_URL}
+ADDRESS_WAREHOUSE: 1a Đ. 449, Tăng Nhơn Phú, Hồ Chí Minh 71207, Việt Nam

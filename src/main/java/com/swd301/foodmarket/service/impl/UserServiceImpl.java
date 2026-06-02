@@ -96,7 +96,7 @@ public class UserServiceImpl implements UserService {
             user.setBankName(request.getBankName());
             user.setBankAccountHolder(request.getBankAccountHolder());
             user.setBankAccount(request.getBankAccount());
-
+            user.setShopActive(true);
             if (logoUrl != null && !logoUrl.isEmpty()) {
                 String logoCloudUrl = cloudinaryService.uploadImage(logoUrl);
                 user.setLogoUrl(logoCloudUrl);
@@ -173,6 +173,7 @@ public class UserServiceImpl implements UserService {
             }
         }
 
+
         // ===============================
         // AUTO CREATE SHIPPER WALLET
         // ===============================
@@ -180,6 +181,25 @@ public class UserServiceImpl implements UserService {
         if (savedUser.getRole().getName().equals(RoleName.SHIPPER)) {
 
             if (!walletRepository.existsByShipper(savedUser)) {
+
+                Wallet wallet = Wallet.builder()
+                        .shipper(savedUser)
+                        .status(WalletStatus.ACTIVE)
+                        .totalBalance(BigDecimal.ZERO)
+                        .frozenBalance(BigDecimal.ZERO)
+                        .totalRevenueAllTime(BigDecimal.ZERO)
+                        .totalWithdrawn(BigDecimal.ZERO)
+                        .commissionWallet(BigDecimal.ZERO)
+                        .type(WalletType.SHIPPER)
+                        .build();
+
+                walletRepository.save(wallet);
+
+                log.info("Wallet created for shipper ID: {}", savedUser.getId());
+            }
+        }
+        if(request.getRoleName().equals(RoleName.BUYER)) {
+            if (!walletRepository.existsByBuyer(savedUser)) {
 
                 Wallet wallet = Wallet.builder()
                         .shipper(savedUser)
@@ -272,13 +292,13 @@ public class UserServiceImpl implements UserService {
         User user = userRepository.findByEmail(email)
                 .orElseThrow(() -> new AppException(ErrorCode.USER_NOT_EXISTED));
 
-        // Update password if provided
+        // Update other fields using mapper
+        userMapper.updateUser(user, request);
+
+        // Encode password AFTER mapper (mapper overwrites with plain text if done before)
         if (request.getPassword() != null && !request.getPassword().isEmpty()) {
             user.setPassword(passwordEncoder.encode(request.getPassword()));
         }
-
-        // Update other fields using mapper
-        userMapper.updateUser(user, request);
 
         User updatedUser = userRepository.save(user);
         log.info("My info updated successfully");
@@ -425,6 +445,17 @@ public class UserServiceImpl implements UserService {
         log.info("Shipper approved successfully: {}", userId);
 
         return userMapper.toUserResponse(approvedUser);
+    }
+
+    @Override
+    public UserResponse updateStatusShop(Integer userId, boolean open) {
+
+        User user = userRepository.findById(userId).orElseThrow(
+                ()-> new AppException(ErrorCode.USER_NOT_EXISTED)
+        );
+        user.setShopActive(open);
+
+        return userMapper.toUserResponse(userRepository.save(user));
     }
 
 

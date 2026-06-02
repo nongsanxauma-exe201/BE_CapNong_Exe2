@@ -2,16 +2,19 @@ package com.swd301.foodmarket.controller;
 
 import com.swd301.foodmarket.dto.request.OrderCreationRequest;
 import com.swd301.foodmarket.dto.request.OrderUpdateRequest;
-import com.swd301.foodmarket.dto.response.ApiResponse;
-import com.swd301.foodmarket.dto.response.OrderResponse;
-import com.swd301.foodmarket.dto.response.PageResponse;
+import com.swd301.foodmarket.dto.response.*;
+import com.swd301.foodmarket.enums.OrderStatus;
 import com.swd301.foodmarket.service.OrderService;
 import jakarta.validation.Valid;
 import lombok.AccessLevel;
 import lombok.RequiredArgsConstructor;
 import lombok.experimental.FieldDefaults;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.data.domain.Page;
+import org.springframework.http.MediaType;
+import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
+import org.springframework.web.multipart.MultipartFile;
 
 import java.math.BigDecimal;
 import java.util.List;
@@ -59,6 +62,7 @@ public class OrderController {
                 .build();
     }
 
+
     @GetMapping("/{id}")
     public ApiResponse<OrderResponse> getOrderById(@PathVariable Integer id) {
         return ApiResponse.<OrderResponse>builder()
@@ -91,14 +95,15 @@ public class OrderController {
                 .build();
     }
 
-    @PatchMapping("/{id}")
+    @PatchMapping(value =  "/{id}", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
     public ApiResponse<OrderResponse> updateOrder(
             @PathVariable Integer id,
-            @RequestBody @Valid OrderUpdateRequest request
-    ) {
+            @RequestPart("request") @Valid OrderUpdateRequest request,
+            @RequestPart(required = false,value = "files") List<MultipartFile> files
+            ) {
         log.info("Request status: {}", request.getStatus());
         return ApiResponse.<OrderResponse>builder()
-                .result(orderService.updateOrder(id, request))
+                .result(orderService.updateOrder(id, request,files))
                 .build();
     }
 
@@ -109,4 +114,41 @@ public class OrderController {
                 .result("Delete order successfully")
                 .build();
     }
+    // STAFF api
+    @GetMapping("/staff")
+    @PreAuthorize("hasAnyRole('STAFF', 'ADMIN')")
+    public ApiResponse<Page<OrderResponse>> getOrdersForStaff(
+            @RequestParam(defaultValue = "0") int page,
+            @RequestParam(defaultValue = "10") int size,
+            @RequestParam(required = false) OrderStatus status
+    ) {
+        return ApiResponse.<Page<OrderResponse>>builder()
+                .result(orderService.getOrdersForStaff(page, size,status))
+                .build();
+    }
+    @GetMapping("/staff/report")
+    @PreAuthorize("hasAnyRole('STAFF', 'ADMIN')")
+    public ApiResponse<StaffOrderReportResponse> getReportForStaff(
+    ) {
+        return ApiResponse.<StaffOrderReportResponse>builder()
+                .result(orderService.generateStaffOrderReport())
+                .build();
+    }
+    @GetMapping("/shop/reports")
+    public ApiResponse<OrderShopReport> getReportForShopDashBoard(
+            @RequestParam String type
+    ) {
+        return ApiResponse.<OrderShopReport>builder()
+                .result(orderService.orderShopReport(type))
+                .build();
+    }
+    @GetMapping("/shop/statistic")
+    public ApiResponse<OrderResponseReport> getReportForShop(
+    ) {
+        return ApiResponse.<OrderResponseReport>builder()
+                .result(orderService.orderReport())
+                .build();
+    }
+
+
 }

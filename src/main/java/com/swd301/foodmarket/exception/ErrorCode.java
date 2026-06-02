@@ -4,10 +4,12 @@ package com.swd301.foodmarket.exception;
 import lombok.Getter;
 import org.springframework.http.HttpStatus;
 
+import java.math.BigDecimal;
+
 
 @Getter
 public enum ErrorCode {
-    UNCATEGORIZED_EXCEPTION(9999,"Uncategorized Error", HttpStatus.INTERNAL_SERVER_ERROR),
+    UNCATEGORIZED_EXCEPTION(9999, "Uncategorized Error", HttpStatus.INTERNAL_SERVER_ERROR),
     USER_EXISTED(1001, "User already exists", HttpStatus.BAD_REQUEST),
     ROLE_NOT_FOUND(1002, "Role not found", HttpStatus.NOT_FOUND),
     PRODUCT_NOT_FOUND(1003, "Product not found", HttpStatus.NOT_FOUND),
@@ -26,9 +28,10 @@ public enum ErrorCode {
     INVALID_KEY(1005, "Invalid key", HttpStatus.BAD_REQUEST),
     CART_ITEM_NOT_FOUND(1006, "Cart item not found", HttpStatus.NOT_FOUND),
     PRODUCT_OUT_OF_STOCK(1007, "Product is out of stock", HttpStatus.BAD_REQUEST),
-    USER_NOT_EXISTED(10010, "User not existed",HttpStatus.NOT_FOUND),
+    USER_NOT_EXISTED(10010, "User not existed", HttpStatus.NOT_FOUND),
     MYSTERY_BOX_SOLD_OUT(10011, "Mystery box is sold out", HttpStatus.BAD_REQUEST),
-//   Create user errors
+    INVALID_LOGIN(10012, "Email or Password wrong", HttpStatus.BAD_REQUEST),
+    //   Create user errors
     EMAIL_INVALID(1006, "Email invalid", HttpStatus.BAD_REQUEST),
     EMAIL_REQUIRED(1009, "Email required", HttpStatus.BAD_REQUEST),
     EMAIL_TOO_LONG(1011, "Email too long", HttpStatus.BAD_REQUEST),
@@ -40,6 +43,8 @@ public enum ErrorCode {
     PASSWORD_SAME_AS_OLD(1015, "The new password must not be the same as the old password", HttpStatus.BAD_REQUEST),
 
     MYSTERY_BOX_NOT_FOUND(2001, "Mystery box not found", HttpStatus.NOT_FOUND),
+    TRIP_NOT_FOUND(2002, "Trip not found", HttpStatus.NOT_FOUND),
+    TRIP_JOIN_REQUEST_NOT_FOUND(2003, "Trip join request not found", HttpStatus.NOT_FOUND),
 
     NOTIFICATION_NOT_FOUND(1016, "Notification not found", HttpStatus.NOT_FOUND),
     INVALID_NOTIFICATION_REQUEST(1017, "Invalid request data", HttpStatus.BAD_REQUEST),
@@ -66,7 +71,7 @@ public enum ErrorCode {
     WALLET_FROZEN_BALANCE_NOT_ENOUGH(3011, "Frozen balance in wallet is not enough for this operation", HttpStatus.BAD_REQUEST),
     PLATFORM_BALANCE_NOT_ENOUGH(3012, "Platform balance is not enough for this operation", HttpStatus.INTERNAL_SERVER_ERROR),
     WALLET_BALANCE_NOT_ENOUGH(3013, "Wallet balance is not enough for this operation", HttpStatus.BAD_REQUEST),
-
+    INVALID_REFUND_AMOUNT(3014, "Invalid refund amount", HttpStatus.BAD_REQUEST),
     BLOG_NOT_FOUND(4001, "Blog not found", HttpStatus.NOT_FOUND),
     //PAYMENT
     PAYMENT_NOT_FOUND(5001, "Payment not found", HttpStatus.NOT_FOUND),
@@ -92,7 +97,26 @@ public enum ErrorCode {
     RETURN_REQUEST_ALREADY_EXISTS(9002, "Return request already exists for this item", HttpStatus.BAD_REQUEST),
     INVALID_RETURN_STATUS(9003, "Invalid status for this return operation", HttpStatus.BAD_REQUEST),
     ORDER_DETAIL_NOT_FOUND(9004, "Order detail not found", HttpStatus.NOT_FOUND),
+    // Quality Check errors
+    QUALITY_CRIERIA_NOT_FOUND(10001, "Quality criteria not found", HttpStatus.NOT_FOUND),
+    QUALITY_CHECK_NOT_FOUND(10002, "Quality check not found", HttpStatus.NOT_FOUND),
+    INVALID_QUALITY_CHECK_REQUEST(10003, "Invalid quality check request", HttpStatus.BAD_REQUEST),
+    // Vie QR
+    BANK_NOT_FOUND(11001, "bankBin is required", HttpStatus.BAD_REQUEST),
+    ACCOUNT_NOT_FOUND(11002, "accountNo is required", HttpStatus.BAD_REQUEST),
+    INVALID_MONEY(12001, "amount must be greater than 0", HttpStatus.BAD_REQUEST),
 
+    // Vehical
+    VEHICLE_NOT_FOUND(13001, "Vehicle not found", HttpStatus.NOT_FOUND),
+    VEHICLE_NUMBER_ALREADY_EXISTED(13002, "Vehicle number already existed", HttpStatus.BAD_REQUEST),
+    //Warehouse
+    WAREHOUSE_NOT_FOUND(14001, "Warehouse not found", HttpStatus.NOT_FOUND),
+    // trip stop
+    TRIP_STOP_NOT_FOUND(15001, "Trip stop not found", HttpStatus.NOT_FOUND),
+  ///  cost
+    INVALID_PAYMENT_METHOD(16001, "Invalid payment method", HttpStatus.BAD_REQUEST),
+    COD_ALREADY_SETTLED(16002, "COD amount has already been settled for this order", HttpStatus.BAD_REQUEST),
+    SHIPPER_NOT_FOUND(16003, "Shipper not found for this order",HttpStatus.BAD_REQUEST),
     ;
 
     private final int code;

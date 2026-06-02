@@ -1,10 +1,7 @@
 package com.swd301.foodmarket.controller;
 
 import com.swd301.foodmarket.dto.request.UpdateOrderStatusRequest;
-import com.swd301.foodmarket.dto.response.ApiResponse;
-import com.swd301.foodmarket.dto.response.AvailableOrderResponse;
-import com.swd301.foodmarket.dto.response.ShipperLocationResponse;
-import com.swd301.foodmarket.dto.response.ShipperOrderResponse;
+import com.swd301.foodmarket.dto.response.*;
 import com.swd301.foodmarket.service.ShipperService;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotNull;
@@ -44,6 +41,17 @@ public class ShipperController {
                 .result(shipperService.getAvailableOrdersNearby(lat, lng))
                 .build();
     }
+  @GetMapping("/orders")
+    @PreAuthorize("hasRole('SHIPPER')")
+    public ApiResponse<PageResponse<AvailableOrderResponse>> getAllMyOrders(
+            @RequestParam(defaultValue = "0") int page,
+            @RequestParam(defaultValue = "10") int size
+  ) {
+        log.info("[SHIPPER] Get all my orders");
+        return ApiResponse.<PageResponse<AvailableOrderResponse>>builder()
+                .result(shipperService.getAllOrderCanShipper(page,size))
+                .build();
+  }
 
     /**
      * Shipper nhận đơn hàng

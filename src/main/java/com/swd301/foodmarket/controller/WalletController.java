@@ -8,8 +8,10 @@ import com.swd301.foodmarket.dto.response.WithdrawRequestResponse;
 import com.swd301.foodmarket.service.WalletService;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
+import org.springframework.http.MediaType;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
+import org.springframework.web.multipart.MultipartFile;
 
 import java.util.List;
 
@@ -22,7 +24,7 @@ public class WalletController {
 
         // Shop owner xem ví
         @GetMapping("/me")
-        @PreAuthorize("hasRole('SHOP_OWNER')")
+        @PreAuthorize("hasAnyRole('SHOP_OWNER','BUYER')")
         public ApiResponse<WalletResponse> myWallet() {
                 return ApiResponse.<WalletResponse>builder()
                                 .result(walletService.getMyWallet())
@@ -50,7 +52,7 @@ public class WalletController {
 
         // Shipper xem lịch sử rút tiền
         @GetMapping("/shipper/withdraw-requests/my")
-        @PreAuthorize("hasRole('SHIPPER')")
+        @PreAuthorize("hasAnyRole('SHIPPER','BUYER')")
         public ApiResponse<List<WithdrawRequestResponse>> myShipperWithdrawRequests() {
                 return ApiResponse.<List<WithdrawRequestResponse>>builder()
                                 .result(walletService.getMyShipperWithdrawRequests())
@@ -77,13 +79,14 @@ public class WalletController {
         }
 
         // Admin duyệt
-        @PutMapping("/withdraw-requests/{id}/confirm-success")
+        @PutMapping(value = "/withdraw-requests/{id}/confirm-success",consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
         @PreAuthorize("hasRole('ADMIN')")
         public ApiResponse<WithdrawRequestResponse> confirmSuccess(
-                        @PathVariable Integer id,
-                        @RequestParam(required = false) String note) {
+                @PathVariable Integer id,
+                @RequestParam(required = false) String note,
+                @RequestPart List<MultipartFile> evidents) {
                 return ApiResponse.<WithdrawRequestResponse>builder()
-                                .result(walletService.confirmWithdrawSuccess(id, note))
+                                .result(walletService.confirmWithdrawSuccess(id, note,evidents))
                                 .build();
         }
 
@@ -96,18 +99,19 @@ public class WalletController {
         }
 
         // Admin từ chối
-        @PutMapping("/withdraw-requests/{id}/reject")
+        @PutMapping(value = "/withdraw-requests/{id}/reject",consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
         @PreAuthorize("hasRole('ADMIN')")
         public ApiResponse<WithdrawRequestResponse> reject(
                         @PathVariable Integer id,
-                        @RequestParam(required = false) String note) {
+                        @RequestParam(required = false) String note,
+                        @RequestPart(required = false) List<MultipartFile> evidents) {
                 return ApiResponse.<WithdrawRequestResponse>builder()
-                                .result(walletService.rejectWithdraw(id, note))
+                                .result(walletService.rejectWithdraw(id, note, evidents))
                                 .build();
         }
 
         @GetMapping("/withdraw-requests/my")
-        @PreAuthorize("hasRole('SHOP_OWNER')")
+        @PreAuthorize("hasAnyRole('SHOP_OWNER','BUYER')")
         public ApiResponse<List<WithdrawRequestResponse>> myWithdrawRequests() {
                 return ApiResponse.<List<WithdrawRequestResponse>>builder()
                                 .result(walletService.getMyWithdrawRequests())

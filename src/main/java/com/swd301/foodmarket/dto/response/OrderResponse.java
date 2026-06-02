@@ -1,5 +1,6 @@
 package com.swd301.foodmarket.dto.response;
 
+import com.fasterxml.jackson.annotation.JsonInclude;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Data;
@@ -13,9 +14,10 @@ import java.util.List;
 @Builder
 @AllArgsConstructor
 @NoArgsConstructor
+@JsonInclude(JsonInclude.Include.NON_NULL)
 public class OrderResponse {
     Integer id;
-
+    UserResponse shopOwner;
     String recipientName;
     String recipientPhone;
     String shippingAddress;
@@ -31,6 +33,21 @@ public class OrderResponse {
     LocalDateTime createdAt;
 
     List<OrderItemResponse> items;
+
     Integer buyerId;
+
+    List<TrackingResponse> trackings;
+
+    boolean passedQualityCheck;
+
+    BigDecimal refundAmount;
+
+    String refundReason;
+
+    BigDecimal codAmount;
+
+    Boolean codSettled;
+
+    LocalDateTime codSettledAt;
 
 }

@@ -44,6 +44,9 @@ public class User {
 
     // ===== SHOP INFO =====
     String shopName;
+    @Builder.Default
+    @Column(nullable = false, columnDefinition = "BOOLEAN DEFAULT TRUE")
+    private boolean shopActive = true;
     // Thông tin ngân hàng
     String bankName;
     String bankAccount;
@@ -140,6 +143,10 @@ public class User {
     @OneToMany(mappedBy = "user", cascade = CascadeType.ALL, orphanRemoval = true)
     @JsonIgnore
     List<UserNotification> userNotifications;
+
+    @OneToMany(mappedBy = "owner", cascade = CascadeType.ALL, orphanRemoval = true)
+    @JsonIgnore
+    List<Vehicle> vehicles;
 
     // SHIPPER
     @OneToMany(mappedBy = "shipper")

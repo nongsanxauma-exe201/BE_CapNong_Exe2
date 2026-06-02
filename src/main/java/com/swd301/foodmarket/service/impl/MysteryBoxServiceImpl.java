@@ -215,6 +215,21 @@ public class MysteryBoxServiceImpl implements MysteryBoxService {
                 .toList();
     }
 
+    @Override
+    public MysteryBoxResponse updateStatusBox(Integer id, boolean active) {
+        MysteryBox box = mysteryBoxRepository.findByIdWithProducts(id)
+                .orElseThrow(() -> new AppException(ErrorCode.MYSTERY_BOX_NOT_FOUND));
+        box.setIsActive(active);
+        mysteryBoxRepository.save(box);
+        return mysteryBoxMapper.toResponse(box);
+    }
+
+    @Override
+    public List<MysteryBoxResponse> getForBuyer() {
+        List<MysteryBox> boxes = mysteryBoxRepository.findAllByShopOwner_ShopActiveAndIsActive(true,true);
+        return boxes.stream().map(mysteryBoxMapper::toResponse).toList();
+    }
+
     private User getCurrentUser() {
         Authentication auth = SecurityContextHolder.getContext().getAuthentication();
 

@@ -69,7 +69,6 @@ public class WithdrawRequest {
 
     @Column(length = 100)
     String bankName;
-
     @Column(length = 50)
     String bankAccountNumber;
 
@@ -100,4 +99,6 @@ public class WithdrawRequest {
 
     @Column(name = "payout_checkout_url", columnDefinition = "TEXT")
     private String payoutCheckoutUrl;
+    @OneToMany(mappedBy = "withdrawRequest")
+    List<Image> images = new java.util.ArrayList<>();
 }

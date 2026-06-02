@@ -17,6 +17,9 @@ import com.swd301.foodmarket.service.NotificationService;
 import jakarta.transaction.Transactional;
 import lombok.RequiredArgsConstructor;
 import lombok.experimental.FieldDefaults;
+import lombok.extern.slf4j.Slf4j;
+import org.springframework.messaging.converter.SimpleMessageConverter;
+import org.springframework.messaging.simp.SimpMessagingTemplate;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.GrantedAuthority;
 import org.springframework.security.core.context.SecurityContextHolder;
@@ -28,6 +31,7 @@ import java.util.stream.Collectors;
 
 import static lombok.AccessLevel.PRIVATE;
 
+@Slf4j
 @Service
 @RequiredArgsConstructor
 @FieldDefaults(level = PRIVATE, makeFinal = true)
@@ -37,7 +41,7 @@ public class NotificationServiceImpl implements NotificationService {
     UserNotificationRepository userNotificationRepository;
     UserRepository userRepository;
     NotificationMapper notificationMapper;
-
+    SimpMessagingTemplate simpMessagingTemplate;
     // =====================================================================
     // ADMIN GỬI THÔNG BÁO CHO NHIỀU NHÓM
     // =====================================================================
@@ -87,16 +91,36 @@ public class NotificationServiceImpl implements NotificationService {
 
         // Tạo UserNotification cho tất cả user thuộc các role được chọn
         List<User> targetUsers = userRepository.findByRole_NameIn(targetRoles);
-        List<UserNotification> userNotifications = targetUsers.stream()
-                .map(user -> UserNotification.builder()
-                        .user(user)
-                        .notification(savedNotification)
-                        .isRead(false)
-                        .isDeleted(false)
-                        .build())
-                .collect(Collectors.toList());
-        
-        userNotificationRepository.saveAll(userNotifications);
+        for(User user : targetUsers) {
+            createUserNotification(user, savedNotification);
+
+        }
+    }
+    @Override
+    public UserNotification createUserNotification(User user, Notification notification) {
+        Notification savedNotification = notificationRepository.save(notification);
+       UserNotification userNotification =  UserNotification.builder()
+                .user(user)
+                .notification(savedNotification)
+                .isRead(false)
+                .isDeleted(false)
+                .build();
+     return userNotificationRepository.save(userNotification);
+    }
+
+    @Override
+    public void sendNotificationWebsocket(User user, Notification notification) {
+        UserNotification un = createUserNotification(user, notification);
+        NotificationResponse response = notificationMapper.toResponse(un.getNotification());
+        response.setId(un.getId()); // FE cần ID của UserNotification để markRead/delete
+        response.setIsRead(un.getIsRead());
+
+        simpMessagingTemplate.convertAndSend(
+                "/queue/notifications."+user.getId(),
+                response
+
+        );
+        log.info("Notification sent to websocket");
     }
 
     // =====================================================================
@@ -166,6 +190,8 @@ public class NotificationServiceImpl implements NotificationService {
         un.setIsDeleted(true);
         userNotificationRepository.save(un);
     }
+
+
 
     /**
      * Lấy role hiện tại của user đang login

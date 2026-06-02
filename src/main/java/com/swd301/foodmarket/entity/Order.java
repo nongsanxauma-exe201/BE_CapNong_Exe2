@@ -8,6 +8,7 @@ import lombok.experimental.FieldDefaults;
 
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
+import java.util.ArrayList;
 import java.util.List;
 
 @Entity
@@ -56,6 +57,10 @@ public class Order {
     @OneToMany(mappedBy = "order")
     @JsonIgnore
     List<Payment> payments;
+
+    @ManyToMany(mappedBy = "orders")
+    @JsonIgnore
+    List<TripJoinRequest> tripJoinRequests;
 
     // ================= DATA =================
 
@@ -109,4 +114,21 @@ public class Order {
     void onCreate() {
         createdAt = LocalDateTime.now();
     }
+    @OneToMany(mappedBy = "order")
+    List<Tracking> trackings = new ArrayList<>();
+
+    // tiền hoàn khi kiểm tra có vấn đề về hàng sau kiem tra chat luong
+    BigDecimal refundAmount = BigDecimal.ZERO;
+    @Column(columnDefinition = "TEXT")
+    String refundReason;
+    @ManyToOne
+    @JoinColumn(name="trip_stop_id")
+    TripStop tripStop;
+
+    @Column(precision = 19, scale = 2)
+    private BigDecimal codAmount;
+
+    private Boolean codSettled = false;
+
+    private LocalDateTime codSettledAt;
 }

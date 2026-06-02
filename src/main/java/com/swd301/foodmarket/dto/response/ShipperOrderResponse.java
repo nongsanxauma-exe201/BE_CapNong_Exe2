@@ -25,11 +25,14 @@ public class ShipperOrderResponse {
     LocalDateTime estimatedDeliveryDate;
     String note;
 
-    // ✅ Tọa độ shop (điểm lấy hàng) — dùng cho FakeGPS
-    Double shopLatitude;
-    Double shopLongitude;
+    // ── Kho bãi (điểm lấy hàng) — lấy thẳng từ bảng warehouses trong DB ────────
+    Integer warehouseId;
+    String  warehouseName;
+    String  warehouseAddress;
+    Double  warehouseLat;
+    Double  warehouseLng;
 
-    // ✅ Tọa độ nhà buyer (điểm giao hàng) — dùng cho FakeGPS
+    // ── Điểm giao hàng (nhà buyer) ───────────────────────────────────────────────
     Double shippingLatitude;
     Double shippingLongitude;
 }

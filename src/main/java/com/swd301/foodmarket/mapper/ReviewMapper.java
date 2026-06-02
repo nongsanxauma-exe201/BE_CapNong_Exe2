@@ -6,6 +6,8 @@ import com.swd301.foodmarket.entity.Review;
 import org.mapstruct.Mapper;
 import org.mapstruct.Mapping;
 
+import javax.annotation.MatchesPattern;
+
 @Mapper(componentModel = "spring")
 public interface ReviewMapper {
     Review toReview(ReviewCreateRequest request);
@@ -17,5 +19,7 @@ public interface ReviewMapper {
     @Mapping(source = "mysteryBox.id", target = "mysteryBoxId")
     @Mapping(source = "orderDetail.product.id", target = "productId")
     @Mapping(source = "orderDetail.product.productName", target = "productName")
+    @Mapping(source = "mysteryBox.boxType", target = "boxType")
+    @Mapping(source = "orderDetail.quantity", target = "quantity")
     ReviewResponse toResponse(Review review);
 }

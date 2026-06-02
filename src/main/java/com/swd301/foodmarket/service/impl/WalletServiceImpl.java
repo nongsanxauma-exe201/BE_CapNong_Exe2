@@ -1,23 +1,24 @@
 package com.swd301.foodmarket.service.impl;
 
+import com.swd301.foodmarket.constant.BankBinConstants;
 import com.swd301.foodmarket.dto.request.WalletCreationRequest;
 import com.swd301.foodmarket.dto.request.WithdrawRequestCreationRequest;
 import com.swd301.foodmarket.dto.response.WalletResponse;
 import com.swd301.foodmarket.dto.response.WithdrawRequestResponse;
-import com.swd301.foodmarket.entity.PayosPayoutResult;
-import com.swd301.foodmarket.entity.User;
-import com.swd301.foodmarket.entity.Wallet;
-import com.swd301.foodmarket.entity.WithdrawRequest;
+import com.swd301.foodmarket.entity.*;
 import com.swd301.foodmarket.enums.PayoutStatus;
+import com.swd301.foodmarket.enums.RoleName;
 import com.swd301.foodmarket.enums.WalletType;
 import com.swd301.foodmarket.enums.WithdrawRequestStatus;
 import com.swd301.foodmarket.exception.AppException;
 import com.swd301.foodmarket.exception.ErrorCode;
 import com.swd301.foodmarket.mapper.WalletMapper;
 import com.swd301.foodmarket.mapper.WithdrawRequestMapper;
+import com.swd301.foodmarket.repository.ImageRepository;
 import com.swd301.foodmarket.repository.UserRepository;
 import com.swd301.foodmarket.repository.WalletRepository;
 import com.swd301.foodmarket.repository.WithdrawRequestRepository;
+import com.swd301.foodmarket.service.CloudinaryService;
 import com.swd301.foodmarket.service.PayosService;
 import com.swd301.foodmarket.service.WalletService;
 import jakarta.transaction.Transactional;
@@ -27,6 +28,7 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.stereotype.Service;
+import org.springframework.web.multipart.MultipartFile;
 
 import java.math.BigDecimal;
 import java.math.RoundingMode;
@@ -44,23 +46,31 @@ public class WalletServiceImpl implements WalletService {
     private final WithdrawRequestMapper withdrawRequestMapper;
     private final UserRepository userRepository;
     private final PayosService payosService;
+    private final VieQRServiceImpl vieQRService;
+    private final CloudinaryService cloudinaryService;
     private static final BigDecimal WITHDRAW_FEE_PERCENT = new BigDecimal("0.10");// 10%
+    private final ImageRepository imageRepository;
     @Value("${FRONTEND_URL}")
     private String frontUrl;
 
     @Override
     public WalletResponse getMyWallet() {
         User currentUser = getCurrentUser();
-
-        Wallet wallet = walletRepository.findByShopOwner_Id(currentUser.getId())
-                .orElseThrow(() -> new AppException(ErrorCode.WALLET_NOT_FOUND));
-
+        Role role = currentUser.getRole();
+        Wallet wallet = null;
+        if(role.getName().equals(RoleName.SHOP_OWNER)){
+             wallet = walletRepository.findByShopOwner_Id(currentUser.getId()).get();
+        }
+        if(role.getName() == RoleName.BUYER){
+             wallet = walletRepository.findByBuyer(currentUser);
+        }
         return walletMapper.toResponse(wallet);
     }
 
     @Override
     public WalletResponse getMyShipperWallet() {
         User currentUser = getCurrentUser();
+
 
         Wallet wallet = walletRepository.findByShipper(currentUser)
                 .orElseThrow(() -> new AppException(ErrorCode.WALLET_NOT_FOUND));
@@ -79,9 +89,10 @@ public class WalletServiceImpl implements WalletService {
             throw new AppException(ErrorCode.INVALID_AMOUNT);
         }
 
-        if (wallet.getFrozenBalance().compareTo(request.getAmount()) < 0) {
+        if (availableBalance(wallet).compareTo(request.getAmount()) < 0) {
             throw new AppException(ErrorCode.INSUFFICIENT_BALANCE);
         }
+
 
         String bankName = request.getBankName() != null && !request.getBankName().isBlank()
                 ? request.getBankName() : shipper.getBankName();
@@ -113,7 +124,7 @@ public class WalletServiceImpl implements WalletService {
 
         withdrawRequestRepository.save(wr);
 
-        wallet.setFrozenBalance(wallet.getFrozenBalance().subtract(request.getAmount()));
+        wallet.setFrozenBalance(wallet.getFrozenBalance().add(request.getAmount()));
         walletRepository.save(wallet);
 
         return withdrawRequestMapper.toResponse(wr);
@@ -123,8 +134,8 @@ public class WalletServiceImpl implements WalletService {
     public List<WithdrawRequestResponse> getMyShipperWithdrawRequests() {
         User shipper = getCurrentUser();
 
-        Wallet wallet = walletRepository.findByShipper(shipper)
-                .orElseThrow(() -> new AppException(ErrorCode.WALLET_NOT_FOUND));
+//        Wallet wallet = walletRepository.findByShipper(shipper)
+//                .orElseThrow(() -> new AppException(ErrorCode.WALLET_NOT_FOUND));
 
         return withdrawRequestMapper.toResponses(
                 withdrawRequestRepository.findByWallet_Shipper_IdOrderByIdDesc(shipper.getId())
@@ -147,45 +158,51 @@ public class WalletServiceImpl implements WalletService {
                 || wr.getReceiveAmount().compareTo(BigDecimal.ZERO) <= 0) {
             throw new AppException(ErrorCode.INVALID_AMOUNT);
         }
-
-        // tạo orderCode unique
-        Long orderCode = Long.parseLong(
-                wr.getId() + "" + System.currentTimeMillis()
-        );
-
-        PayosPayoutResult qrResult = payosService.createQr(
-                wr.getReceiveAmount(),
-                orderCode,
-                wr.getId(),
-                wr.getBankName(),
+//
+//        // tạo orderCode unique
+//        Long orderCode = Long.parseLong(
+//                wr.getId() + "" + System.currentTimeMillis()
+//        );
+//
+//        PayosPayoutResult qrResult = payosService.createQr(
+//                wr.getReceiveAmount(),
+//                orderCode,
+//                wr.getId(),
+//                wr.getBankName(),
+//                wr.getBankAccountNumber(),
+//                wr.getBankAccountHolder(),
+//                frontUrl+"/admin/wallet?withdrawId=" + wr.getId(),
+//                frontUrl+"/admin/wallet?withdrawId=" + wr.getId() + "&cancel=true"
+//        );
+//
+//        if (qrResult == null ||
+//                (qrResult.getCheckoutUrl() == null && qrResult.getQrCodeUrl() == null)) {
+//            throw new AppException(ErrorCode.PAYOS_CREATE_QR_FAILED);
+//        }
+       String qrUrl = vieQRService.generateVieQRCode(
+               String.valueOf(BankBinConstants.getBankBinIgnoreCase(wr.getBankName())),
                 wr.getBankAccountNumber(),
-                wr.getBankAccountHolder(),
-                frontUrl+"/admin/wallet?withdrawId=" + wr.getId(),
-                frontUrl+"/admin/wallet?withdrawId=" + wr.getId() + "&cancel=true"
+               wr.getReceiveAmount(),
+                null,
+                wr.getBankAccountHolder()
         );
-
-        if (qrResult == null ||
-                (qrResult.getCheckoutUrl() == null && qrResult.getQrCodeUrl() == null)) {
-            throw new AppException(ErrorCode.PAYOS_CREATE_QR_FAILED);
-        }
-
-        wr.setPayoutProvider("PAYOS");
+        wr.setPayoutProvider("VietQR");
         wr.setPayoutStatus(PayoutStatus.CREATED);
-        wr.setPayoutOrderCode(String.valueOf(orderCode));
-        wr.setPayoutQrUrl(qrResult.getQrCodeUrl());
-        wr.setPayoutCheckoutUrl(qrResult.getCheckoutUrl());
+//        wr.setPayoutOrderCode(String.valueOf(orderCode));
+        wr.setPayoutQrUrl(qrUrl);
+//        wr.setPayoutCheckoutUrl(qrResult.getCheckoutUrl());
 
         withdrawRequestRepository.save(wr);
 
         WithdrawRequestResponse res = withdrawRequestMapper.toResponse(wr);
-        res.setQrCodeUrl(qrResult.getQrCodeUrl());
-        res.setCheckoutUrl(qrResult.getCheckoutUrl());
+        res.setQrCodeUrl(qrUrl);
+//        res.setCheckoutUrl(qrResult.getCheckoutUrl());
 
         return res;
     }
     @Override
     @Transactional
-    public WithdrawRequestResponse confirmWithdrawSuccess(Integer requestId, String adminNote) {
+    public WithdrawRequestResponse confirmWithdrawSuccess(Integer requestId, String adminNote, List<MultipartFile> evidents) {
 
         User admin = getCurrentUser();
 
@@ -201,41 +218,48 @@ public class WalletServiceImpl implements WalletService {
                 .orElseThrow(() -> new AppException(ErrorCode.PLATFORM_WALLET_NOT_FOUND));
 
         BigDecimal amount = wr.getAmount();
-
-        // 1. Cập nhật ví chủ sở hữu (Shop/Shipper)
-        if (wallet.getType() == WalletType.SHIPPER) {
-            // Khi Shipper tạo yêu cầu, tiền đã bị TRỪ khỏi frozenBalance rồi.
-            // Ở đây chỉ cần tăng totalWithdrawn để thống kê.
-            wallet.setTotalWithdrawn(wallet.getTotalWithdrawn().add(amount));
-        } else {
-            // Khi Shop tạo yêu cầu, tiền được GIỮ (add) vào frozenBalance.
-            // Ở đây cần kiểm tra và TRỪ khỏi frozenBalance.
-            if (wallet.getFrozenBalance().compareTo(amount) < 0) {
-                throw new AppException(ErrorCode.WALLET_BALANCE_NOT_ENOUGH);
-            }
-            wallet.setFrozenBalance(wallet.getFrozenBalance().subtract(amount));
-            wallet.setTotalWithdrawn(wallet.getTotalWithdrawn().add(amount));
+        if (wallet.getFrozenBalance().compareTo(amount) < 0) {
+            throw new AppException(ErrorCode.WALLET_BALANCE_NOT_ENOUGH);
         }
+
+        wallet.setFrozenBalance(wallet.getFrozenBalance().subtract(amount));
+        wallet.setTotalBalance(wallet.getTotalBalance().subtract(amount));
+        wallet.setTotalWithdrawn(wallet.getTotalWithdrawn().add(amount));
         walletRepository.save(wallet);
+
 
         // 2. Cập nhật ví hệ thống (Platform) - Luôn phải trừ đi phần tiền hệ thống đã bỏ ra trả
         log.error("Platform balance: {}", platformWallet.getTotalBalance());
         log.error("Receive amount: {}", wr.getReceiveAmount());
 
-        if (platformWallet.getTotalBalance().compareTo(wr.getReceiveAmount()) < 0) {
+        BigDecimal withdrawAmount = wr.getAmount();
+        BigDecimal receiveAmount = wr.getReceiveAmount();
+        BigDecimal fee = wr.getFee() != null ? wr.getFee() : BigDecimal.ZERO;
+
+        if (platformWallet.getTotalBalance().compareTo(receiveAmount) < 0) {
             throw new AppException(ErrorCode.PLATFORM_BALANCE_NOT_ENOUGH);
         }
 
-        platformWallet.setTotalWithdrawn(platformWallet.getTotalWithdrawn().add(amount));
+        if (platformWallet.getFrozenBalance().compareTo(withdrawAmount) < 0) {
+            throw new AppException(ErrorCode.PLATFORM_BALANCE_NOT_ENOUGH);
+        }
+
         platformWallet.setTotalBalance(
-                platformWallet.getTotalBalance().subtract(wr.getReceiveAmount())
+                platformWallet.getTotalBalance().subtract(receiveAmount)
         );
+
         platformWallet.setFrozenBalance(
-                platformWallet.getFrozenBalance().subtract(wr.getReceiveAmount())
+                platformWallet.getFrozenBalance().subtract(withdrawAmount)
         );
+
+        platformWallet.setTotalWithdrawn(
+                platformWallet.getTotalWithdrawn().add(receiveAmount)
+        );
+
         platformWallet.setCommissionWallet(
-                platformWallet.getCommissionWallet().add(wr.getFee())
+                platformWallet.getCommissionWallet().add(fee)
         );
+
         walletRepository.save(platformWallet);
 
         // 3. Update trạng thái yêu cầu
@@ -247,8 +271,20 @@ public class WalletServiceImpl implements WalletService {
         wr.setPayoutAt(LocalDateTime.now());
 
         withdrawRequestRepository.save(wr);
+        // insert evident
+        saveEvidnetFile(evidents,wr);
 
         return withdrawRequestMapper.toResponse(wr);
+    }
+    public  void saveEvidnetFile( List<MultipartFile> evidents, WithdrawRequest wr) {
+        if(evidents != null && evidents.size() > 0) {
+            for (MultipartFile file : evidents) {
+                imageRepository.save(Image.builder()
+                        .withdrawRequest(wr)
+                        .imageUrl(cloudinaryService.uploadImage(file))
+                        .build());
+            }
+        }
     }
     @Override
     public WithdrawRequestResponse createWithdrawRequest(WithdrawRequestCreationRequest request) {
@@ -261,8 +297,8 @@ public class WalletServiceImpl implements WalletService {
         if (request.getAmount().compareTo(BigDecimal.ZERO) <= 0) {
             throw new AppException(ErrorCode.INVALID_AMOUNT);
         }
-
-        if (wallet.getTotalBalance().compareTo(request.getAmount()) < 0) {
+log.info("Wallet balance: {}, request amount {}", wallet.getTotalBalance(),request.getAmount());
+        if (availableBalance(wallet).compareTo(request.getAmount()) < 0) {
             throw new AppException(ErrorCode.INSUFFICIENT_BALANCE);
         }
 
@@ -307,7 +343,6 @@ public class WalletServiceImpl implements WalletService {
 
         withdrawRequestRepository.save(wr);
 
-        wallet.setTotalBalance(wallet.getTotalBalance().subtract(request.getAmount()));
         wallet.setFrozenBalance(wallet.getFrozenBalance().add(request.getAmount()));
         walletRepository.save(wallet);
 
@@ -316,7 +351,7 @@ public class WalletServiceImpl implements WalletService {
 
 
     @Override
-    public WithdrawRequestResponse rejectWithdraw(Integer requestId, String adminNote) {
+    public WithdrawRequestResponse rejectWithdraw(Integer requestId, String adminNote, List<MultipartFile> files) {
         User admin = getCurrentUser();
 
         WithdrawRequest wr = withdrawRequestRepository.findById(requestId)
@@ -331,13 +366,18 @@ public class WalletServiceImpl implements WalletService {
         wr.setProcessedAt(LocalDateTime.now());
 
         Wallet wallet = wr.getWallet();
-        if (wallet.getType() == WalletType.SHIPPER) {
-            wallet.setFrozenBalance(wallet.getFrozenBalance().add(wr.getAmount()));
-        } else {
-            wallet.setFrozenBalance(wallet.getFrozenBalance().subtract(wr.getAmount()));
-            wallet.setTotalBalance(wallet.getTotalBalance().add(wr.getAmount())); // trả tiền lại
+
+        if (wallet.getFrozenBalance().compareTo(wr.getAmount()) < 0) {
+            throw new AppException(ErrorCode.WALLET_BALANCE_NOT_ENOUGH);
         }
+
+        wallet.setFrozenBalance(
+                wallet.getFrozenBalance().subtract(wr.getAmount())
+        );
+
         walletRepository.save(wallet);
+        // save image
+        saveEvidnetFile(files,wr);
 
         return withdrawRequestMapper.toResponse(wr);
     }
@@ -364,14 +404,21 @@ public class WalletServiceImpl implements WalletService {
 
     @Override
     public List<WithdrawRequestResponse> getMyWithdrawRequests() {
-        User shopOwner = getCurrentUser();
+        User currentUser = getCurrentUser();
+        Role role = currentUser.getRole();
+        if(role.getName().equals(RoleName.SHOP_OWNER)){
+            return withdrawRequestMapper.toResponses(
+                    withdrawRequestRepository.findByWallet_ShopOwner_IdOrderByIdDesc(currentUser.getId())
+            );
+        }
+        if(role.getName() == RoleName.BUYER){
+            return withdrawRequestMapper.toResponses(
+                    withdrawRequestRepository.findByWallet_Buyer_IdOrderByIdDesc(currentUser.getId())
+            );
+        }
 
-        Wallet wallet = walletRepository.findByShopOwner(shopOwner)
-                .orElseThrow(() -> new AppException(ErrorCode.WALLET_NOT_FOUND));
 
-        return withdrawRequestMapper.toResponses(
-                withdrawRequestRepository.findByWallet_ShopOwner_IdOrderByIdDesc(shopOwner.getId())
-        );
+        return null;
     }
 
     @Override
@@ -383,4 +430,10 @@ public class WalletServiceImpl implements WalletService {
                 withdrawRequestRepository.findAllByOrderByIdDesc()
         );
     }
+    private BigDecimal availableBalance(Wallet wallet) {
+        BigDecimal total = wallet.getTotalBalance() != null ? wallet.getTotalBalance() : BigDecimal.ZERO;
+        BigDecimal frozen = wallet.getFrozenBalance() != null ? wallet.getFrozenBalance() : BigDecimal.ZERO;
+        return total.subtract(frozen);
+    }
+
 }
