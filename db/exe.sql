@@ -69,15 +69,19 @@ SET @shipper_role_id=(SELECT id FROM roles WHERE name='SHIPPER');
 SET @staff_role_id   = (SELECT id FROM roles WHERE name='STAFF');
 
 -- ============================================================
--- 2. CATEGORIES (chỉ Củ và Quả/Trái cây)
+-- 2. CATEGORIES (4 loại: Củ gia vị, Củ thực phẩm, Trái cây nhiệt đới, Trái cây quanh năm)
 -- ============================================================
 INSERT INTO categories (name, description) VALUES
-    ('Củ','Các loại củ tươi: cà rốt, khoai tây, khoai lang, củ cải, hành tỏi, gừng, nghệ...'),
-    ('Quả/Trái cây','Trái cây tươi ngon: chuối, xoài, dưa hấu, cam, bưởi, dâu tây, nho...')
+    ('Củ gia vị','Các loại củ, rau có tính gia vị: tỏi, gừng, nghệ, hành tím, sả, ớt, cần tây, hành tây...'),
+    ('Củ thực phẩm','Các loại rau củ dùng làm thức ăn chính: cà rốt, khoai tây, khoai lang, bí đỏ, cà tím, khoai môn...'),
+    ('Trái cây nhiệt đới','Đặc sản trái cây nhiệt đới Việt Nam: xoài, thanh long, dưa hấu, ổi, sầu riêng, chôm chôm...'),
+    ('Trái cây quanh năm','Trái cây phổ biến quanh năm: cam, bưởi, nho, cà chua, dưa leo, ớt chuông, táo, mướp...')
     ON DUPLICATE KEY UPDATE description=VALUES(description);
 
-SET @cat_cu=(SELECT category_id FROM categories WHERE name='Củ');
-SET @cat_trai_cay=(SELECT category_id FROM categories WHERE name='Quả/Trái cây');
+SET @cat_cu_gia_vi        =(SELECT category_id FROM categories WHERE name='Củ gia vị');
+SET @cat_cu_thuc_pham     =(SELECT category_id FROM categories WHERE name='Củ thực phẩm');
+SET @cat_trai_cay_nhiet_doi=(SELECT category_id FROM categories WHERE name='Trái cây nhiệt đới');
+SET @cat_trai_cay_quanh_nam=(SELECT category_id FROM categories WHERE name='Trái cây quanh năm');
 
 -- ============================================================
 -- 3. USERS
@@ -153,21 +157,30 @@ SET @shipper3_id = (SELECT id FROM users WHERE email = 'shipper3@gmail.com');
 INSERT INTO wallets (admin_id,status,total_balance,frozen_balance,total_revenue_all_time,total_withdrawn,commission_wallet,type)
 VALUES (@admin_id,'ACTIVE',100000000,0,0,0,19410,'PLATFORM');
 
+-- shop1 frozen: #17(164700)+#18(189000)=353700 | realized: #3(181800)+#12(153000)+mystery(80100)=414900 | total=414900+353700-128000=640600
+-- shop2 frozen: #23(155700)+#25(117000)=272700 | realized: #6(132300)+#19(181800)+#24(157500)+mystery2(134100)=605700 | total=605700+272700=878400
 INSERT INTO wallets (shop_id,status,total_balance,frozen_balance,total_revenue_all_time,total_withdrawn,commission_wallet,type)
-VALUES (@shop1_id,'ACTIVE',31960,100000,268000,128000,8040,'SHOP'),
-       (@shop2_id,'ACTIVE',217630,150000,379000,0,11370,'SHOP'),
+VALUES (@shop1_id,'ACTIVE',640600,353700,414900,128000,8040,'SHOP'),
+       (@shop2_id,'ACTIVE',878400,272700,605700,0,11370,'SHOP'),
        (@shop3_id,'ACTIVE',0,0,0,0,0,'SHOP');
 
+-- shipper1: 12 đơn DELIVERED × 15000 = 180000đ; đã rút 55000; đang chờ rút 50000
+-- totalBalance = 180000 - 55000 = 125000; frozenBalance = 50000 (pending)
 INSERT INTO wallets (shipper_id,status,total_balance,frozen_balance,total_revenue_all_time,total_withdrawn,commission_wallet,type)
-VALUES (@shipper1_id,'ACTIVE',60000,0,60000,0,0,'SHIPPER'),
+VALUES (@shipper1_id,'ACTIVE',125000,50000,180000,55000,0,'SHIPPER'),
        (@shipper2_id,'ACTIVE',0,0,0,0,0,'SHIPPER');
 
 SET @wallet_shop1_id=(SELECT wallet_id FROM wallets WHERE shop_id=@shop1_id);
 SET @wallet_shop2_id=(SELECT wallet_id FROM wallets WHERE shop_id=@shop2_id);
 SET @wallet_shop3_id=(SELECT wallet_id FROM wallets WHERE shop_id=@shop3_id);
 
+-- shipper3: 4 đơn DELIVERED × 15000 = 60000đ; đã rút 30000
+-- totalBalance = 60000 - 30000 = 30000
 INSERT INTO wallets (shipper_id, status, total_balance, frozen_balance, total_revenue_all_time, total_withdrawn, commission_wallet, type)
-VALUES (@shipper3_id, 'ACTIVE', 0, 0, 0, 0, 0, 'SHIPPER');
+VALUES (@shipper3_id, 'ACTIVE', 30000, 0, 60000, 30000, 0, 'SHIPPER');
+
+SET @wallet_shipper1_id=(SELECT wallet_id FROM wallets WHERE shipper_id=@shipper1_id);
+SET @wallet_shipper3_id=(SELECT wallet_id FROM wallets WHERE shipper_id=@shipper3_id);
 
 -- ============================================================
 -- 5. PRODUCTS
@@ -177,67 +190,71 @@ VALUES (@shipper3_id, 'ACTIVE', 0, 0, 0, 0, 0, 'SHIPPER');
 -- OUT_OF_STOCK / EXPIRED: demo thêm nếu cần
 -- ============================================================
 INSERT INTO products (shop_owner_id,category_id,product_name,unit,selling_price,stock_quantity,description,status,image_url) VALUES
--- SHOP 1 - CỦ (AVAILABLE)
-(@shop1_id,@cat_cu,'Cà rốt','kg',25000,100,'Cà rốt Đà Lạt tươi ngon, ngọt tự nhiên, giàu beta-carotene.','AVAILABLE','https://res.cloudinary.com/dfp44sbsj/image/upload/v1773916721/brands/uj1eoinkwvthfjvtpvpq.jpg'),
-(@shop1_id,@cat_cu,'Khoai tây','kg',30000,80,'Khoai tây Đà Lạt dẻo thơm, thích hợp chiên, hầm, nấu canh.','AVAILABLE','https://res.cloudinary.com/dfp44sbsj/image/upload/v1773916676/brands/bmgnazybi0rro8bnxhwp.jpg'),
-(@shop1_id,@cat_cu,'Khoai lang','kg',28000,70,'Khoai lang tím Đà Lạt ngọt bùi, giàu anthocyanin tốt cho tim mạch.','AVAILABLE','https://res.cloudinary.com/dfp44sbsj/image/upload/v1774249499/brands/pgdvlccom3lid5t24pnk.jpg'),
-(@shop1_id,@cat_cu,'Củ cải trắng','kg',18000,70,'Củ cải trắng tươi ngọt thanh, nấu canh hoặc muối dưa đều ngon.','AVAILABLE','https://res.cloudinary.com/dfp44sbsj/image/upload/v1773943219/brands/dysl261o6o2bapfwurmf.jpg'),
-(@shop1_id,@cat_cu,'Bí đỏ','kg',22000,60,'Bí đỏ bùi ngọt, giàu vitamin A, nấu canh hoặc hầm đều tuyệt.','AVAILABLE','https://res.cloudinary.com/dfp44sbsj/image/upload/v1773917463/brands/xjz74sedvolg7woxywpo.jpg'),
-(@shop1_id,@cat_cu,'Hành tây','kg',25000,80,'Hành tây tươi to tròn, thơm ngọt, dùng xào nấu hay ăn sống.','AVAILABLE','https://res.cloudinary.com/dfp44sbsj/image/upload/v1773943658/brands/qieeuppupbnypfoenpwg.jpg'),
-(@shop1_id,@cat_cu,'Tỏi','kg',85000,35,'Tỏi ta Lý Sơn đậm vị thơm nồng, gia vị không thể thiếu.','AVAILABLE','https://res.cloudinary.com/dfp44sbsj/image/upload/v1773943632/brands/zhw2ww8qghsqscht29xb.jpg'),
-(@shop1_id,@cat_cu,'Gừng','kg',55000,45,'Gừng tươi cay nồng ấm bụng, dùng nấu ăn, pha trà hay làm thuốc.','AVAILABLE','https://res.cloudinary.com/dfp44sbsj/image/upload/v1774249614/brands/ponetjgmfffbv8j8xpto.jpg'),
-(@shop1_id,@cat_cu,'Nghệ','kg',40000,30,'Nghệ tươi vàng óng, kháng viêm tự nhiên, dùng nấu ăn và làm đẹp.','AVAILABLE','https://res.cloudinary.com/dfp44sbsj/image/upload/v1774249845/brands/xafrqajebqsjhwhramh3.jpg'),
-(@shop1_id,@cat_cu,'Cần tây','bó',15000,40,'Cần tây xanh giòn, giàu chất xơ, tốt cho tiêu hóa và giảm cân.','AVAILABLE','https://res.cloudinary.com/dfp44sbsj/image/upload/v1774249561/brands/jtszr297g1cr4g25vqjj.webp'),
--- SHOP 1 - QUẢ/TRÁI CÂY (AVAILABLE)
-(@shop1_id,@cat_trai_cay,'Cà chua','kg',35000,50,'Cà chua đỏ tươi ngọt, giàu lycopene, ăn tươi hay nấu đều ngon.','AVAILABLE','https://res.cloudinary.com/dfp44sbsj/image/upload/v1773916530/brands/xjiiaehe5evwybwhmpmu.jpg'),
-(@shop1_id,@cat_trai_cay,'Dưa leo','kg',15000,100,'Dưa leo sạch giòn mát, thích hợp salad hoặc ăn kèm.','AVAILABLE','https://res.cloudinary.com/dfp44sbsj/image/upload/v1773917431/brands/yif2icgotbydg5qvzvbf.jpg'),
-(@shop1_id,@cat_trai_cay,'Ớt chuông','kg',55000,40,'Ớt chuông 3 màu giòn ngọt, giàu vitamin C.','AVAILABLE','https://res.cloudinary.com/dfp44sbsj/image/upload/v1774249920/brands/azkaanfoa7ommwnhxbv6.jpg'),
-(@shop1_id,@cat_trai_cay,'Dâu tây','kg',180000,20,'Dâu tây Đà Lạt tươi chua ngọt, thu hoạch buổi sáng giao ngay.','AVAILABLE','https://res.cloudinary.com/dfp44sbsj/image/upload/v1773943061/brands/qtspypfmdjcxtsbme7xi.jpg'),
-(@shop1_id,@cat_trai_cay,'Chuối','nải',25000,20,'Chuối sứ chín vàng thơm ngọt, giàu kali và năng lượng tự nhiên.','AVAILABLE','https://res.cloudinary.com/dfp44sbsj/image/upload/v1773916917/brands/n8ykdyjv59yavetdoj2l.jpg'),
-(@shop1_id,@cat_trai_cay,'Táo','kg',110000,30,'Táo Fuji nhập khẩu giòn ngọt, vỏ đỏ đẹp, bảo quản tươi lâu.','AVAILABLE','https://images.unsplash.com/photo-1560806887-1e4cd0b6cbd6?w=600&h=400&fit=crop'),
-(@shop1_id,@cat_trai_cay,'Mướp','kg',18000,60,'Mướp hương tươi ngon, nấu canh hay xào đều thơm ngon.','AVAILABLE','https://res.cloudinary.com/dfp44sbsj/image/upload/v1774249989/brands/o7csibhzy57s2wpmcus9.jpg'),
+-- SHOP 1 - CỦ THỰC PHẨM (AVAILABLE)
+(@shop1_id,@cat_cu_thuc_pham,'Cà rốt','kg',25000,100,'Cà rốt Đà Lạt tươi ngon, ngọt tự nhiên, giàu beta-carotene.','AVAILABLE','https://res.cloudinary.com/dfp44sbsj/image/upload/v1773916721/brands/uj1eoinkwvthfjvtpvpq.jpg'),
+(@shop1_id,@cat_cu_thuc_pham,'Khoai tây','kg',30000,80,'Khoai tây Đà Lạt dẻo thơm, thích hợp chiên, hầm, nấu canh.','AVAILABLE','https://res.cloudinary.com/dfp44sbsj/image/upload/v1773916676/brands/bmgnazybi0rro8bnxhwp.jpg'),
+(@shop1_id,@cat_cu_thuc_pham,'Khoai lang','kg',28000,70,'Khoai lang tím Đà Lạt ngọt bùi, giàu anthocyanin tốt cho tim mạch.','AVAILABLE','https://res.cloudinary.com/dfp44sbsj/image/upload/v1774249499/brands/pgdvlccom3lid5t24pnk.jpg'),
+(@shop1_id,@cat_cu_thuc_pham,'Củ cải trắng','kg',18000,70,'Củ cải trắng tươi ngọt thanh, nấu canh hoặc muối dưa đều ngon.','AVAILABLE','https://res.cloudinary.com/dfp44sbsj/image/upload/v1773943219/brands/dysl261o6o2bapfwurmf.jpg'),
+(@shop1_id,@cat_cu_thuc_pham,'Bí đỏ','kg',22000,60,'Bí đỏ bùi ngọt, giàu vitamin A, nấu canh hoặc hầm đều tuyệt.','AVAILABLE','https://res.cloudinary.com/dfp44sbsj/image/upload/v1773917463/brands/xjz74sedvolg7woxywpo.jpg'),
+-- SHOP 1 - CỦ GIA VỊ (AVAILABLE)
+(@shop1_id,@cat_cu_gia_vi,'Hành tây','kg',25000,80,'Hành tây tươi to tròn, thơm ngọt, dùng xào nấu hay ăn sống.','AVAILABLE','https://res.cloudinary.com/dfp44sbsj/image/upload/v1773943658/brands/qieeuppupbnypfoenpwg.jpg'),
+(@shop1_id,@cat_cu_gia_vi,'Tỏi','kg',85000,35,'Tỏi ta Lý Sơn đậm vị thơm nồng, gia vị không thể thiếu.','AVAILABLE','https://res.cloudinary.com/dfp44sbsj/image/upload/v1773943632/brands/zhw2ww8qghsqscht29xb.jpg'),
+(@shop1_id,@cat_cu_gia_vi,'Gừng','kg',55000,45,'Gừng tươi cay nồng ấm bụng, dùng nấu ăn, pha trà hay làm thuốc.','AVAILABLE','https://res.cloudinary.com/dfp44sbsj/image/upload/v1774249614/brands/ponetjgmfffbv8j8xpto.jpg'),
+(@shop1_id,@cat_cu_gia_vi,'Nghệ','kg',40000,30,'Nghệ tươi vàng óng, kháng viêm tự nhiên, dùng nấu ăn và làm đẹp.','AVAILABLE','https://res.cloudinary.com/dfp44sbsj/image/upload/v1774249845/brands/xafrqajebqsjhwhramh3.jpg'),
+(@shop1_id,@cat_cu_gia_vi,'Cần tây','bó',15000,40,'Cần tây xanh giòn, giàu chất xơ, tốt cho tiêu hóa và giảm cân.','AVAILABLE','https://res.cloudinary.com/dfp44sbsj/image/upload/v1774249561/brands/jtszr297g1cr4g25vqjj.webp'),
+-- SHOP 1 - TRÁI CÂY QUANH NĂM (AVAILABLE)
+(@shop1_id,@cat_trai_cay_quanh_nam,'Cà chua','kg',35000,50,'Cà chua đỏ tươi ngọt, giàu lycopene, ăn tươi hay nấu đều ngon.','AVAILABLE','https://res.cloudinary.com/dfp44sbsj/image/upload/v1773916530/brands/xjiiaehe5evwybwhmpmu.jpg'),
+(@shop1_id,@cat_trai_cay_quanh_nam,'Dưa leo','kg',15000,100,'Dưa leo sạch giòn mát, thích hợp salad hoặc ăn kèm.','AVAILABLE','https://res.cloudinary.com/dfp44sbsj/image/upload/v1773917431/brands/yif2icgotbydg5qvzvbf.jpg'),
+(@shop1_id,@cat_trai_cay_quanh_nam,'Ớt chuông','kg',55000,40,'Ớt chuông 3 màu giòn ngọt, giàu vitamin C.','AVAILABLE','https://res.cloudinary.com/dfp44sbsj/image/upload/v1774249920/brands/azkaanfoa7ommwnhxbv6.jpg'),
+(@shop1_id,@cat_trai_cay_quanh_nam,'Táo','kg',110000,30,'Táo Fuji nhập khẩu giòn ngọt, vỏ đỏ đẹp, bảo quản tươi lâu.','AVAILABLE','https://images.unsplash.com/photo-1560806887-1e4cd0b6cbd6?w=600&h=400&fit=crop'),
+(@shop1_id,@cat_trai_cay_quanh_nam,'Mướp','kg',18000,60,'Mướp hương tươi ngon, nấu canh hay xào đều thơm ngon.','AVAILABLE','https://res.cloudinary.com/dfp44sbsj/image/upload/v1774249989/brands/o7csibhzy57s2wpmcus9.jpg'),
+-- SHOP 1 - TRÁI CÂY NHIỆT ĐỚI (AVAILABLE)
+(@shop1_id,@cat_trai_cay_nhiet_doi,'Dâu tây','kg',180000,20,'Dâu tây Đà Lạt tươi chua ngọt, thu hoạch buổi sáng giao ngay.','AVAILABLE','https://res.cloudinary.com/dfp44sbsj/image/upload/v1773943061/brands/qtspypfmdjcxtsbme7xi.jpg'),
+(@shop1_id,@cat_trai_cay_nhiet_doi,'Chuối','nải',25000,20,'Chuối sứ chín vàng thơm ngọt, giàu kali và năng lượng tự nhiên.','AVAILABLE','https://res.cloudinary.com/dfp44sbsj/image/upload/v1773916917/brands/n8ykdyjv59yavetdoj2l.jpg'),
 -- SHOP 1 - PENDING (chờ admin duyệt)
-(@shop1_id,@cat_cu,'Khoai mỡ','kg',32000,50,'Khoai mỡ tím dẻo bùi, mới nhập từ vùng trồng Vĩnh Long, chờ kiểm duyệt.','PENDING','https://res.cloudinary.com/dfp44sbsj/image/upload/v1774251234/brands/vocydo64vc5ljrztscl8.jpg'),
-(@shop1_id,@cat_trai_cay,'Lê Hàn Quốc','kg',145000,15,'Lê Hàn Quốc nhập khẩu giòn ngọt, mới đăng bán chờ duyệt.','PENDING','https://images.unsplash.com/photo-1560806887-1e4cd0b6cbd6?w=600&h=400&fit=crop'),
-(@shop1_id,@cat_cu,'Khoai sọ Đà Lạt','kg',38000,25,'Khoai sọ Đà Lạt dẻo bùi, mới đăng chờ admin kiểm duyệt chất lượng.','PENDING','https://res.cloudinary.com/dfp44sbsj/image/upload/v1774249499/brands/pgdvlccom3lid5t24pnk.jpg'),
+(@shop1_id,@cat_cu_thuc_pham,'Khoai mỡ','kg',32000,50,'Khoai mỡ tím dẻo bùi, mới nhập từ vùng trồng Vĩnh Long, chờ kiểm duyệt.','PENDING','https://res.cloudinary.com/dfp44sbsj/image/upload/v1774251234/brands/vocydo64vc5ljrztscl8.jpg'),
+(@shop1_id,@cat_trai_cay_quanh_nam,'Lê Hàn Quốc','kg',145000,15,'Lê Hàn Quốc nhập khẩu giòn ngọt, mới đăng bán chờ duyệt.','PENDING','https://images.unsplash.com/photo-1560806887-1e4cd0b6cbd6?w=600&h=400&fit=crop'),
+(@shop1_id,@cat_cu_thuc_pham,'Khoai sọ Đà Lạt','kg',38000,25,'Khoai sọ Đà Lạt dẻo bùi, mới đăng chờ admin kiểm duyệt chất lượng.','PENDING','https://res.cloudinary.com/dfp44sbsj/image/upload/v1774249499/brands/pgdvlccom3lid5t24pnk.jpg'),
 -- SHOP 1 - OUT_OF_STOCK (hết hàng, stock=0)
-(@shop1_id,@cat_cu,'Củ đậu','kg',20000,0,'Củ đậu giòn mát, hiện đã hết hàng, chờ nhập thêm.','OUT_OF_STOCK','https://res.cloudinary.com/dfp44sbsj/image/upload/v1773943219/brands/dysl261o6o2bapfwurmf.jpg'),
-(@shop1_id,@cat_trai_cay,'Mận hậu','kg',95000,0,'Mận hậu Sơn La ngọt chua, hiện đã hết hàng theo mùa.','OUT_OF_STOCK','https://images.unsplash.com/photo-1464965911861-746a04b4bca6?w=400&h=300&fit=crop'),
-(@shop1_id,@cat_cu,'Củ năng','kg',22000,0,'Củ năng tươi giòn ngọt, hết hàng chờ mùa vụ mới.','OUT_OF_STOCK','https://res.cloudinary.com/dfp44sbsj/image/upload/v1773943711/brands/tjr6dujcccbiyqdpr4qk.jpg'),
+(@shop1_id,@cat_cu_thuc_pham,'Củ đậu','kg',20000,0,'Củ đậu giòn mát, hiện đã hết hàng, chờ nhập thêm.','OUT_OF_STOCK','https://res.cloudinary.com/dfp44sbsj/image/upload/v1773943219/brands/dysl261o6o2bapfwurmf.jpg'),
+(@shop1_id,@cat_trai_cay_nhiet_doi,'Mận hậu','kg',95000,0,'Mận hậu Sơn La ngọt chua, hiện đã hết hàng theo mùa.','OUT_OF_STOCK','https://images.unsplash.com/photo-1464965911861-746a04b4bca6?w=400&h=300&fit=crop'),
+(@shop1_id,@cat_cu_thuc_pham,'Củ năng','kg',22000,0,'Củ năng tươi giòn ngọt, hết hàng chờ mùa vụ mới.','OUT_OF_STOCK','https://res.cloudinary.com/dfp44sbsj/image/upload/v1773943711/brands/tjr6dujcccbiyqdpr4qk.jpg'),
 -- SHOP 1 - INACTIVE (bị từ chối khi đăng bán)
-(@shop1_id,@cat_cu,'Củ cải đỏ','kg',35000,0,'Sản phẩm bị từ chối do thiếu thông tin nguồn gốc xuất xứ.','INACTIVE','https://res.cloudinary.com/dfp44sbsj/image/upload/v1773943219/brands/dysl261o6o2bapfwurmf.jpg'),
-(@shop1_id,@cat_trai_cay,'Dưa lưới','kg',75000,0,'Sản phẩm bị từ chối do hình ảnh không đạt tiêu chuẩn đăng bán.','INACTIVE','https://images.unsplash.com/photo-1619566636858-adf3ef46400b?w=400&h=300&fit=crop'),
-(@shop1_id,@cat_cu,'Khoai tây chiên sẵn','gói',45000,0,'Sản phẩm bị từ chối do không thuộc danh mục nông sản tươi.','INACTIVE','https://res.cloudinary.com/dfp44sbsj/image/upload/v1773916676/brands/bmgnazybi0rro8bnxhwp.jpg'),
--- SHOP 2 - CỦ (AVAILABLE)
-(@shop2_id,@cat_cu,'Bí đao','kg',15000,60,'Bí đao tươi to, nấu canh giải nhiệt mùa hè rất mát.','AVAILABLE','https://res.cloudinary.com/dfp44sbsj/image/upload/v1774250920/brands/w0bf8nfrconotcqe8vec.jpg'),
-(@shop2_id,@cat_cu,'Bí ngòi','kg',18000,55,'Bí ngòi non tươi, xào nướng hay nấu canh đều ngon.','AVAILABLE','https://res.cloudinary.com/dfp44sbsj/image/upload/v1774250987/brands/z0qmi41ocaxbgaxa7kq1.jpg'),
-(@shop2_id,@cat_cu,'Su su','kg',20000,60,'Su su non tươi ngọt thanh, luộc hoặc xào đều giữ vị ngon.','AVAILABLE','https://res.cloudinary.com/dfp44sbsj/image/upload/v1773943711/brands/tjr6dujcccbiyqdpr4qk.jpg'),
-(@shop2_id,@cat_cu,'Cà tím','kg',22000,50,'Cà tím tươi bóng mướt, nướng mỡ hành hoặc hấp chấm nước mắm.','AVAILABLE','https://res.cloudinary.com/dfp44sbsj/image/upload/v1773943685/brands/sn8j7wqbpp6uhtitk5nf.jpg'),
-(@shop2_id,@cat_cu,'Hành tím','kg',45000,40,'Hành tím thơm nồng, gia vị không thể thiếu trong bếp Việt.','AVAILABLE','https://res.cloudinary.com/dfp44sbsj/image/upload/v1773943658/brands/qieeuppupbnypfoenpwg.jpg'),
-(@shop2_id,@cat_cu,'Sả','bó',10000,80,'Sả tươi thơm nồng, dùng xào nướng, nấu lẩu hay đuổi muỗi.','AVAILABLE','https://res.cloudinary.com/dfp44sbsj/image/upload/v1774251166/brands/s5xw72wtr6ezrs1ykpzo.jpg'),
-(@shop2_id,@cat_cu,'Khoai môn','kg',32000,40,'Khoai môn dẻo bùi thơm, nấu chè, hầm xương hoặc chiên đều ngon.','AVAILABLE','https://res.cloudinary.com/dfp44sbsj/image/upload/v1774251234/brands/vocydo64vc5ljrztscl8.jpg'),
-(@shop2_id,@cat_cu,'Ớt đỏ','kg',50000,35,'Ớt đỏ tươi cay nồng, dùng làm gia vị hay muối chua.','AVAILABLE','https://res.cloudinary.com/dfp44sbsj/image/upload/v1773943106/brands/eburdvo8w0tnequetwte.jpg'),
-(@shop2_id,@cat_cu,'Tỏi tây','cây',15000,40,'Tỏi tây tươi to, vị nhẹ hơn tỏi thường, dùng xào hay nấu súp.','AVAILABLE','https://res.cloudinary.com/dfp44sbsj/image/upload/v1773943632/brands/zhw2ww8qghsqscht29xb.jpg'),
--- SHOP 2 - QUẢ/TRÁI CÂY (AVAILABLE)
-(@shop2_id,@cat_trai_cay,'Dưa hấu','kg',12000,200,'Dưa hấu đỏ mọng nước, ngọt lịm, giải nhiệt mùa hè tuyệt vời.','AVAILABLE','https://res.cloudinary.com/dfp44sbsj/image/upload/v1773917373/brands/h0mivuwgipa6hssaawfi.jpg'),
-(@shop2_id,@cat_trai_cay,'Thanh long','kg',35000,80,'Thanh long ruột đỏ Bình Thuận ngọt đậm, giàu chất chống oxy hóa.','AVAILABLE','https://res.cloudinary.com/dfp44sbsj/image/upload/v1773917308/brands/dfm7lmlxne7nztndgk0m.jpg'),
-(@shop2_id,@cat_trai_cay,'Xoài','kg',85000,25,'Xoài cát Hòa Lộc thơm lừng vị ngọt đậm đà, đặc sản Tiền Giang.','AVAILABLE','https://images.unsplash.com/photo-1553279768-865429fa0078?w=600&h=400&fit=crop'),
-(@shop2_id,@cat_trai_cay,'Cam','kg',35000,150,'Cam sành Tiền Giang mọng nước, ngọt thanh, giàu vitamin C.','AVAILABLE','https://res.cloudinary.com/dfp44sbsj/image/upload/v1773916481/brands/s5ld5232nl4s4fwczawr.jpg'),
-(@shop2_id,@cat_trai_cay,'Bưởi','kg',65000,50,'Bưởi da xanh Bến Tre ngọt thanh, múi to không hạt, bổ dưỡng.','AVAILABLE','https://res.cloudinary.com/dfp44sbsj/image/upload/v1773917344/brands/c2i9gkbkl8vx7iwulwsz.png'),
-(@shop2_id,@cat_trai_cay,'Ổi','kg',30000,50,'Ổi ruột đỏ thơm giòn ngọt, giàu vitamin C, ăn tươi hoặc ép nước.','AVAILABLE','https://res.cloudinary.com/dfp44sbsj/image/upload/v1773942953/brands/ohl0lsjzhcq6pmqp4qmu.jpg'),
-(@shop2_id,@cat_trai_cay,'Nho','kg',120000,25,'Nho đen không hạt, ngọt đậm, giàu resveratrol tốt cho tim mạch.','AVAILABLE','https://res.cloudinary.com/dfp44sbsj/image/upload/v1773916419/brands/zdz1hvl9hcx6yyaq1wq3.jpg'),
+(@shop1_id,@cat_cu_thuc_pham,'Củ cải đỏ','kg',35000,0,'Sản phẩm bị từ chối do thiếu thông tin nguồn gốc xuất xứ.','INACTIVE','https://res.cloudinary.com/dfp44sbsj/image/upload/v1773943219/brands/dysl261o6o2bapfwurmf.jpg'),
+(@shop1_id,@cat_trai_cay_quanh_nam,'Dưa lưới','kg',75000,0,'Sản phẩm bị từ chối do hình ảnh không đạt tiêu chuẩn đăng bán.','INACTIVE','https://images.unsplash.com/photo-1619566636858-adf3ef46400b?w=400&h=300&fit=crop'),
+(@shop1_id,@cat_cu_thuc_pham,'Khoai tây chiên sẵn','gói',45000,0,'Sản phẩm bị từ chối do không thuộc danh mục nông sản tươi.','INACTIVE','https://res.cloudinary.com/dfp44sbsj/image/upload/v1773916676/brands/bmgnazybi0rro8bnxhwp.jpg'),
+-- SHOP 2 - CỦ THỰC PHẨM (AVAILABLE)
+(@shop2_id,@cat_cu_thuc_pham,'Bí đao','kg',15000,60,'Bí đao tươi to, nấu canh giải nhiệt mùa hè rất mát.','AVAILABLE','https://res.cloudinary.com/dfp44sbsj/image/upload/v1774250920/brands/w0bf8nfrconotcqe8vec.jpg'),
+(@shop2_id,@cat_cu_thuc_pham,'Bí ngòi','kg',18000,55,'Bí ngòi non tươi, xào nướng hay nấu canh đều ngon.','AVAILABLE','https://res.cloudinary.com/dfp44sbsj/image/upload/v1774250987/brands/z0qmi41ocaxbgaxa7kq1.jpg'),
+(@shop2_id,@cat_cu_thuc_pham,'Su su','kg',20000,60,'Su su non tươi ngọt thanh, luộc hoặc xào đều giữ vị ngon.','AVAILABLE','https://res.cloudinary.com/dfp44sbsj/image/upload/v1773943711/brands/tjr6dujcccbiyqdpr4qk.jpg'),
+(@shop2_id,@cat_cu_thuc_pham,'Cà tím','kg',22000,50,'Cà tím tươi bóng mướt, nướng mỡ hành hoặc hấp chấm nước mắm.','AVAILABLE','https://res.cloudinary.com/dfp44sbsj/image/upload/v1773943685/brands/sn8j7wqbpp6uhtitk5nf.jpg'),
+(@shop2_id,@cat_cu_thuc_pham,'Khoai môn','kg',32000,40,'Khoai môn dẻo bùi thơm, nấu chè, hầm xương hoặc chiên đều ngon.','AVAILABLE','https://res.cloudinary.com/dfp44sbsj/image/upload/v1774251234/brands/vocydo64vc5ljrztscl8.jpg'),
+-- SHOP 2 - CỦ GIA VỊ (AVAILABLE)
+(@shop2_id,@cat_cu_gia_vi,'Hành tím','kg',45000,40,'Hành tím thơm nồng, gia vị không thể thiếu trong bếp Việt.','AVAILABLE','https://res.cloudinary.com/dfp44sbsj/image/upload/v1773943658/brands/qieeuppupbnypfoenpwg.jpg'),
+(@shop2_id,@cat_cu_gia_vi,'Sả','bó',10000,80,'Sả tươi thơm nồng, dùng xào nướng, nấu lẩu hay đuổi muỗi.','AVAILABLE','https://res.cloudinary.com/dfp44sbsj/image/upload/v1774251166/brands/s5xw72wtr6ezrs1ykpzo.jpg'),
+(@shop2_id,@cat_cu_gia_vi,'Ớt đỏ','kg',50000,35,'Ớt đỏ tươi cay nồng, dùng làm gia vị hay muối chua.','AVAILABLE','https://res.cloudinary.com/dfp44sbsj/image/upload/v1773943106/brands/eburdvo8w0tnequetwte.jpg'),
+(@shop2_id,@cat_cu_gia_vi,'Tỏi tây','cây',15000,40,'Tỏi tây tươi to, vị nhẹ hơn tỏi thường, dùng xào hay nấu súp.','AVAILABLE','https://res.cloudinary.com/dfp44sbsj/image/upload/v1773943632/brands/zhw2ww8qghsqscht29xb.jpg'),
+-- SHOP 2 - TRÁI CÂY NHIỆT ĐỚI (AVAILABLE)
+(@shop2_id,@cat_trai_cay_nhiet_doi,'Dưa hấu','kg',12000,200,'Dưa hấu đỏ mọng nước, ngọt lịm, giải nhiệt mùa hè tuyệt vời.','AVAILABLE','https://res.cloudinary.com/dfp44sbsj/image/upload/v1773917373/brands/h0mivuwgipa6hssaawfi.jpg'),
+(@shop2_id,@cat_trai_cay_nhiet_doi,'Thanh long','kg',35000,80,'Thanh long ruột đỏ Bình Thuận ngọt đậm, giàu chất chống oxy hóa.','AVAILABLE','https://res.cloudinary.com/dfp44sbsj/image/upload/v1773917308/brands/dfm7lmlxne7nztndgk0m.jpg'),
+(@shop2_id,@cat_trai_cay_nhiet_doi,'Xoài','kg',85000,25,'Xoài cát Hòa Lộc thơm lừng vị ngọt đậm đà, đặc sản Tiền Giang.','AVAILABLE','https://images.unsplash.com/photo-1553279768-865429fa0078?w=600&h=400&fit=crop'),
+(@shop2_id,@cat_trai_cay_nhiet_doi,'Ổi','kg',30000,50,'Ổi ruột đỏ thơm giòn ngọt, giàu vitamin C, ăn tươi hoặc ép nước.','AVAILABLE','https://res.cloudinary.com/dfp44sbsj/image/upload/v1773942953/brands/ohl0lsjzhcq6pmqp4qmu.jpg'),
+-- SHOP 2 - TRÁI CÂY QUANH NĂM (AVAILABLE)
+(@shop2_id,@cat_trai_cay_quanh_nam,'Cam','kg',35000,150,'Cam sành Tiền Giang mọng nước, ngọt thanh, giàu vitamin C.','AVAILABLE','https://res.cloudinary.com/dfp44sbsj/image/upload/v1773916481/brands/s5ld5232nl4s4fwczawr.jpg'),
+(@shop2_id,@cat_trai_cay_quanh_nam,'Bưởi','kg',65000,50,'Bưởi da xanh Bến Tre ngọt thanh, múi to không hạt, bổ dưỡng.','AVAILABLE','https://res.cloudinary.com/dfp44sbsj/image/upload/v1773917344/brands/c2i9gkbkl8vx7iwulwsz.png'),
+(@shop2_id,@cat_trai_cay_quanh_nam,'Nho','kg',120000,25,'Nho đen không hạt, ngọt đậm, giàu resveratrol tốt cho tim mạch.','AVAILABLE','https://res.cloudinary.com/dfp44sbsj/image/upload/v1773916419/brands/zdz1hvl9hcx6yyaq1wq3.jpg'),
 -- SHOP 2 - PENDING (chờ admin duyệt)
-(@shop2_id,@cat_trai_cay,'Sầu riêng Musang King','kg',320000,10,'Sầu riêng Musang King Malaysia nhập khẩu, mới đăng chờ duyệt.','PENDING','https://images.unsplash.com/photo-1553279768-865429fa0078?w=600&h=400&fit=crop'),
-(@shop2_id,@cat_cu,'Củ sen','kg',55000,20,'Củ sen tươi giòn ngọt, mới đăng bán chờ admin kiểm duyệt.','PENDING','https://res.cloudinary.com/dfp44sbsj/image/upload/v1774251234/brands/vocydo64vc5ljrztscl8.jpg'),
-(@shop2_id,@cat_trai_cay,'Chôm chôm Java','kg',45000,30,'Chôm chôm Java ngọt thơm đặc sản miền Tây, chờ duyệt.','PENDING','https://images.unsplash.com/photo-1619566636858-adf3ef46400b?w=400&h=300&fit=crop'),
+(@shop2_id,@cat_trai_cay_nhiet_doi,'Sầu riêng Musang King','kg',320000,10,'Sầu riêng Musang King Malaysia nhập khẩu, mới đăng chờ duyệt.','PENDING','https://images.unsplash.com/photo-1553279768-865429fa0078?w=600&h=400&fit=crop'),
+(@shop2_id,@cat_cu_thuc_pham,'Củ sen','kg',55000,20,'Củ sen tươi giòn ngọt, mới đăng bán chờ admin kiểm duyệt.','PENDING','https://res.cloudinary.com/dfp44sbsj/image/upload/v1774251234/brands/vocydo64vc5ljrztscl8.jpg'),
+(@shop2_id,@cat_trai_cay_nhiet_doi,'Chôm chôm Java','kg',45000,30,'Chôm chôm Java ngọt thơm đặc sản miền Tây, chờ duyệt.','PENDING','https://images.unsplash.com/photo-1619566636858-adf3ef46400b?w=400&h=300&fit=crop'),
 -- SHOP 2 - OUT_OF_STOCK (hết hàng, stock=0)
-(@shop2_id,@cat_cu,'Măng tươi','kg',25000,0,'Măng tươi Đà Lạt, hiện đã hết hàng chờ nhập thêm.','OUT_OF_STOCK','https://res.cloudinary.com/dfp44sbsj/image/upload/v1774250920/brands/w0bf8nfrconotcqe8vec.jpg'),
-(@shop2_id,@cat_trai_cay,'Mít tố nữ','kg',45000,0,'Mít tố nữ miền Tây, hết hàng chưa vào mùa.','OUT_OF_STOCK','https://images.unsplash.com/photo-1619566636858-adf3ef46400b?w=400&h=300&fit=crop'),
-(@shop2_id,@cat_trai_cay,'Vú sữa Lò Rèn','kg',85000,0,'Vú sữa Lò Rèn Vĩnh Long đặc sản, hết hàng theo mùa.','OUT_OF_STOCK','https://images.unsplash.com/photo-1553279768-865429fa0078?w=600&h=400&fit=crop'),
+(@shop2_id,@cat_cu_thuc_pham,'Măng tươi','kg',25000,0,'Măng tươi Đà Lạt, hiện đã hết hàng chờ nhập thêm.','OUT_OF_STOCK','https://res.cloudinary.com/dfp44sbsj/image/upload/v1774250920/brands/w0bf8nfrconotcqe8vec.jpg'),
+(@shop2_id,@cat_trai_cay_nhiet_doi,'Mít tố nữ','kg',45000,0,'Mít tố nữ miền Tây, hết hàng chưa vào mùa.','OUT_OF_STOCK','https://images.unsplash.com/photo-1619566636858-adf3ef46400b?w=400&h=300&fit=crop'),
+(@shop2_id,@cat_trai_cay_nhiet_doi,'Vú sữa Lò Rèn','kg',85000,0,'Vú sữa Lò Rèn Vĩnh Long đặc sản, hết hàng theo mùa.','OUT_OF_STOCK','https://images.unsplash.com/photo-1553279768-865429fa0078?w=600&h=400&fit=crop'),
 -- SHOP 2 - INACTIVE (bị từ chối khi đăng bán)
-(@shop2_id,@cat_cu,'Củ cải muối sẵn','hũ',35000,0,'Sản phẩm bị từ chối do là thực phẩm chế biến, không phải nông sản tươi.','INACTIVE','https://res.cloudinary.com/dfp44sbsj/image/upload/v1773943219/brands/dysl261o6o2bapfwurmf.jpg'),
-(@shop2_id,@cat_trai_cay,'Nước ép cam đóng chai','chai',25000,0,'Sản phẩm bị từ chối do không thuộc danh mục nông sản tươi.','INACTIVE','https://res.cloudinary.com/dfp44sbsj/image/upload/v1773916481/brands/s5ld5232nl4s4fwczawr.jpg'),
-(@shop2_id,@cat_trai_cay,'Trái cây sấy khô','gói',65000,0,'Sản phẩm bị từ chối do thiếu giấy tờ kiểm định an toàn thực phẩm.','INACTIVE','https://images.unsplash.com/photo-1512621776951-a57141f2eefd?w=400&h=300&fit=crop');
+(@shop2_id,@cat_cu_thuc_pham,'Củ cải muối sẵn','hũ',35000,0,'Sản phẩm bị từ chối do là thực phẩm chế biến, không phải nông sản tươi.','INACTIVE','https://res.cloudinary.com/dfp44sbsj/image/upload/v1773943219/brands/dysl261o6o2bapfwurmf.jpg'),
+(@shop2_id,@cat_trai_cay_quanh_nam,'Nước ép cam đóng chai','chai',25000,0,'Sản phẩm bị từ chối do không thuộc danh mục nông sản tươi.','INACTIVE','https://res.cloudinary.com/dfp44sbsj/image/upload/v1773916481/brands/s5ld5232nl4s4fwczawr.jpg'),
+(@shop2_id,@cat_trai_cay_nhiet_doi,'Trái cây sấy khô','gói',65000,0,'Sản phẩm bị từ chối do thiếu giấy tờ kiểm định an toàn thực phẩm.','INACTIVE','https://images.unsplash.com/photo-1512621776951-a57141f2eefd?w=400&h=300&fit=crop');
 
 -- ============================================================
 -- 6. MYSTERY BOXES
@@ -479,23 +496,49 @@ VALUES (@shipper1_id,@os1,10.8670,106.7730,NOW());
 INSERT IGNORE INTO shipper_locations (shipper_id, order_id, latitude, longitude, updated_at)
 VALUES (@shipper3_id, NULL, 10.8651, 106.7752, NOW());
 -- ============================================================
--- 9. REVIEWS
+-- 9. REVIEWS  (14 reviews, trải đều 2–5 sao để demo bộ lọc)
 -- ============================================================
-SET @ood1=(SELECT order_detail_id FROM order_details WHERE order_id=@od1 LIMIT 1);
-SET @ood2=(SELECT order_detail_id FROM order_details WHERE order_id=@od1 LIMIT 1 OFFSET 1);
-SET @ood3=(SELECT order_detail_id FROM order_details WHERE order_id=@od2 LIMIT 1);
-SET @ood4=(SELECT order_detail_id FROM order_details WHERE order_id=@od4 LIMIT 1);
-SET @ood5=(SELECT order_detail_id FROM order_details WHERE order_id=@od5 LIMIT 1);
+-- order_details đã DELIVERED – mỗi dòng 1 biến
+SET @ood1 =(SELECT order_detail_id FROM order_details WHERE order_id=@od1 ORDER BY order_detail_id LIMIT 1);           -- cà rốt   (od1/shop1)
+SET @ood2 =(SELECT order_detail_id FROM order_details WHERE order_id=@od1 ORDER BY order_detail_id LIMIT 1 OFFSET 1);  -- khoai tây (od1/shop1)
+SET @ood3 =(SELECT order_detail_id FROM order_details WHERE order_id=@od2 ORDER BY order_detail_id LIMIT 1);           -- dâu tây   (od2/shop1)
+SET @ood4 =(SELECT order_detail_id FROM order_details WHERE order_id=@od2 ORDER BY order_detail_id LIMIT 1 OFFSET 1);  -- táo       (od2/shop1)
+SET @ood5 =(SELECT order_detail_id FROM order_details WHERE order_id=@od2 ORDER BY order_detail_id LIMIT 1 OFFSET 2);  -- chuối     (od2/shop1)
+SET @ood6 =(SELECT order_detail_id FROM order_details WHERE order_id=@od3 ORDER BY order_detail_id LIMIT 1);           -- cam       (od3/shop2)
+SET @ood7 =(SELECT order_detail_id FROM order_details WHERE order_id=@od3 ORDER BY order_detail_id LIMIT 1 OFFSET 1);  -- dưa hấu   (od3/shop2)
+SET @ood8 =(SELECT order_detail_id FROM order_details WHERE order_id=@od3 ORDER BY order_detail_id LIMIT 1 OFFSET 2);  -- thanh long(od3/shop2)
+SET @ood9 =(SELECT order_detail_id FROM order_details WHERE order_id=@od4 ORDER BY order_detail_id LIMIT 1);           -- xoài      (od4/shop2)
+SET @ood10=(SELECT order_detail_id FROM order_details WHERE order_id=@od4 ORDER BY order_detail_id LIMIT 1 OFFSET 1);  -- bưởi      (od4/shop2)
+SET @ood11=(SELECT order_detail_id FROM order_details WHERE order_id=@od4 ORDER BY order_detail_id LIMIT 1 OFFSET 2);  -- cam       (od4/shop2)
+SET @ood12=(SELECT order_detail_id FROM order_details WHERE order_id=@od5 ORDER BY order_detail_id LIMIT 1);           -- nho       (od5/shop2)
+SET @ood13=(SELECT order_detail_id FROM order_details WHERE order_id=@od5 ORDER BY order_detail_id LIMIT 1 OFFSET 1);  -- thanh long(od5/shop2)
+SET @ood14=(SELECT order_detail_id FROM order_details WHERE order_id=@od5 ORDER BY order_detail_id LIMIT 1 OFFSET 2);  -- ổi        (od5/shop2)
 
 INSERT INTO reviews (buyer_id,shop_owner_id,order_detail_id,rating_star,comment,evidence,reply_from_shop) VALUES
+-- ★★★★★ 5 sao
 (@buyer1_id,@shop1_id,@ood1,5.0,'Cà rốt rất tươi, to đều, ngọt tự nhiên! Đóng gói cẩn thận, giao nhanh. Sẽ ủng hộ thường xuyên!','https://images.unsplash.com/photo-1540420773420-3366772f4999?w=400&h=300&fit=crop','Cảm ơn bạn đã tin tưởng Nông Sản Xấu Mã! 🥕'),
-(@buyer1_id,@shop1_id,@ood2,4.0,'Khoai tây Đà Lạt dẻo thơm, bí đỏ ngọt bùi. Hài lòng!',NULL,'Cảm ơn bạn đã đánh giá! Chúng tôi sẽ cố gắng hoàn thiện hơn!'),
-(@buyer1_id,@shop1_id,@ood3,5.0,'Dâu tây Đà Lạt tuyệt vời! Táo giòn ngọt. Đáng tiền lắm!','https://images.unsplash.com/photo-1464965911861-746a04b4bca6?w=400&h=300&fit=crop','Dâu tây nhập trực tiếp từ Đà Lạt mỗi sáng 🍓'),
-(@buyer1_id,@shop2_id,@ood4,4.5,'Cam ngọt lịm, dưa hấu đỏ au. Đóng gói cẩn thận không bị dập.',NULL,'Cảm ơn bạn đã ủng hộ Vườn Trái Cây Bình Dương! 🍊'),
-(@buyer1_id,@shop2_id,@ood5,5.0,'Xoài thơm lừng, bưởi không hạt, cam ngon xuất sắc!','https://images.unsplash.com/photo-1553279768-865429fa0078?w=400&h=300&fit=crop','Đây đều là đặc sản miền Tây chính gốc! 🌟');
+(@buyer1_id,@shop1_id,@ood3,5.0,'Dâu tây Đà Lạt chua ngọt hoàn hảo, hái buổi sáng giao trưa vẫn còn tươi nguyên! Sẽ đặt lại.','https://images.unsplash.com/photo-1464965911861-746a04b4bca6?w=400&h=300&fit=crop','Dâu tây nhập trực tiếp từ Đà Lạt mỗi sáng sớm 🍓'),
+(@buyer1_id,@shop2_id,@ood12,5.0,'Nho đen không hạt ngọt đậm, bưởi múi to mọng nước, xoài thơm lừng. Combo hoàn hảo!','https://images.unsplash.com/photo-1553279768-865429fa0078?w=400&h=300&fit=crop','Đây đều là đặc sản miền Tây chính gốc, cảm ơn bạn rất nhiều! 🌟'),
+-- ★★★★ 4 sao
+(@buyer1_id,@shop1_id,@ood2,4.0,'Khoai tây Đà Lạt dẻo thơm, bí đỏ ngọt bùi. Hài lòng với chất lượng!',NULL,'Cảm ơn bạn! Chúng tôi sẽ cố gắng hoàn thiện hơn mỗi ngày 🌿'),
+(@buyer1_id,@shop1_id,@ood4,4.0,'Táo Fuji giòn ngọt, vỏ đỏ đẹp. Tuy nhiên một vài quả hơi nhỏ hơn hình. Nhìn chung ổn.',NULL,'Cảm ơn bạn đã phản hồi! Lần sau sẽ chọn quả to đều hơn cho bạn 🍎'),
+(@buyer1_id,@shop2_id,@ood9,4.0,'Xoài cát Hòa Lộc thơm, ngọt vừa. Giao hàng cẩn thận không bị dập. Sẽ đặt lại.',NULL,'Xoài cát Hòa Lộc là đặc sản Tiền Giang, cảm ơn bạn ủng hộ! 🥭'),
+-- ★★★ 3 sao
+(@buyer1_id,@shop2_id,@ood7,3.0,'Dưa hấu tươi nhưng vị hơi nhạt, không đỏ ruột như hình mô tả. Chấp nhận được với mức giá này.',NULL,'Xin lỗi vì trải nghiệm chưa tốt! Dưa hấu phụ thuộc mùa vụ, chúng tôi sẽ cải thiện 🍉'),
+(@buyer1_id,@shop2_id,@ood10,3.0,'Bưởi da xanh múi to nhưng hơi đắng ở phần gần vỏ. Ăn được nhưng chưa ngọt như kỳ vọng.',NULL,'Cảm ơn bạn đã phản hồi chân thực! Bưởi tươi gần thu hoạch nên vị hay đổi 🍋'),
+(@buyer1_id,@shop2_id,@ood11,3.0,'Cam sành tươi, nước nhiều, nhưng độ ngọt không đồng đều, một số quả khá chua.',NULL,'Xin lỗi bạn! Cam sành vụ này ít nắng nên vị không đồng đều, sẽ cải thiện 🍊'),
+(@buyer1_id,@shop2_id,@ood14,3.0,'Ổi ruột đỏ còn khá cứng, chưa chín đều. Phải để thêm 1-2 ngày mới ăn được.',NULL,'Xin lỗi bạn! Chúng tôi sẽ chú ý độ chín hơn khi đóng gói 🍐'),
+-- ★★ 2 sao
+(@buyer1_id,@shop1_id,@ood5,2.0,'Chuối giao đến bị dập nhiều, một nửa đã thâm đen. Không được như kỳ vọng với mức giá này.','https://images.unsplash.com/photo-1571771894821-ce9b6c11b08e?w=400&h=300&fit=crop','Rất xin lỗi bạn! Đây là sự cố đóng gói, chúng tôi sẽ hoàn tiền và cải thiện ngay 🙏'),
+(@buyer1_id,@shop2_id,@ood6,2.0,'Cam sành mua về chua lét, không ngọt gì cả. Mô tả "ngọt thanh" nhưng thực tế không đúng. Thất vọng.','https://images.unsplash.com/photo-1547036967-23d11aacaee0?w=400&h=300&fit=crop','Thành thật xin lỗi bạn! Lô cam này có vấn đề, chúng tôi sẽ liên hệ bù hàng cho bạn 🙏'),
+(@buyer1_id,@shop2_id,@ood8,2.0,'Thanh long ruột đỏ nhưng gần nửa số quả đã bị nhũn khi nhận. Đóng gói quá kém, lãng phí tiền.',NULL,'Rất xin lỗi! Đây là sự cố vận chuyển, chúng tôi cam kết cải thiện khâu đóng gói 🙏'),
+(@buyer1_id,@shop2_id,@ood13,2.0,'Thanh long nhận về 5 quả thì 3 quả đã nhũn, không ăn được. Shipper giao quá lâu hay do đóng gói kém?',NULL,'Xin lỗi bạn rất nhiều! Chúng tôi sẽ hoàn tiền 3 quả bị hỏng và cải thiện khâu đóng gói ngay 🙏');
 
-UPDATE users SET rating_average=4.8 WHERE id=@shop1_id;
-UPDATE users SET rating_average=4.7 WHERE id=@shop2_id;
+-- Cập nhật rating shop theo trung bình thực tế
+-- Shop1: (5+5+5+4+4+4+2) / 7 ≈ 4.1
+-- Shop2: (4+4+3+3+3+3+2+2+2+2) / 10 = 2.8 → 2.8 (thể hiện sự khác biệt rõ cho demo)
+UPDATE users SET rating_average=4.1 WHERE id=@shop1_id;
+UPDATE users SET rating_average=2.8 WHERE id=@shop2_id;
 
 -- ============================================================
 -- 10. PAYMENTS
@@ -517,6 +560,12 @@ INSERT INTO withdraw_requests (admin_id,wallet_id,reason,admin_note,created_at,p
 (@admin_id,@wallet_shop1_id,'Rút tiền doanh thu tháng này','Đã xác nhận, đang xử lý',DATE_SUB(NOW(),INTERVAL 1 DAY),DATE_SUB(NOW(),INTERVAL 12 HOUR),'APPROVED',100000,2500,97500,'Vietcombank','0071000123456','TRAN VAN KIET','PAYOS','PENDING'),
 (@admin_id,@wallet_shop2_id,'Rút tiền tuần',NULL,DATE_SUB(NOW(),INTERVAL 2 HOUR),NULL,'PENDING',150000,3750,146250,'Techcombank','19034567890123','LE THI NGOC','PAYOS','CREATED'),
 (@admin_id,@wallet_shop1_id,'Rút tiền tuần trước','Đã chuyển khoản thành công',DATE_SUB(NOW(),INTERVAL 7 DAY),DATE_SUB(NOW(),INTERVAL 6 DAY),'SUCCESS',128000,3200,124800,'Vietcombank','0071000123456','TRAN VAN KIET','PAYOS','SUCCESS');
+
+-- Shipper rút tiền
+INSERT INTO withdraw_requests (admin_id,wallet_id,reason,admin_note,created_at,processed_at,status,amount,fee,receive_amount,bank_name,bank_account_number,bank_account_holder,payout_provider,payout_status) VALUES
+(@admin_id,@wallet_shipper1_id,'Rút lương tuần 1','Đã chuyển khoản thành công',DATE_SUB(NOW(),INTERVAL 10 DAY),DATE_SUB(NOW(),INTERVAL 9 DAY),'SUCCESS',55000,0,55000,'Vietcombank','0071000999888','NGUYEN VAN HOANG','PAYOS','SUCCESS'),
+(@admin_id,@wallet_shipper1_id,'Rút tiền cuối tháng',NULL,DATE_SUB(NOW(),INTERVAL 1 DAY),NULL,'PENDING',50000,0,50000,'Vietcombank','0071000999888','NGUYEN VAN HOANG','PAYOS','PENDING'),
+(@admin_id,@wallet_shipper3_id,'Rút lương tháng trước','Đã chuyển khoản thành công',DATE_SUB(NOW(),INTERVAL 15 DAY),DATE_SUB(NOW(),INTERVAL 14 DAY),'SUCCESS',30000,0,30000,'MB Bank','0987654321098','PHAM THI BICH THUY','PAYOS','SUCCESS');
 
 -- ============================================================
 -- 12. NOTIFICATIONS
@@ -544,11 +593,63 @@ INSERT INTO user_notifications (user_id,notification_id,is_read,is_deleted) VALU
 
 -- ============================================================
 -- 13. BLOGS
+-- category phải khớp với APP filter (toUpperCase):
+--   XU HƯỚNG  → XU_HUONG  | NHÀ NÔNG → NHA_NONG
+--   SỨC KHỎE  → SUC_KHOE  | CẨM NANG → CAM_NANG
 -- ============================================================
 INSERT INTO blogs (admin_id,title,content,picture_url,status,category,create_at) VALUES
-(@admin_id,'Mẹo chọn củ quả tươi ngon không hóa chất','Việc lựa chọn củ quả sạch là ưu tiên hàng đầu.\n\n1. Màu sắc tự nhiên, không bóng bẩy.\n2. Củ chắc tay, không bị mềm hay thối.\n3. Có thể có vết xước nhỏ - ít thuốc BVTV.\n4. Ngửi thấy mùi tự nhiên đặc trưng.','https://images.unsplash.com/photo-1542838132-92c53300491e?w=800&h=400&fit=crop','PUBLISHED','Kiến thức',NOW()),
-(@admin_id,'Thực đơn detox củ quả 7 ngày cho người bận rộn','Detox bằng củ quả không cần phức tạp:\n- Sáng: Nước ép cà rốt + táo + gừng\n- Trưa: Salad dưa leo + cà chua + ớt chuông\n- Tối: Canh bí đỏ hầm khoai tây','https://res.cloudinary.com/dfp44sbsj/image/upload/v1773920858/brands/a23bsuby6hhu2ty2r3bb.jpg','PUBLISHED','Sức khỏe',NOW()),
-(@admin_id,'Trái cây miền Nam theo mùa - Nên mua gì?','Mùa hè là thời điểm vàng của trái cây Nam Bộ:\n- Xoài cát Hòa Lộc: ngọt đậm thơm lừng\n- Thanh long ruột đỏ: mọng nước bổ dưỡng\n- Bưởi da xanh: thanh ngọt không hạt\n- Ổi ruột đỏ: giòn ngọt vitamin C cao','https://res.cloudinary.com/dfp44sbsj/image/upload/v1773921072/brands/zhzaxj3de5vhhuw2ankp.jpg','PUBLISHED','Tin tức',NOW());
+
+-- ── XU HƯỚNG ─────────────────────────────────────────────
+(@admin_id,
+ 'Trái cây miền Nam theo mùa - Nên mua gì?',
+ 'Mùa hè là thời điểm vàng của trái cây Nam Bộ:\n- Xoài cát Hòa Lộc: ngọt đậm thơm lừng\n- Thanh long ruột đỏ: mọng nước bổ dưỡng\n- Bưởi da xanh: thanh ngọt không hạt\n- Ổi ruột đỏ: giòn ngọt vitamin C cao',
+ 'https://res.cloudinary.com/dfp44sbsj/image/upload/v1773921072/brands/zhzaxj3de5vhhuw2ankp.jpg',
+ 'PUBLISHED','XU_HUONG',DATE_SUB(NOW(),INTERVAL 1 DAY)),
+
+(@admin_id,
+ 'Xu hướng mua nông sản online năm 2026',
+ 'Thị trường thương mại điện tử nông sản Việt Nam đang bùng nổ:\n\n1. Nông sản hữu cơ (organic) tăng 45% so với năm trước.\n2. Người tiêu dùng ưu tiên sản phẩm có tem VietGAP, GlobalGAP.\n3. Giao hàng trong ngày (same-day delivery) trở thành tiêu chuẩn.\n4. Review video ngắn trên mạng xã hội thúc đẩy quyết định mua.\n5. Combo rau củ theo tuần ngày càng được yêu thích.',
+ 'https://images.unsplash.com/photo-1488459716781-31db52582fe9?w=800&h=400&fit=crop',
+ 'PUBLISHED','XU_HUONG',DATE_SUB(NOW(),INTERVAL 3 DAY)),
+
+-- ── NHÀ NÔNG ─────────────────────────────────────────────
+(@admin_id,
+ 'Bí quyết trồng rau sạch tại nhà dễ dàng',
+ 'Trồng rau tại nhà không cần nhiều diện tích:\n\n1. Chọn chậu sâu ít nhất 20cm để rễ phát triển tốt.\n2. Dùng đất trộn xơ dừa + phân hữu cơ tỷ lệ 2:1.\n3. Tưới nước buổi sáng sớm, tránh tưới buổi trưa nắng.\n4. Bón phân hữu cơ 2 tuần/lần thay vì phân hóa học.\n5. Rau muống, cải xanh, rau húng dễ trồng nhất cho người mới.\n\nKhởi đầu với 3-4 loại rau là đủ, đừng trồng quá nhiều cùng lúc!',
+ 'https://images.unsplash.com/photo-1416879595882-3373a0480b5b?w=800&h=400&fit=crop',
+ 'PUBLISHED','NHA_NONG',DATE_SUB(NOW(),INTERVAL 2 DAY)),
+
+(@admin_id,
+ 'Nông dân Đà Lạt chia sẻ bí kíp trồng rau',
+ 'Anh Nguyễn Văn Minh, nông dân Đà Lạt 20 năm kinh nghiệm chia sẻ:\n\n"Bí quyết lớn nhất là hiểu đất và nghe cây nói. Khi lá vàng nhạt là thiếu đạm, lá xoăn là thiếu nước, lá cháy viền là bón phân quá nhiều."\n\nKinh nghiệm thực tế:\n- Luân canh 3 vụ/năm để đất không bị bạc màu\n- Tủ rơm giữ ẩm giảm tưới 30-40%\n- Trồng hoa cúc vạn thọ xung quanh để xua đuổi sâu bọ tự nhiên\n- Bẫy côn trùng bằng bẫy dính vàng thay thuốc trừ sâu',
+ 'https://images.unsplash.com/photo-1560493676-04071c5f467b?w=800&h=400&fit=crop',
+ 'PUBLISHED','NHA_NONG',DATE_SUB(NOW(),INTERVAL 5 DAY)),
+
+-- ── SỨC KHỎE ─────────────────────────────────────────────
+(@admin_id,
+ 'Thực đơn detox củ quả 7 ngày cho người bận rộn',
+ 'Detox bằng củ quả không cần phức tạp:\n- Sáng: Nước ép cà rốt + táo + gừng\n- Trưa: Salad dưa leo + cà chua + ớt chuông\n- Tối: Canh bí đỏ hầm khoai tây\n\nLợi ích sau 7 ngày detox:\n1. Da sáng hơn, bớt mụn\n2. Tiêu hóa cải thiện rõ rệt\n3. Cơ thể nhẹ nhàng hơn 1-2kg\n4. Giấc ngủ sâu hơn\n\nLưu ý: Uống đủ 2 lít nước mỗi ngày trong suốt quá trình detox.',
+ 'https://res.cloudinary.com/dfp44sbsj/image/upload/v1773920858/brands/a23bsuby6hhu2ty2r3bb.jpg',
+ 'PUBLISHED','SUC_KHOE',NOW()),
+
+(@admin_id,
+ 'Ăn rau củ đúng cách giúp tăng sức đề kháng',
+ 'Rau củ là "vũ khí" tự nhiên tăng miễn dịch:\n\nVitamin C (ổi, ớt chuông, bưởi): tăng sản sinh bạch cầu, bảo vệ tế bào.\nBeta-carotene (cà rốt, bí đỏ, khoai lang): chống oxy hóa mạnh mẽ.\nZinc (tỏi, hành tây): kháng khuẩn, kháng virus hiệu quả.\n\nMẹo ăn đúng cách:\n- Nấu chín vừa tới, không nhừ quá - giảm vitamin\n- Ăn đa dạng màu sắc mỗi ngày (xanh, đỏ, vàng, tím)\n- Kết hợp rau sống và rau chín để hấp thụ tối đa dinh dưỡng\n- Ăn tỏi sống sau khi để 10 phút cắt/đập cho allicin phát huy tác dụng',
+ 'https://images.unsplash.com/photo-1512621776951-a57141f2eefd?w=800&h=400&fit=crop',
+ 'PUBLISHED','SUC_KHOE',DATE_SUB(NOW(),INTERVAL 4 DAY)),
+
+-- ── CẨM NANG ─────────────────────────────────────────────
+(@admin_id,
+ 'Mẹo chọn củ quả tươi ngon không hóa chất',
+ 'Việc lựa chọn củ quả sạch là ưu tiên hàng đầu.\n\n1. Màu sắc tự nhiên, không bóng bẩy quá mức.\n2. Củ chắc tay, không bị mềm hay có mùi lạ.\n3. Vết xước nhỏ là dấu hiệu ít thuốc BVTV.\n4. Ngửi thấy mùi tự nhiên đặc trưng.\n\nDấu hiệu nhận biết hàng kém chất lượng:\n- Màu sắc đồng đều bất thường, quá đẹp\n- Để lâu không héo - có thể bảo quản hóa chất\n- Mùi hăng nhẹ, không phải mùi đất tự nhiên\n- Bề mặt trơn bóng, không có "lông" tự nhiên',
+ 'https://images.unsplash.com/photo-1542838132-92c53300491e?w=800&h=400&fit=crop',
+ 'PUBLISHED','CAM_NANG',DATE_SUB(NOW(),INTERVAL 6 DAY)),
+
+(@admin_id,
+ 'Cách bảo quản rau củ tươi lâu trong tủ lạnh',
+ 'Bảo quản đúng cách giúp rau củ tươi lâu gấp đôi:\n\nRau lá (cải, rau muống, xà lách):\n- Bọc giấy báo ẩm, cho vào túi zipper, ngăn mát 3-5 ngày\n\nCủ (cà rốt, khoai tây, cải củ):\n- Không rửa trước khi cất, bọc túi lưới ngăn mát 1-2 tuần\n- Khoai tây: để nơi tối, thoáng, không cần tủ lạnh\n\nTrái cây:\n- Chưa chín: để nhiệt độ phòng\n- Đã chín (chuối, xoài, ổi): ngăn mát 3-5 ngày\n- Trái cây chua (cam, bưởi, thanh long): ngăn mát 7-10 ngày\n\nMẹo: Tách riêng chuối ra khỏi trái cây khác vì chuối thải ethylene làm trái chín nhanh hơn.',
+ 'https://images.unsplash.com/photo-1490818387583-1baba5e638af?w=800&h=400&fit=crop',
+ 'PUBLISHED','CAM_NANG',DATE_SUB(NOW(),INTERVAL 8 DAY));
 
 -- ============================================================
 -- 14. BOT KNOWLEDGE
@@ -735,6 +836,26 @@ INSERT INTO orders (buyer_id,shop_owner_id,shipper_id,shipping_fee,recipient_nam
 VALUES (@buyer1_id,@shop2_id,@shipper1_id,15000,'Ngô Gia Sang','0911111111','A15 Tiền Giang, Đông Hòa, Dĩ An, Bình Dương',10.8978,106.7731,10.9021,106.7698,'Trái cây nhiệt đới bí ẩn!','DELIVERED',164000,'COD',DATE_SUB(NOW(),INTERVAL 6 DAY));
 SET @od_box2=(SELECT order_id FROM orders WHERE status='DELIVERED' AND shop_owner_id=@shop2_id AND note='Trái cây nhiệt đới bí ẩn!' LIMIT 1);
 INSERT INTO order_mystery_boxes (order_id,mystery_box_id,quantity) VALUES (@od_box2,@box2_s2,1);
+
+-- ============================================================
+-- 20b. THÊM ĐƠN DELIVERED LỊCH SỬ CHO SHIPPER (dùng cho màn Thu nhập)
+-- ============================================================
+-- 5 đơn thêm cho shipper1 (tổng cộng 12 đơn × 15000 = 180000đ)
+INSERT INTO orders (buyer_id,shop_owner_id,shipper_id,shipping_fee,recipient_name,recipient_phone,shipping_address,shipping_latitude,shipping_longitude,shop_latitude,shop_longitude,note,status,total_amount,payment_method,created_at)
+VALUES
+(@buyer1_id,@shop1_id,@shipper1_id,15000,'Ngô Gia Sang','0911111111','Đ. Võ Trường Toản, Linh Trung, Thủ Đức, TP.HCM',10.8651,106.7752,10.8697,106.7717,'Cà rốt hữu cơ, rau cải sạch','DELIVERED',98000,'COD',DATE_SUB(NOW(),INTERVAL 1 DAY)),
+(@buyer1_id,@shop2_id,@shipper1_id,15000,'Ngô Gia Sang','0911111111','A15 Tiền Giang, Đông Hòa, Dĩ An, Bình Dương',10.8978,106.7731,10.9021,106.7698,'Xoài cát Hòa Lộc ngon tuyệt','DELIVERED',145000,'PAYOS',DATE_SUB(NOW(),INTERVAL 2 DAY)),
+(@buyer1_id,@shop1_id,@shipper1_id,15000,'Ngô Gia Sang','0911111111','Đ. Võ Trường Toản, Linh Trung, Thủ Đức, TP.HCM',10.8651,106.7752,10.8697,106.7717,'Khoai lang mật siêu ngọt','DELIVERED',112000,'COD',DATE_SUB(NOW(),INTERVAL 3 DAY)),
+(@buyer1_id,@shop2_id,@shipper1_id,15000,'Ngô Gia Sang','0911111111','A15 Tiền Giang, Đông Hòa, Dĩ An, Bình Dương',10.8978,106.7731,10.9021,106.7698,'Bưởi da xanh, cam sành tươi','DELIVERED',178000,'PAYOS',DATE_SUB(NOW(),INTERVAL 4 DAY)),
+(@buyer1_id,@shop1_id,@shipper1_id,15000,'Ngô Gia Sang','0911111111','Đ. Võ Trường Toản, Linh Trung, Thủ Đức, TP.HCM',10.8651,106.7752,10.8697,106.7717,'Giao đúng giờ, rất hài lòng','DELIVERED',135000,'COD',DATE_SUB(NOW(),INTERVAL 7 DAY));
+
+-- 4 đơn cho shipper3 (tổng 4 đơn × 15000 = 60000đ)
+INSERT INTO orders (buyer_id,shop_owner_id,shipper_id,shipping_fee,recipient_name,recipient_phone,shipping_address,shipping_latitude,shipping_longitude,shop_latitude,shop_longitude,note,status,total_amount,payment_method,created_at)
+VALUES
+(@buyer1_id,@shop1_id,@shipper3_id,15000,'Ngô Gia Sang','0911111111','Đ. Võ Trường Toản, Linh Trung, Thủ Đức, TP.HCM',10.8651,106.7752,10.8697,106.7717,'Rau củ tươi ngon','DELIVERED',89000,'COD',DATE_SUB(NOW(),INTERVAL 8 DAY)),
+(@buyer1_id,@shop2_id,@shipper3_id,15000,'Ngô Gia Sang','0911111111','A15 Tiền Giang, Đông Hòa, Dĩ An, Bình Dương',10.8978,106.7731,10.9021,106.7698,'Trái cây nhiệt đới ngon','DELIVERED',125000,'PAYOS',DATE_SUB(NOW(),INTERVAL 10 DAY)),
+(@buyer1_id,@shop1_id,@shipper3_id,15000,'Ngô Gia Sang','0911111111','Đ. Võ Trường Toản, Linh Trung, Thủ Đức, TP.HCM',10.8651,106.7752,10.8697,106.7717,'Hàng tươi sạch như mô tả','DELIVERED',97000,'COD',DATE_SUB(NOW(),INTERVAL 12 DAY)),
+(@buyer1_id,@shop2_id,@shipper3_id,15000,'Ngô Gia Sang','0911111111','A15 Tiền Giang, Đông Hòa, Dĩ An, Bình Dương',10.8978,106.7731,10.9021,106.7698,'Dứa mật siêu thơm','DELIVERED',110000,'PAYOS',DATE_SUB(NOW(),INTERVAL 14 DAY));
 
 -- ============================================================
 -- 21. TRANSACTIONS

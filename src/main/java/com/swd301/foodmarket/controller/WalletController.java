@@ -33,7 +33,7 @@ public class WalletController {
 
         // Shipper xem ví
         @GetMapping("/shipper/me")
-        @PreAuthorize("hasAnyRole('SHOP_OWNER')")
+        @PreAuthorize("hasRole('SHIPPER')")
         public ApiResponse<WalletResponse> myShipperWallet() {
                 return ApiResponse.<WalletResponse>builder()
                                 .result(walletService.getMyShipperWallet())

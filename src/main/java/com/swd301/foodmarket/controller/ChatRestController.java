@@ -30,7 +30,6 @@ import java.util.List;
 @RequiredArgsConstructor
 @Slf4j
 public class ChatRestController {
-
     private final ChatService chatService;
     private final UserRepository userRepository;
 
