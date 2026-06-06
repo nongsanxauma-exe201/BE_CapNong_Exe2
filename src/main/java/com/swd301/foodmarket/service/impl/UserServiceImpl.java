@@ -36,7 +36,11 @@ import org.springframework.data.domain.Pageable;
 import org.springframework.data.domain.Sort;
 import org.springframework.web.multipart.MultipartFile;
 
+import org.springframework.core.io.ClassPathResource;
+
+import java.io.InputStream;
 import java.math.BigDecimal;
+import java.nio.charset.StandardCharsets;
 import java.time.LocalDateTime;
 import java.util.List;
 import java.util.stream.Collectors;
@@ -356,6 +360,29 @@ public class UserServiceImpl implements UserService {
     }
 
     @Override
+    public PageResponse<UserResponse> getUsersByRolePaged(List<String> roles, String status, int page, int size) {
+        log.info("Getting users by roles={} status={} paged: page={}, size={}", roles, status, page, size);
+        Pageable pageable = PageRequest.of(page, size, Sort.by("id").descending());
+        List<RoleName> roleNames = roles.stream().map(RoleName::valueOf).toList();
+        Page<User> pageResult;
+        if (status != null && !status.isBlank()) {
+            UserStatus userStatus = UserStatus.valueOf(status);
+            pageResult = userRepository.findByRole_NameInAndStatus(roleNames, userStatus, pageable);
+        } else {
+            pageResult = userRepository.findByRole_NameIn(roleNames, pageable);
+        }
+        return PageResponse.<UserResponse>builder()
+                .content(pageResult.getContent().stream().map(userMapper::toUserResponse).toList())
+                .page(pageResult.getNumber())
+                .size(pageResult.getSize())
+                .totalElements(pageResult.getTotalElements())
+                .totalPages(pageResult.getTotalPages())
+                .first(pageResult.isFirst())
+                .last(pageResult.isLast())
+                .build();
+    }
+
+    @Override
     public void deleteUser(Integer userId) {
         log.info("Deleting user with ID: {}", userId);
 
@@ -418,6 +445,7 @@ public class UserServiceImpl implements UserService {
         User approvedUser = userRepository.save(user);
 
         log.info("Shop owner approved successfully: {}", userId);
+        sendShopOwnerApprovedEmail(approvedUser);
 
         return userMapper.toUserResponse(approvedUser);
     }
@@ -458,6 +486,25 @@ public class UserServiceImpl implements UserService {
         return userMapper.toUserResponse(userRepository.save(user));
     }
 
+
+    private void sendShopOwnerApprovedEmail(User user) {
+        try {
+            ClassPathResource resource = new ClassPathResource("templates/shop_owner_approved_template.html");
+            InputStream inputStream = resource.getInputStream();
+            String html = new String(inputStream.readAllBytes(), StandardCharsets.UTF_8)
+                    .replace("${fullName}", user.getFullName());
+
+            MimeMessage message = javaMailSender.createMimeMessage();
+            MimeMessageHelper helper = new MimeMessageHelper(message, true, "UTF-8");
+            helper.setTo(user.getEmail());
+            helper.setFrom("vinhhien8882004@gmail.com");
+            helper.setSubject("Tài khoản người bán của bạn đã được duyệt - Nông sản xấu mã");
+            helper.setText(html, true);
+            javaMailSender.send(message);
+        } catch (Exception e) {
+            log.error("Failed to send approval email to shop owner {}", user.getId());
+        }
+    }
 
     private void sendAccountLockedEmail(User user) {
 

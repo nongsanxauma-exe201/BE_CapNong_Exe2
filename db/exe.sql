@@ -547,11 +547,11 @@ UPDATE users SET rating_average=2.8 WHERE id=@shop2_id;
 -- 10. PAYMENTS
 -- ============================================================
 INSERT INTO payments (order_id,payment_date,amount,payment_gateway,status,created_at,updated_at,payos_order_code) VALUES
-                                                                                                                      (@od2,DATE_SUB(NOW(),INTERVAL 2 DAY),217000,'PAYOS','SUCCESS',DATE_SUB(NOW(),INTERVAL 2 DAY),DATE_SUB(NOW(),INTERVAL 2 DAY),'FOOD20240001'),
-                                                                                                                      (@od4,DATE_SUB(NOW(),INTERVAL 4 DAY),217000,'PAYOS','SUCCESS',DATE_SUB(NOW(),INTERVAL 4 DAY),DATE_SUB(NOW(),INTERVAL 4 DAY),'FOOD20240002'),
-                                                                                                                      (@os2,DATE_SUB(NOW(),INTERVAL 3 HOUR),225000,'PAYOS','SUCCESS',DATE_SUB(NOW(),INTERVAL 4 HOUR),DATE_SUB(NOW(),INTERVAL 3 HOUR),'FOOD20240003'),
-                                                                                                                      (@os4,DATE_SUB(NOW(),INTERVAL 90 MINUTE),188000,'PAYOS','SUCCESS',DATE_SUB(NOW(),INTERVAL 2 HOUR),DATE_SUB(NOW(),INTERVAL 90 MINUTE),'FOOD20240004'),
-                                                                                                                      (@op2,NULL,125000,'PAYOS','PENDING',DATE_SUB(NOW(),INTERVAL 1 HOUR),NOW(),'FOOD20240005');
+(@od2,DATE_SUB(NOW(),INTERVAL 2 DAY),217000,'PAYOS','SUCCESS',DATE_SUB(NOW(),INTERVAL 2 DAY),DATE_SUB(NOW(),INTERVAL 2 DAY),'FOOD20240001'),
+(@od4,DATE_SUB(NOW(),INTERVAL 4 DAY),217000,'PAYOS','SUCCESS',DATE_SUB(NOW(),INTERVAL 4 DAY),DATE_SUB(NOW(),INTERVAL 4 DAY),'FOOD20240002'),
+(@os2,DATE_SUB(NOW(),INTERVAL 3 HOUR),225000,'PAYOS','SUCCESS',DATE_SUB(NOW(),INTERVAL 4 HOUR),DATE_SUB(NOW(),INTERVAL 3 HOUR),'FOOD20240003'),
+(@os4,DATE_SUB(NOW(),INTERVAL 90 MINUTE),188000,'PAYOS','SUCCESS',DATE_SUB(NOW(),INTERVAL 2 HOUR),DATE_SUB(NOW(),INTERVAL 90 MINUTE),'FOOD20240004'),
+(@op2,NULL,125000,'PAYOS','PENDING',DATE_SUB(NOW(),INTERVAL 1 HOUR),NOW(),'FOOD20240005');
 
 SET @payment_success1=(SELECT payment_id FROM payments WHERE payos_order_code='FOOD20240001' LIMIT 1);
 SET @payment_success2=(SELECT payment_id FROM payments WHERE payos_order_code='FOOD20240002' LIMIT 1);
@@ -868,20 +868,20 @@ VALUES
 SET @payment_pending5=(SELECT payment_id FROM payments WHERE payos_order_code='FOOD20240005' LIMIT 1);
 
 INSERT INTO transactions (payment_id,payment_gateway,amount,balance_after,status,content) VALUES
-                                                                                              (@payment_success1,'PAYOS',217000.00,217000.00,'SUCCESS',
-                                                                                               'Thanh toán đơn hàng FOOD20240001 - Dâu tây Đà Lạt, Táo Fuji, Chuối - 217.000đ'),
-                                                                                              (@payment_success2,'PAYOS',217000.00,367630.00,'SUCCESS',
-                                                                                               'Thanh toán đơn hàng FOOD20240002 - Xoài cát, Bưởi da xanh, Cam sành - 217.000đ'),
-                                                                                              (@payment_success3,'PAYOS',225000.00,100413000.00,'SUCCESS',
-                                                                                               'Thanh toán đơn hàng FOOD20240003 - Cà rốt, Khoai tây, Bí đỏ - 225.000đ'),
-                                                                                              (@payment_success4,'PAYOS',188000.00,100601000.00,'SUCCESS',
-                                                                                               'Thanh toán đơn hàng FOOD20240004 - Cam sành, Bưởi da xanh - 188.000đ'),
-                                                                                              (@payment_pending5,'PAYOS',125000.00,0.00,'PENDING',
-                                                                                               'Khởi tạo thanh toán đơn hàng FOOD20240005 - Bí đỏ, Hành tây, Tỏi - 125.000đ'),
-                                                                                              (NULL,'PAYOS',128000.00,131960.00,'SUCCESS',
-                                                                                               'Rút tiền doanh thu về tài khoản Vietcombank 0071000123456 - Trần Văn Kiệt'),
-                                                                                              (NULL,'PAYOS',150000.00,217630.00,'PENDING',
-                                                                                               'Đang xử lý rút tiền về tài khoản Techcombank 19034567890123 - Lê Thị Ngọc');
+(@payment_success1,'PAYOS',217000.00,217000.00,'SUCCESS',
+ 'Thanh toán đơn hàng FOOD20240001 - Dâu tây Đà Lạt, Táo Fuji, Chuối - 217.000đ'),
+(@payment_success2,'PAYOS',217000.00,367630.00,'SUCCESS',
+ 'Thanh toán đơn hàng FOOD20240002 - Xoài cát, Bưởi da xanh, Cam sành - 217.000đ'),
+(@payment_success3,'PAYOS',225000.00,100413000.00,'SUCCESS',
+ 'Thanh toán đơn hàng FOOD20240003 - Cà rốt, Khoai tây, Bí đỏ - 225.000đ'),
+(@payment_success4,'PAYOS',188000.00,100601000.00,'SUCCESS',
+ 'Thanh toán đơn hàng FOOD20240004 - Cam sành, Bưởi da xanh - 188.000đ'),
+(@payment_pending5,'PAYOS',125000.00,0.00,'PENDING',
+ 'Khởi tạo thanh toán đơn hàng FOOD20240005 - Bí đỏ, Hành tây, Tỏi - 125.000đ'),
+(NULL,'PAYOS',128000.00,131960.00,'SUCCESS',
+ 'Rút tiền doanh thu về tài khoản Vietcombank 0071000123456 - Trần Văn Kiệt'),
+(NULL,'PAYOS',150000.00,217630.00,'PENDING',
+ 'Đang xử lý rút tiền về tài khoản Techcombank 19034567890123 - Lê Thị Ngọc');
 
 -- ============================================================
 -- 22. TEST DATA CHO 3 TÍNH NĂNG STAFF
@@ -1062,7 +1062,7 @@ VALUES
 -- WAREHOUSES
 -- ============================================================
 INSERT INTO warehouses (name, address, latitude, longitude, active) VALUES
-    ('Kho Bãi', 'Hẻm C21, đường 449, Lê Văn Việt, Phường Tăng Nhơn Phú A, TP HCM', 10.8490, 106.7720, TRUE);
+('Kho Bãi', 'Hẻm C21, đường 449, Lê Văn Việt, Phường Tăng Nhơn Phú A, TP HCM', 10.8490, 106.7720, TRUE);
 
 -- ============================================================
 -- TỔNG KẾT DỮ LIỆU
