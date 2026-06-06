@@ -10,6 +10,7 @@ import com.swd301.foodmarket.entity.User;
 import java.time.LocalDateTime;
 
 import com.swd301.foodmarket.enums.RoleName;
+import com.swd301.foodmarket.enums.UserStatus;
 
 import java.util.List;
 import java.util.Optional;
@@ -27,4 +28,5 @@ public interface UserRepository extends JpaRepository<User, Integer> {
 
     Page<User> findAll(Pageable pageable);
     Page<User> findByRole_NameIn(List<RoleName> roleNames, Pageable pageable);
+    Page<User> findByRole_NameInAndStatus(List<RoleName> roleNames, UserStatus status, Pageable pageable);
 }
