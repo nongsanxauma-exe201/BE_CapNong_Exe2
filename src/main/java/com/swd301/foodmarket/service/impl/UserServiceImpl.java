@@ -360,6 +360,29 @@ public class UserServiceImpl implements UserService {
     }
 
     @Override
+    public PageResponse<UserResponse> getUsersByRolePaged(List<String> roles, String status, int page, int size) {
+        log.info("Getting users by roles={} status={} paged: page={}, size={}", roles, status, page, size);
+        Pageable pageable = PageRequest.of(page, size, Sort.by("id").descending());
+        List<RoleName> roleNames = roles.stream().map(RoleName::valueOf).toList();
+        Page<User> pageResult;
+        if (status != null && !status.isBlank()) {
+            UserStatus userStatus = UserStatus.valueOf(status);
+            pageResult = userRepository.findByRole_NameInAndStatus(roleNames, userStatus, pageable);
+        } else {
+            pageResult = userRepository.findByRole_NameIn(roleNames, pageable);
+        }
+        return PageResponse.<UserResponse>builder()
+                .content(pageResult.getContent().stream().map(userMapper::toUserResponse).toList())
+                .page(pageResult.getNumber())
+                .size(pageResult.getSize())
+                .totalElements(pageResult.getTotalElements())
+                .totalPages(pageResult.getTotalPages())
+                .first(pageResult.isFirst())
+                .last(pageResult.isLast())
+                .build();
+    }
+
+    @Override
     public void deleteUser(Integer userId) {
         log.info("Deleting user with ID: {}", userId);
 

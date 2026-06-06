@@ -109,14 +109,22 @@ public class UserController {
     }
 
     /**
-     * Get all users paged (Admin only)
+     * Get all users paged, optionally filtered by roles and/or status (Admin only)
      */
     @GetMapping("/paged")
     @PreAuthorize("hasRole('ADMIN')")
     public ApiResponse<PageResponse<UserResponse>> getAllUsersPaged(
             @RequestParam(defaultValue = "0") int page,
-            @RequestParam(defaultValue = "10") int size
+            @RequestParam(defaultValue = "10") int size,
+            @RequestParam(required = false) List<String> roles,
+            @RequestParam(required = false) String status
     ) {
+        if (roles != null && !roles.isEmpty()) {
+            log.info("Get users paged by roles={} status={}", roles, status);
+            return ApiResponse.<PageResponse<UserResponse>>builder()
+                    .result(userService.getUsersByRolePaged(roles, status, page, size))
+                    .build();
+        }
         log.info("Get all users paged");
         return ApiResponse.<PageResponse<UserResponse>>builder()
                 .result(userService.getAllUsersPaged(page, size))

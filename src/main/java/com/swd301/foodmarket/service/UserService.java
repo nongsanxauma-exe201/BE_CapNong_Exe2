@@ -23,6 +23,7 @@ public interface UserService {
 
     List<UserResponse> getAllUsers();
     PageResponse<UserResponse> getAllUsersPaged(int page, int size);
+    PageResponse<UserResponse> getUsersByRolePaged(List<String> roles, String status, int page, int size);
 
     void deleteUser(Integer userId);
 
