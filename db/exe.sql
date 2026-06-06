@@ -40,6 +40,7 @@ TRUNCATE TABLE build_plan_items;
 TRUNCATE TABLE users;
 TRUNCATE TABLE roles;
 TRUNCATE TABLE chat_bot;
+TRUNCATE TABLE warehouses;
 
 SET FOREIGN_KEY_CHECKS = 1;
 
@@ -154,8 +155,10 @@ SET @shipper3_id = (SELECT id FROM users WHERE email = 'shipper3@gmail.com');
 -- ============================================================
 -- 4. WALLETS
 -- ============================================================
+-- platform: 100M base + 225000 (os2 PAYOS confirmed) + 188000 (os4 PAYOS confirmed) = 100413000
+-- frozen = 225000 + 188000 = 413000 (khóa tiền 2 đơn SHIPPING PAYOS chờ shipper giao)
 INSERT INTO wallets (admin_id,status,total_balance,frozen_balance,total_revenue_all_time,total_withdrawn,commission_wallet,type)
-VALUES (@admin_id,'ACTIVE',100000000,0,0,0,19410,'PLATFORM');
+VALUES (@admin_id,'ACTIVE',100413000,413000,0,0,19410,'PLATFORM');
 
 -- shop1 frozen: #17(164700)+#18(189000)=353700 | realized: #3(181800)+#12(153000)+mystery(80100)=414900 | total=414900+353700-128000=640600
 -- shop2 frozen: #23(155700)+#25(117000)=272700 | realized: #6(132300)+#19(181800)+#24(157500)+mystery2(134100)=605700 | total=605700+272700=878400
@@ -546,12 +549,14 @@ UPDATE users SET rating_average=2.8 WHERE id=@shop2_id;
 INSERT INTO payments (order_id,payment_date,amount,payment_gateway,status,created_at,updated_at,payos_order_code) VALUES
 (@od2,DATE_SUB(NOW(),INTERVAL 2 DAY),217000,'PAYOS','SUCCESS',DATE_SUB(NOW(),INTERVAL 2 DAY),DATE_SUB(NOW(),INTERVAL 2 DAY),'FOOD20240001'),
 (@od4,DATE_SUB(NOW(),INTERVAL 4 DAY),217000,'PAYOS','SUCCESS',DATE_SUB(NOW(),INTERVAL 4 DAY),DATE_SUB(NOW(),INTERVAL 4 DAY),'FOOD20240002'),
-(@os2,NULL,225000,'PAYOS','PENDING',DATE_SUB(NOW(),INTERVAL 3 HOUR),NOW(),'FOOD20240003'),
-(@os4,NULL,188000,'PAYOS','PENDING',DATE_SUB(NOW(),INTERVAL 90 MINUTE),NOW(),'FOOD20240004'),
+(@os2,DATE_SUB(NOW(),INTERVAL 3 HOUR),225000,'PAYOS','SUCCESS',DATE_SUB(NOW(),INTERVAL 4 HOUR),DATE_SUB(NOW(),INTERVAL 3 HOUR),'FOOD20240003'),
+(@os4,DATE_SUB(NOW(),INTERVAL 90 MINUTE),188000,'PAYOS','SUCCESS',DATE_SUB(NOW(),INTERVAL 2 HOUR),DATE_SUB(NOW(),INTERVAL 90 MINUTE),'FOOD20240004'),
 (@op2,NULL,125000,'PAYOS','PENDING',DATE_SUB(NOW(),INTERVAL 1 HOUR),NOW(),'FOOD20240005');
 
 SET @payment_success1=(SELECT payment_id FROM payments WHERE payos_order_code='FOOD20240001' LIMIT 1);
 SET @payment_success2=(SELECT payment_id FROM payments WHERE payos_order_code='FOOD20240002' LIMIT 1);
+SET @payment_success3=(SELECT payment_id FROM payments WHERE payos_order_code='FOOD20240003' LIMIT 1);
+SET @payment_success4=(SELECT payment_id FROM payments WHERE payos_order_code='FOOD20240004' LIMIT 1);
 
 -- ============================================================
 -- 11. WITHDRAW REQUESTS
@@ -860,8 +865,6 @@ VALUES
 -- ============================================================
 -- 21. TRANSACTIONS
 -- ============================================================
-SET @payment_pending3=(SELECT payment_id FROM payments WHERE payos_order_code='FOOD20240003' LIMIT 1);
-SET @payment_pending4=(SELECT payment_id FROM payments WHERE payos_order_code='FOOD20240004' LIMIT 1);
 SET @payment_pending5=(SELECT payment_id FROM payments WHERE payos_order_code='FOOD20240005' LIMIT 1);
 
 INSERT INTO transactions (payment_id,payment_gateway,amount,balance_after,status,content) VALUES
@@ -869,14 +872,12 @@ INSERT INTO transactions (payment_id,payment_gateway,amount,balance_after,status
  'Thanh toán đơn hàng FOOD20240001 - Dâu tây Đà Lạt, Táo Fuji, Chuối - 217.000đ'),
 (@payment_success2,'PAYOS',217000.00,367630.00,'SUCCESS',
  'Thanh toán đơn hàng FOOD20240002 - Xoài cát, Bưởi da xanh, Cam sành - 217.000đ'),
-(@payment_pending3,'PAYOS',225000.00,0.00,'PENDING',
- 'Đang xử lý thanh toán đơn hàng FOOD20240003 - Cà rốt, Khoai tây, Bí đỏ - 225.000đ'),
-(@payment_pending4,'PAYOS',188000.00,0.00,'PENDING',
- 'Đang xử lý thanh toán đơn hàng FOOD20240004 - Cam sành, Bưởi da xanh - 188.000đ'),
+(@payment_success3,'PAYOS',225000.00,100413000.00,'SUCCESS',
+ 'Thanh toán đơn hàng FOOD20240003 - Cà rốt, Khoai tây, Bí đỏ - 225.000đ'),
+(@payment_success4,'PAYOS',188000.00,100601000.00,'SUCCESS',
+ 'Thanh toán đơn hàng FOOD20240004 - Cam sành, Bưởi da xanh - 188.000đ'),
 (@payment_pending5,'PAYOS',125000.00,0.00,'PENDING',
  'Khởi tạo thanh toán đơn hàng FOOD20240005 - Bí đỏ, Hành tây, Tỏi - 125.000đ'),
-(@payment_pending3,'PAYOS',225000.00,0.00,'FAILED',
- 'Thanh toán thất bại - hết hạn QR code - đơn FOOD20240003 lần 1'),
 (NULL,'PAYOS',128000.00,131960.00,'SUCCESS',
  'Rút tiền doanh thu về tài khoản Vietcombank 0071000123456 - Trần Văn Kiệt'),
 (NULL,'PAYOS',150000.00,217630.00,'PENDING',
@@ -1056,6 +1057,12 @@ VALUES
     ('Trọng lượng', 'Kiểm tra trọng lượng thực tế có khớp với khai báo'),
 
     ('Đánh giá chuyên môn', 'Nhân viên kiểm định đánh giá tổng quan chất lượng sản phẩm');
+
+-- ============================================================
+-- WAREHOUSES
+-- ============================================================
+INSERT INTO warehouses (name, address, latitude, longitude, active) VALUES
+('Kho Bãi', 'Hẻm C21, đường 449, Lê Văn Việt, Phường Tăng Nhơn Phú A, TP HCM', 10.8490, 106.7720, TRUE);
 
 -- ============================================================
 -- TỔNG KẾT DỮ LIỆU

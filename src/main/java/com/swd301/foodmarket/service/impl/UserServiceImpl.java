@@ -36,7 +36,11 @@ import org.springframework.data.domain.Pageable;
 import org.springframework.data.domain.Sort;
 import org.springframework.web.multipart.MultipartFile;
 
+import org.springframework.core.io.ClassPathResource;
+
+import java.io.InputStream;
 import java.math.BigDecimal;
+import java.nio.charset.StandardCharsets;
 import java.time.LocalDateTime;
 import java.util.List;
 import java.util.stream.Collectors;
@@ -418,6 +422,7 @@ public class UserServiceImpl implements UserService {
         User approvedUser = userRepository.save(user);
 
         log.info("Shop owner approved successfully: {}", userId);
+        sendShopOwnerApprovedEmail(approvedUser);
 
         return userMapper.toUserResponse(approvedUser);
     }
@@ -458,6 +463,25 @@ public class UserServiceImpl implements UserService {
         return userMapper.toUserResponse(userRepository.save(user));
     }
 
+
+    private void sendShopOwnerApprovedEmail(User user) {
+        try {
+            ClassPathResource resource = new ClassPathResource("templates/shop_owner_approved_template.html");
+            InputStream inputStream = resource.getInputStream();
+            String html = new String(inputStream.readAllBytes(), StandardCharsets.UTF_8)
+                    .replace("${fullName}", user.getFullName());
+
+            MimeMessage message = javaMailSender.createMimeMessage();
+            MimeMessageHelper helper = new MimeMessageHelper(message, true, "UTF-8");
+            helper.setTo(user.getEmail());
+            helper.setFrom("vinhhien8882004@gmail.com");
+            helper.setSubject("Tài khoản người bán của bạn đã được duyệt - Nông sản xấu mã");
+            helper.setText(html, true);
+            javaMailSender.send(message);
+        } catch (Exception e) {
+            log.error("Failed to send approval email to shop owner {}", user.getId());
+        }
+    }
 
     private void sendAccountLockedEmail(User user) {
 
