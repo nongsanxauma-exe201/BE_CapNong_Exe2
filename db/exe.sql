@@ -49,17 +49,17 @@ SET FOREIGN_KEY_CHECKS = 1;
 -- ============================================================
 ALTER TABLE roles
     MODIFY COLUMN name ENUM(
-        'ADMIN',
-        'BUYER',
-        'SHOP_OWNER',
-        'SHIPPER',
-        'STAFF'
-        );
+    'ADMIN',
+    'BUYER',
+    'SHOP_OWNER',
+    'SHIPPER',
+    'STAFF'
+    );
 INSERT INTO roles (name, description) VALUES   ('STAFF','staff personnel'),
-    ('ADMIN','System administrator'),
-    ('BUYER','Regular customer'),
-    ('SHOP_OWNER','Shop owner / Seller'),
-    ('SHIPPER','Shipment personnel')
+                                               ('ADMIN','System administrator'),
+                                               ('BUYER','Regular customer'),
+                                               ('SHOP_OWNER','Shop owner / Seller'),
+                                               ('SHIPPER','Shipment personnel')
 
     ON DUPLICATE KEY UPDATE description=VALUES(description);
 
@@ -73,10 +73,10 @@ SET @staff_role_id   = (SELECT id FROM roles WHERE name='STAFF');
 -- 2. CATEGORIES (4 loại: Củ gia vị, Củ thực phẩm, Trái cây nhiệt đới, Trái cây quanh năm)
 -- ============================================================
 INSERT INTO categories (name, description) VALUES
-    ('Củ gia vị','Các loại củ, rau có tính gia vị: tỏi, gừng, nghệ, hành tím, sả, ớt, cần tây, hành tây...'),
-    ('Củ thực phẩm','Các loại rau củ dùng làm thức ăn chính: cà rốt, khoai tây, khoai lang, bí đỏ, cà tím, khoai môn...'),
-    ('Trái cây nhiệt đới','Đặc sản trái cây nhiệt đới Việt Nam: xoài, thanh long, dưa hấu, ổi, sầu riêng, chôm chôm...'),
-    ('Trái cây quanh năm','Trái cây phổ biến quanh năm: cam, bưởi, nho, cà chua, dưa leo, ớt chuông, táo, mướp...')
+                                               ('Củ gia vị','Các loại củ, rau có tính gia vị: tỏi, gừng, nghệ, hành tím, sả, ớt, cần tây, hành tây...'),
+                                               ('Củ thực phẩm','Các loại rau củ dùng làm thức ăn chính: cà rốt, khoai tây, khoai lang, bí đỏ, cà tím, khoai môn...'),
+                                               ('Trái cây nhiệt đới','Đặc sản trái cây nhiệt đới Việt Nam: xoài, thanh long, dưa hấu, ổi, sầu riêng, chôm chôm...'),
+                                               ('Trái cây quanh năm','Trái cây phổ biến quanh năm: cam, bưởi, nho, cà chua, dưa leo, ớt chuông, táo, mướp...')
     ON DUPLICATE KEY UPDATE description=VALUES(description);
 
 SET @cat_cu_gia_vi        =(SELECT category_id FROM categories WHERE name='Củ gia vị');
@@ -128,7 +128,7 @@ VALUES ('shop3@gmail.com','$2a$12$lU/EpH6mhkL4ERuMRO2cjeeT1CPHxqAyDHGwnDctIWzojS
 SET @shop3_id=(SELECT id FROM users WHERE email='shop3@gmail.com');
 INSERT INTO users (email,password,role_id,status,full_name,phone_number,address,description,create_at)
 VALUES ('staff@gmail.com','$2a$12$lU/EpH6mhkL4ERuMRO2cjeeT1CPHxqAyDHGwnDctIWzojS6k/oG/K',@staff_role_id,'ACTIVE','Nhân viên ','0900000009','TP.HCM','Nhân viên kho',NOW())
-ON DUPLICATE KEY UPDATE email=email;
+    ON DUPLICATE KEY UPDATE email=email;
 SET @staff_id=(SELECT id FROM users WHERE email='staff@gmail.com');
 
 INSERT INTO users (email, password, role_id, status, full_name, phone_number, address, description, rating_average, license, vehicle_number, license_image_url, vehicle_doc_image_url, create_at, logo_url)
@@ -149,7 +149,7 @@ VALUES (
            NOW(),
            'https://res.cloudinary.com/dfp44sbsj/image/upload/v1774252921/brands/xu1pv9ty2njacb3bhozh.jpg'
        )
-ON DUPLICATE KEY UPDATE email = email;
+    ON DUPLICATE KEY UPDATE email = email;
 SET @shipper3_id = (SELECT id FROM users WHERE email = 'shipper3@gmail.com');
 
 -- ============================================================
@@ -263,10 +263,10 @@ INSERT INTO products (shop_owner_id,category_id,product_name,unit,selling_price,
 -- 6. MYSTERY BOXES
 -- ============================================================
 INSERT INTO mystery_boxes (shop_owner_id,box_type,image_url,price,description,note,is_active,total_quantity,sold_quantity) VALUES
-(@shop1_id,'Hộp Củ Bí Ẩn Đà Lạt','https://res.cloudinary.com/dfp44sbsj/image/upload/v1774253772/brands/sftnvmjw2mvym1plcpql.jpg',89000,'Hộp củ bí ẩn từ vườn organic Đà Lạt. Bên trong là 4-5 loại củ tươi ngon được chọn lọc kỹ càng.','Giao hàng trong ngày, bảo đảm tươi sạch',TRUE,20,5),
-(@shop1_id,'Hộp Trái Cây Dinh Dưỡng','https://images.unsplash.com/photo-1619566636858-adf3ef46400b?w=400&h=300&fit=crop',129000,'Hộp trái cây bí ẩn gồm 3-4 loại quả tươi ngon, đầy đủ vitamin và khoáng chất.','Giá trị thực tế cao hơn 30% so với giá bán',TRUE,15,3),
-(@shop2_id,'Hộp Củ Quả Miền Tây','https://images.unsplash.com/photo-1512621776951-a57141f2eefd?w=400&h=300&fit=crop',75000,'Hộp củ quả đặc sản miền Tây gồm 4-5 loại tươi xanh mát, thích hợp nấu canh và xào.','Thu hoạch buổi sáng, giao ngay trong ngày',TRUE,25,8),
-(@shop2_id,'Hộp Trái Cây Nhiệt Đới','https://images.unsplash.com/photo-1553279768-865429fa0078?w=400&h=300&fit=crop',149000,'Hộp trái cây nhiệt đới đặc sản miền Nam gồm 4-5 loại trái cây ngọt ngon tươi mát.','Phù hợp giải nhiệt mùa hè',TRUE,15,4);
+                                                                                                                               (@shop1_id,'Hộp Củ Bí Ẩn Đà Lạt','https://res.cloudinary.com/dfp44sbsj/image/upload/v1774253772/brands/sftnvmjw2mvym1plcpql.jpg',89000,'Hộp củ bí ẩn từ vườn organic Đà Lạt. Bên trong là 4-5 loại củ tươi ngon được chọn lọc kỹ càng.','Giao hàng trong ngày, bảo đảm tươi sạch',TRUE,20,5),
+                                                                                                                               (@shop1_id,'Hộp Trái Cây Dinh Dưỡng','https://images.unsplash.com/photo-1619566636858-adf3ef46400b?w=400&h=300&fit=crop',129000,'Hộp trái cây bí ẩn gồm 3-4 loại quả tươi ngon, đầy đủ vitamin và khoáng chất.','Giá trị thực tế cao hơn 30% so với giá bán',TRUE,15,3),
+                                                                                                                               (@shop2_id,'Hộp Củ Quả Miền Tây','https://images.unsplash.com/photo-1512621776951-a57141f2eefd?w=400&h=300&fit=crop',75000,'Hộp củ quả đặc sản miền Tây gồm 4-5 loại tươi xanh mát, thích hợp nấu canh và xào.','Thu hoạch buổi sáng, giao ngay trong ngày',TRUE,25,8),
+                                                                                                                               (@shop2_id,'Hộp Trái Cây Nhiệt Đới','https://images.unsplash.com/photo-1553279768-865429fa0078?w=400&h=300&fit=crop',149000,'Hộp trái cây nhiệt đới đặc sản miền Nam gồm 4-5 loại trái cây ngọt ngon tươi mát.','Phù hợp giải nhiệt mùa hè',TRUE,15,4);
 
 -- Product ID variables - shop1
 SET @p_ca_rot    =(SELECT product_id FROM products WHERE product_name='Cà rốt'       AND shop_owner_id=@shop1_id);
@@ -310,23 +310,23 @@ SET @box1_s2=(SELECT mystery_id FROM mystery_boxes WHERE box_type='Hộp Củ Qu
 SET @box2_s2=(SELECT mystery_id FROM mystery_boxes WHERE box_type='Hộp Trái Cây Nhiệt Đới'   AND shop_owner_id=@shop2_id);
 
 INSERT INTO product_mystery (product_id,mystery_id,quantity) VALUES
-(@p_ca_rot,   @box1_s1,1),(@p_khoai_tay,@box1_s1,1),(@p_bi_do,@box1_s1,1),(@p_cu_cai,@box1_s1,1),
-(@p_dau_tay,  @box2_s1,1),(@p_tao,      @box2_s1,1),(@p_chuoi,@box2_s1,1),
-(@p2_bi_dao,  @box1_s2,1),(@p2_su_su,   @box1_s2,1),(@p2_ca_tim,@box1_s2,1),(@p2_khoai_mon,@box1_s2,1),
-(@p2_dua_hau, @box2_s2,2),(@p2_thanh_long,@box2_s2,1),(@p2_xoai,@box2_s2,1);
+                                                                 (@p_ca_rot,   @box1_s1,1),(@p_khoai_tay,@box1_s1,1),(@p_bi_do,@box1_s1,1),(@p_cu_cai,@box1_s1,1),
+                                                                 (@p_dau_tay,  @box2_s1,1),(@p_tao,      @box2_s1,1),(@p_chuoi,@box2_s1,1),
+                                                                 (@p2_bi_dao,  @box1_s2,1),(@p2_su_su,   @box1_s2,1),(@p2_ca_tim,@box1_s2,1),(@p2_khoai_mon,@box1_s2,1),
+                                                                 (@p2_dua_hau, @box2_s2,2),(@p2_thanh_long,@box2_s2,1),(@p2_xoai,@box2_s2,1);
 
 -- ============================================================
 -- 7. VOUCHERS
 -- ============================================================
 INSERT INTO vouchers (shop_id,voucher_code,discount_value,max_discount,min_order_value,usage_limit,expiry_date) VALUES
-(@shop1_id,'NONGSAN10',10000,20000,50000,100,DATE_ADD(NOW(),INTERVAL 30 DAY)),
-(@shop1_id,'ORGANIC20',20000,40000,100000,50,DATE_ADD(NOW(),INTERVAL 30 DAY)),
-(@shop1_id,'DALAT50K',50000,50000,200000,20,DATE_ADD(NOW(),INTERVAL 15 DAY)),
-(@shop1_id,'FREESHIP1',15000,15000,80000,200,DATE_ADD(NOW(),INTERVAL 60 DAY)),
-(@shop2_id,'VUONTRAI15',15000,30000,70000,100,DATE_ADD(NOW(),INTERVAL 30 DAY)),
-(@shop2_id,'MIENTAY25',25000,50000,120000,50,DATE_ADD(NOW(),INTERVAL 30 DAY)),
-(@shop2_id,'TRAICAY30',30000,30000,150000,30,DATE_ADD(NOW(),INTERVAL 20 DAY)),
-(@shop2_id,'SHIP0DONG',20000,20000,100000,150,DATE_ADD(NOW(),INTERVAL 45 DAY));
+                                                                                                                    (@shop1_id,'NONGSAN10',10000,20000,50000,100,DATE_ADD(NOW(),INTERVAL 30 DAY)),
+                                                                                                                    (@shop1_id,'ORGANIC20',20000,40000,100000,50,DATE_ADD(NOW(),INTERVAL 30 DAY)),
+                                                                                                                    (@shop1_id,'DALAT50K',50000,50000,200000,20,DATE_ADD(NOW(),INTERVAL 15 DAY)),
+                                                                                                                    (@shop1_id,'FREESHIP1',15000,15000,80000,200,DATE_ADD(NOW(),INTERVAL 60 DAY)),
+                                                                                                                    (@shop2_id,'VUONTRAI15',15000,30000,70000,100,DATE_ADD(NOW(),INTERVAL 30 DAY)),
+                                                                                                                    (@shop2_id,'MIENTAY25',25000,50000,120000,50,DATE_ADD(NOW(),INTERVAL 30 DAY)),
+                                                                                                                    (@shop2_id,'TRAICAY30',30000,30000,150000,30,DATE_ADD(NOW(),INTERVAL 20 DAY)),
+                                                                                                                    (@shop2_id,'SHIP0DONG',20000,20000,100000,150,DATE_ADD(NOW(),INTERVAL 45 DAY));
 
 -- ============================================================
 -- 8. ORDERS (25 đơn, xen kẽ status cách 30 phút, page 1 có đủ 6 status)
@@ -338,39 +338,39 @@ INSERT INTO vouchers (shop_id,voucher_code,discount_value,max_discount,min_order
 -- ============================================================
 ALTER TABLE orders
     MODIFY COLUMN status ENUM(
-        'PENDING',
-        'CONFIRMED',
-        'SHIPPING',
-        'SHIPPING_TO_WAREHOUSE',
-        'ARRIVED_AT_WAREHOUSE',
-        'QUALITY_CHECKING',
-        'QUALITY_CHECKED',
-        'QUALITY_APPROVED',
-        'QUALITY_REJECTED',
-        'READY',
-        'DELIVERED',
-        'CANCELLED',
-        'PAID',
-        'FAILED'
-        ) NOT NULL;
+    'PENDING',
+    'CONFIRMED',
+    'SHIPPING',
+    'SHIPPING_TO_WAREHOUSE',
+    'ARRIVED_AT_WAREHOUSE',
+    'QUALITY_CHECKING',
+    'QUALITY_CHECKED',
+    'QUALITY_APPROVED',
+    'QUALITY_REJECTED',
+    'READY',
+    'DELIVERED',
+    'CANCELLED',
+    'PAID',
+    'FAILED'
+    ) NOT NULL;
 -- Sync ENUM trackings.status với OrderStatus Java enum
 ALTER TABLE trackings
     MODIFY COLUMN status ENUM(
-        'PENDING',
-        'CONFIRMED',
-        'SHIPPING',
-        'SHIPPING_TO_WAREHOUSE',
-        'ARRIVED_AT_WAREHOUSE',
-        'QUALITY_CHECKING',
-        'QUALITY_CHECKED',
-        'QUALITY_APPROVED',
-        'QUALITY_REJECTED',
-        'READY',
-        'DELIVERED',
-        'CANCELLED',
-        'PAID',
-        'FAILED'
-        ) NULL;
+    'PENDING',
+    'CONFIRMED',
+    'SHIPPING',
+    'SHIPPING_TO_WAREHOUSE',
+    'ARRIVED_AT_WAREHOUSE',
+    'QUALITY_CHECKING',
+    'QUALITY_CHECKED',
+    'QUALITY_APPROVED',
+    'QUALITY_REJECTED',
+    'READY',
+    'DELIVERED',
+    'CANCELLED',
+    'PAID',
+    'FAILED'
+    ) NULL;
 
 
 
@@ -562,26 +562,26 @@ SET @payment_success4=(SELECT payment_id FROM payments WHERE payos_order_code='F
 -- 11. WITHDRAW REQUESTS
 -- ============================================================
 INSERT INTO withdraw_requests (admin_id,wallet_id,reason,admin_note,created_at,processed_at,status,amount,fee,receive_amount,bank_name,bank_account_number,bank_account_holder,payout_provider,payout_status) VALUES
-(@admin_id,@wallet_shop1_id,'Rút tiền doanh thu tháng này','Đã xác nhận, đang xử lý',DATE_SUB(NOW(),INTERVAL 1 DAY),DATE_SUB(NOW(),INTERVAL 12 HOUR),'APPROVED',100000,2500,97500,'Vietcombank','0071000123456','TRAN VAN KIET','PAYOS','PENDING'),
-(@admin_id,@wallet_shop2_id,'Rút tiền tuần',NULL,DATE_SUB(NOW(),INTERVAL 2 HOUR),NULL,'PENDING',150000,3750,146250,'Techcombank','19034567890123','LE THI NGOC','PAYOS','CREATED'),
-(@admin_id,@wallet_shop1_id,'Rút tiền tuần trước','Đã chuyển khoản thành công',DATE_SUB(NOW(),INTERVAL 7 DAY),DATE_SUB(NOW(),INTERVAL 6 DAY),'SUCCESS',128000,3200,124800,'Vietcombank','0071000123456','TRAN VAN KIET','PAYOS','SUCCESS');
+                                                                                                                                                                                                                  (@admin_id,@wallet_shop1_id,'Rút tiền doanh thu tháng này','Đã xác nhận, đang xử lý',DATE_SUB(NOW(),INTERVAL 1 DAY),DATE_SUB(NOW(),INTERVAL 12 HOUR),'APPROVED',100000,2500,97500,'Vietcombank','0071000123456','TRAN VAN KIET','PAYOS','PENDING'),
+                                                                                                                                                                                                                  (@admin_id,@wallet_shop2_id,'Rút tiền tuần',NULL,DATE_SUB(NOW(),INTERVAL 2 HOUR),NULL,'PENDING',150000,3750,146250,'Techcombank','19034567890123','LE THI NGOC','PAYOS','CREATED'),
+                                                                                                                                                                                                                  (@admin_id,@wallet_shop1_id,'Rút tiền tuần trước','Đã chuyển khoản thành công',DATE_SUB(NOW(),INTERVAL 7 DAY),DATE_SUB(NOW(),INTERVAL 6 DAY),'SUCCESS',128000,3200,124800,'Vietcombank','0071000123456','TRAN VAN KIET','PAYOS','SUCCESS');
 
 -- Shipper rút tiền
 INSERT INTO withdraw_requests (admin_id,wallet_id,reason,admin_note,created_at,processed_at,status,amount,fee,receive_amount,bank_name,bank_account_number,bank_account_holder,payout_provider,payout_status) VALUES
-(@admin_id,@wallet_shipper1_id,'Rút lương tuần 1','Đã chuyển khoản thành công',DATE_SUB(NOW(),INTERVAL 10 DAY),DATE_SUB(NOW(),INTERVAL 9 DAY),'SUCCESS',55000,0,55000,'Vietcombank','0071000999888','NGUYEN VAN HOANG','PAYOS','SUCCESS'),
-(@admin_id,@wallet_shipper1_id,'Rút tiền cuối tháng',NULL,DATE_SUB(NOW(),INTERVAL 1 DAY),NULL,'PENDING',50000,0,50000,'Vietcombank','0071000999888','NGUYEN VAN HOANG','PAYOS','PENDING'),
-(@admin_id,@wallet_shipper3_id,'Rút lương tháng trước','Đã chuyển khoản thành công',DATE_SUB(NOW(),INTERVAL 15 DAY),DATE_SUB(NOW(),INTERVAL 14 DAY),'SUCCESS',30000,0,30000,'MB Bank','0987654321098','PHAM THI BICH THUY','PAYOS','SUCCESS');
+                                                                                                                                                                                                                  (@admin_id,@wallet_shipper1_id,'Rút lương tuần 1','Đã chuyển khoản thành công',DATE_SUB(NOW(),INTERVAL 10 DAY),DATE_SUB(NOW(),INTERVAL 9 DAY),'SUCCESS',55000,0,55000,'Vietcombank','0071000999888','NGUYEN VAN HOANG','PAYOS','SUCCESS'),
+                                                                                                                                                                                                                  (@admin_id,@wallet_shipper1_id,'Rút tiền cuối tháng',NULL,DATE_SUB(NOW(),INTERVAL 1 DAY),NULL,'PENDING',50000,0,50000,'Vietcombank','0071000999888','NGUYEN VAN HOANG','PAYOS','PENDING'),
+                                                                                                                                                                                                                  (@admin_id,@wallet_shipper3_id,'Rút lương tháng trước','Đã chuyển khoản thành công',DATE_SUB(NOW(),INTERVAL 15 DAY),DATE_SUB(NOW(),INTERVAL 14 DAY),'SUCCESS',30000,0,30000,'MB Bank','0987654321098','PHAM THI BICH THUY','PAYOS','SUCCESS');
 
 -- ============================================================
 -- 12. NOTIFICATIONS
 -- ============================================================
 INSERT INTO notifications (admin_id,title,message,evidence,create_at,receiver_type) VALUES
-(@admin_id,'🌿 Chào mừng đến Food Market!','Chào mừng bạn đến với Food Market - nền tảng mua sắm củ quả sạch hàng đầu! Khám phá hàng trăm sản phẩm tươi ngon từ các vườn organic uy tín.',NULL,NOW(),'BUYER'),
-(@admin_id,'🎉 Khuyến mãi tháng này - Giảm 20% củ quả','Tháng này Food Market có chương trình khuyến mãi đặc biệt! Giảm 20% tất cả sản phẩm củ quả khi đặt đơn từ 100.000đ. Đừng bỏ lỡ!','https://images.unsplash.com/photo-1540420773420-3366772f4999?w=800&h=400&fit=crop',DATE_SUB(NOW(),INTERVAL 1 DAY),'BUYER'),
-(@admin_id,'📦 Cập nhật chính sách giao hàng','Food Market vừa cập nhật: Miễn phí ship cho đơn từ 200.000đ. Giao hàng trong 2-4 giờ tại TP.HCM và Bình Dương.',NULL,DATE_SUB(NOW(),INTERVAL 2 DAY),'BUYER,SHOP_OWNER'),
-(@admin_id,'🏪 Thông báo Shop: Cập nhật quy định bán hàng','Kính gửi các Shop, vui lòng cập nhật thông tin sản phẩm đầy đủ để tăng tỷ lệ chuyển đổi đơn hàng.',NULL,DATE_SUB(NOW(),INTERVAL 3 DAY),'SHOP_OWNER'),
-(@admin_id,'🚚 Thông báo Shipper: Khu vực giao hàng mới','Food Market mở rộng sang Bình Dương và Đồng Nai. Shipper đăng ký khu vực mới được phụ cấp thêm 5.000đ/đơn.',NULL,DATE_SUB(NOW(),INTERVAL 4 DAY),'SHIPPER'),
-(@admin_id,'⭐ Hệ thống đánh giá mới','Food Market vừa ra mắt hệ thống đánh giá mới! Shop có rating cao sẽ được hiển thị ưu tiên trên trang chủ.',NULL,DATE_SUB(NOW(),INTERVAL 5 DAY),'BUYER,SHOP_OWNER');
+                                                                                        (@admin_id,'🌿 Chào mừng đến Food Market!','Chào mừng bạn đến với Food Market - nền tảng mua sắm củ quả sạch hàng đầu! Khám phá hàng trăm sản phẩm tươi ngon từ các vườn organic uy tín.',NULL,NOW(),'BUYER'),
+                                                                                        (@admin_id,'🎉 Khuyến mãi tháng này - Giảm 20% củ quả','Tháng này Food Market có chương trình khuyến mãi đặc biệt! Giảm 20% tất cả sản phẩm củ quả khi đặt đơn từ 100.000đ. Đừng bỏ lỡ!','https://images.unsplash.com/photo-1540420773420-3366772f4999?w=800&h=400&fit=crop',DATE_SUB(NOW(),INTERVAL 1 DAY),'BUYER'),
+                                                                                        (@admin_id,'📦 Cập nhật chính sách giao hàng','Food Market vừa cập nhật: Miễn phí ship cho đơn từ 200.000đ. Giao hàng trong 2-4 giờ tại TP.HCM và Bình Dương.',NULL,DATE_SUB(NOW(),INTERVAL 2 DAY),'BUYER,SHOP_OWNER'),
+                                                                                        (@admin_id,'🏪 Thông báo Shop: Cập nhật quy định bán hàng','Kính gửi các Shop, vui lòng cập nhật thông tin sản phẩm đầy đủ để tăng tỷ lệ chuyển đổi đơn hàng.',NULL,DATE_SUB(NOW(),INTERVAL 3 DAY),'SHOP_OWNER'),
+                                                                                        (@admin_id,'🚚 Thông báo Shipper: Khu vực giao hàng mới','Food Market mở rộng sang Bình Dương và Đồng Nai. Shipper đăng ký khu vực mới được phụ cấp thêm 5.000đ/đơn.',NULL,DATE_SUB(NOW(),INTERVAL 4 DAY),'SHIPPER'),
+                                                                                        (@admin_id,'⭐ Hệ thống đánh giá mới','Food Market vừa ra mắt hệ thống đánh giá mới! Shop có rating cao sẽ được hiển thị ưu tiên trên trang chủ.',NULL,DATE_SUB(NOW(),INTERVAL 5 DAY),'BUYER,SHOP_OWNER');
 
 SET @n1=(SELECT not_id FROM notifications WHERE title LIKE '%Chào mừng%' LIMIT 1);
 SET @n2=(SELECT not_id FROM notifications WHERE title LIKE '%Khuyến mãi%' LIMIT 1);
@@ -591,10 +591,10 @@ SET @n5=(SELECT not_id FROM notifications WHERE title LIKE '%Shipper%' LIMIT 1);
 SET @n6=(SELECT not_id FROM notifications WHERE title LIKE '%đánh giá%' LIMIT 1);
 
 INSERT INTO user_notifications (user_id,notification_id,is_read,is_deleted) VALUES
-(@buyer1_id,@n1,TRUE,FALSE),(@buyer1_id,@n2,FALSE,FALSE),(@buyer1_id,@n3,FALSE,FALSE),(@buyer1_id,@n6,FALSE,FALSE),
-(@shop1_id,@n3,TRUE,FALSE),(@shop1_id,@n4,FALSE,FALSE),(@shop1_id,@n6,FALSE,FALSE),
-(@shop2_id,@n3,TRUE,FALSE),(@shop2_id,@n4,FALSE,FALSE),
-(@shipper1_id,@n5,FALSE,FALSE);
+                                                                                (@buyer1_id,@n1,TRUE,FALSE),(@buyer1_id,@n2,FALSE,FALSE),(@buyer1_id,@n3,FALSE,FALSE),(@buyer1_id,@n6,FALSE,FALSE),
+                                                                                (@shop1_id,@n3,TRUE,FALSE),(@shop1_id,@n4,FALSE,FALSE),(@shop1_id,@n6,FALSE,FALSE),
+                                                                                (@shop2_id,@n3,TRUE,FALSE),(@shop2_id,@n4,FALSE,FALSE),
+                                                                                (@shipper1_id,@n5,FALSE,FALSE);
 
 -- ============================================================
 -- 13. BLOGS
@@ -660,30 +660,30 @@ INSERT INTO blogs (admin_id,title,content,picture_url,status,category,create_at)
 -- 14. BOT KNOWLEDGE
 -- ============================================================
 INSERT INTO bot_knowledge (type,title,content,keywords,active) VALUES
-('POLICY','Chính sách giao hàng',
- 'Food Market hỗ trợ giao hàng toàn quốc.\n- Nội thành TP.HCM và Bình Dương: giao trong 2-4 giờ.\n- Tỉnh thành khác: 1-3 ngày làm việc.\n- Phí giao hàng: 15.000đ - 30.000đ tùy khu vực.\n- Miễn phí giao hàng cho đơn từ 200.000đ trở lên.',
- 'giao hàng, ship, phí ship, vận chuyển, bao lâu, miễn phí ship',TRUE),
-('POLICY','Chính sách đổi trả và hoàn tiền',
- 'Food Market cam kết chất lượng sản phẩm:\n- Đổi trả miễn phí trong 24 giờ nếu không tươi, dập nát hoặc không đúng mô tả.\n- Hoàn tiền 100% nếu sản phẩm bị lỗi do shop hoặc shipper.\n- Liên hệ hotline hoặc chat trực tiếp để được hỗ trợ.',
- 'đổi trả, hoàn tiền, lỗi, không tươi, dập, chất lượng, khiếu nại',TRUE),
-('POLICY','Phương thức thanh toán',
- 'Food Market hỗ trợ nhiều hình thức thanh toán:\n- COD: Thanh toán tiền mặt khi nhận hàng.\n- Chuyển khoản ngân hàng.\n- PayOS: Quét mã QR thanh toán nhanh.',
- 'thanh toán, COD, chuyển khoản, PayOS, QR',TRUE),
-('POLICY','Chính sách chất lượng sản phẩm',
- 'Food Market đảm bảo chất lượng nghiêm ngặt:\n- Tất cả sản phẩm có nguồn gốc xuất xứ rõ ràng.\n- Ưu tiên sản phẩm đạt chuẩn VietGAP, GlobalGAP hoặc Organic.\n- Kiểm tra chất lượng trước khi đưa lên sàn.',
- 'chất lượng, organic, VietGAP, an toàn, nguồn gốc, xuất xứ',TRUE),
-('FAQ','Làm thế nào để đặt hàng?',
- 'Đặt hàng trên Food Market rất đơn giản:\n1. Tìm kiếm sản phẩm hoặc duyệt theo danh mục Củ / Quả.\n2. Chọn sản phẩm và thêm vào giỏ hàng.\n3. Điền địa chỉ giao hàng và chọn thanh toán.\n4. Xác nhận đơn hàng và chờ shop xác nhận.\n5. Shipper sẽ giao hàng trong 2-4 giờ.',
- 'đặt hàng, mua hàng, giỏ hàng, checkout, order',TRUE),
-('FAQ','Làm thế nào để theo dõi đơn hàng?',
- 'Bạn có thể theo dõi đơn hàng:\n- Vào mục "Đơn hàng của tôi" trong tài khoản.\n- Xem trạng thái: Chờ xác nhận → Đã xác nhận → Đang giao → Đã giao.\n- Khi shipper đang giao, có thể xem GPS thời gian thực.',
- 'theo dõi đơn, trạng thái đơn hàng, GPS, shipper đang giao',TRUE),
-('FAQ','Làm thế nào để bảo quản củ quả tươi lâu?',
- 'Mẹo bảo quản củ quả:\n- Củ (cà rốt, khoai tây, bí đỏ, bí đao, su su, cà tím): Nơi thoáng mát, tránh ánh nắng, dùng 1-2 tuần.\n- Gia vị củ (tỏi, gừng, nghệ, sả, hành tím): Nơi khô thoáng 2-4 tuần.\n- Trái cây chín (chuối, xoài, ổi, dưa hấu): Nhiệt độ phòng 3-5 ngày.\n- Trái cây chua (cam, bưởi, dâu tây, nho, thanh long): Ngăn mát 5-7 ngày.',
- 'bảo quản, tươi lâu, tủ lạnh, để được bao lâu, hư, úa',TRUE),
-('FAQ','Làm thế nào để liên hệ hỗ trợ?',
- 'Liên hệ Food Market qua nhiều kênh:\n- Chat với trợ lý AI ngay trên app.\n- Nhắn tin trực tiếp với shop qua tính năng chat.\n- Email: support@foodmarket.vn\n- Hotline: 1900-xxxx (8h-22h mỗi ngày)',
- 'liên hệ, hỗ trợ, hotline, chat, email, tư vấn',TRUE);
+                                                                   ('POLICY','Chính sách giao hàng',
+                                                                    'Food Market hỗ trợ giao hàng toàn quốc.\n- Nội thành TP.HCM và Bình Dương: giao trong 2-4 giờ.\n- Tỉnh thành khác: 1-3 ngày làm việc.\n- Phí giao hàng: 15.000đ - 30.000đ tùy khu vực.\n- Miễn phí giao hàng cho đơn từ 200.000đ trở lên.',
+                                                                    'giao hàng, ship, phí ship, vận chuyển, bao lâu, miễn phí ship',TRUE),
+                                                                   ('POLICY','Chính sách đổi trả và hoàn tiền',
+                                                                    'Food Market cam kết chất lượng sản phẩm:\n- Đổi trả miễn phí trong 24 giờ nếu không tươi, dập nát hoặc không đúng mô tả.\n- Hoàn tiền 100% nếu sản phẩm bị lỗi do shop hoặc shipper.\n- Liên hệ hotline hoặc chat trực tiếp để được hỗ trợ.',
+                                                                    'đổi trả, hoàn tiền, lỗi, không tươi, dập, chất lượng, khiếu nại',TRUE),
+                                                                   ('POLICY','Phương thức thanh toán',
+                                                                    'Food Market hỗ trợ nhiều hình thức thanh toán:\n- COD: Thanh toán tiền mặt khi nhận hàng.\n- Chuyển khoản ngân hàng.\n- PayOS: Quét mã QR thanh toán nhanh.',
+                                                                    'thanh toán, COD, chuyển khoản, PayOS, QR',TRUE),
+                                                                   ('POLICY','Chính sách chất lượng sản phẩm',
+                                                                    'Food Market đảm bảo chất lượng nghiêm ngặt:\n- Tất cả sản phẩm có nguồn gốc xuất xứ rõ ràng.\n- Ưu tiên sản phẩm đạt chuẩn VietGAP, GlobalGAP hoặc Organic.\n- Kiểm tra chất lượng trước khi đưa lên sàn.',
+                                                                    'chất lượng, organic, VietGAP, an toàn, nguồn gốc, xuất xứ',TRUE),
+                                                                   ('FAQ','Làm thế nào để đặt hàng?',
+                                                                    'Đặt hàng trên Food Market rất đơn giản:\n1. Tìm kiếm sản phẩm hoặc duyệt theo danh mục Củ / Quả.\n2. Chọn sản phẩm và thêm vào giỏ hàng.\n3. Điền địa chỉ giao hàng và chọn thanh toán.\n4. Xác nhận đơn hàng và chờ shop xác nhận.\n5. Shipper sẽ giao hàng trong 2-4 giờ.',
+                                                                    'đặt hàng, mua hàng, giỏ hàng, checkout, order',TRUE),
+                                                                   ('FAQ','Làm thế nào để theo dõi đơn hàng?',
+                                                                    'Bạn có thể theo dõi đơn hàng:\n- Vào mục "Đơn hàng của tôi" trong tài khoản.\n- Xem trạng thái: Chờ xác nhận → Đã xác nhận → Đang giao → Đã giao.\n- Khi shipper đang giao, có thể xem GPS thời gian thực.',
+                                                                    'theo dõi đơn, trạng thái đơn hàng, GPS, shipper đang giao',TRUE),
+                                                                   ('FAQ','Làm thế nào để bảo quản củ quả tươi lâu?',
+                                                                    'Mẹo bảo quản củ quả:\n- Củ (cà rốt, khoai tây, bí đỏ, bí đao, su su, cà tím): Nơi thoáng mát, tránh ánh nắng, dùng 1-2 tuần.\n- Gia vị củ (tỏi, gừng, nghệ, sả, hành tím): Nơi khô thoáng 2-4 tuần.\n- Trái cây chín (chuối, xoài, ổi, dưa hấu): Nhiệt độ phòng 3-5 ngày.\n- Trái cây chua (cam, bưởi, dâu tây, nho, thanh long): Ngăn mát 5-7 ngày.',
+                                                                    'bảo quản, tươi lâu, tủ lạnh, để được bao lâu, hư, úa',TRUE),
+                                                                   ('FAQ','Làm thế nào để liên hệ hỗ trợ?',
+                                                                    'Liên hệ Food Market qua nhiều kênh:\n- Chat với trợ lý AI ngay trên app.\n- Nhắn tin trực tiếp với shop qua tính năng chat.\n- Email: support@foodmarket.vn\n- Hotline: 1900-xxxx (8h-22h mỗi ngày)',
+                                                                    'liên hệ, hỗ trợ, hotline, chat, email, tư vấn',TRUE);
 
 -- ============================================================
 -- 15. RETURN REQUESTS
@@ -693,9 +693,9 @@ SET @od2_det=(SELECT order_detail_id FROM order_details WHERE order_id=@od2 LIMI
 SET @od4_det=(SELECT order_detail_id FROM order_details WHERE order_id=@od4 LIMIT 1);
 
 INSERT INTO return_requests (order_detail_id,shop_owner_id,buyer_id,reason,evidence,status,refund_amount,created_at,updated_at) VALUES
-(@od1_det,@shop1_id,@buyer1_id,'Cà rốt không tươi như quảng cáo, bị héo nhiều khi nhận hàng','https://res.cloudinary.com/dfp44sbsj/image/upload/v1774253772/brands/sftnvmjw2mvym1plcpql.jpg','PENDING',25000,DATE_SUB(NOW(),INTERVAL 1 HOUR),DATE_SUB(NOW(),INTERVAL 1 HOUR)),
-(@od2_det,@shop1_id,@buyer1_id,'Giao nhầm loại táo, mình đặt táo Fuji nhưng giao táo thường','https://res.cloudinary.com/dfp44sbsj/image/upload/v1774253772/brands/sftnvmjw2mvym1plcpql.jpg','SHOP_APPROVED',110000,DATE_SUB(NOW(),INTERVAL 2 DAY),DATE_SUB(NOW(),INTERVAL 1 DAY)),
-(@od4_det,@shop2_id,@buyer1_id,'Cam bị chua, không ngọt như mô tả','https://res.cloudinary.com/dfp44sbsj/image/upload/v1774253772/brands/sftnvmjw2mvym1plcpql.jpg','COMPLETED',35000,DATE_SUB(NOW(),INTERVAL 3 DAY),DATE_SUB(NOW(),INTERVAL 2 DAY));
+                                                                                                                                    (@od1_det,@shop1_id,@buyer1_id,'Cà rốt không tươi như quảng cáo, bị héo nhiều khi nhận hàng','https://res.cloudinary.com/dfp44sbsj/image/upload/v1774253772/brands/sftnvmjw2mvym1plcpql.jpg','PENDING',25000,DATE_SUB(NOW(),INTERVAL 1 HOUR),DATE_SUB(NOW(),INTERVAL 1 HOUR)),
+                                                                                                                                    (@od2_det,@shop1_id,@buyer1_id,'Giao nhầm loại táo, mình đặt táo Fuji nhưng giao táo thường','https://res.cloudinary.com/dfp44sbsj/image/upload/v1774253772/brands/sftnvmjw2mvym1plcpql.jpg','SHOP_APPROVED',110000,DATE_SUB(NOW(),INTERVAL 2 DAY),DATE_SUB(NOW(),INTERVAL 1 DAY)),
+                                                                                                                                    (@od4_det,@shop2_id,@buyer1_id,'Cam bị chua, không ngọt như mô tả','https://res.cloudinary.com/dfp44sbsj/image/upload/v1774253772/brands/sftnvmjw2mvym1plcpql.jpg','COMPLETED',35000,DATE_SUB(NOW(),INTERVAL 3 DAY),DATE_SUB(NOW(),INTERVAL 2 DAY));
 
 UPDATE order_details SET is_requested_return=1 WHERE order_detail_id IN (@od1_det,@od2_det,@od4_det);
 
@@ -703,73 +703,73 @@ UPDATE order_details SET is_requested_return=1 WHERE order_detail_id IN (@od1_de
 -- 16. CONVERSATIONS & CHAT
 -- ============================================================
 INSERT INTO conversations (room_key,user1_id,user2_id,created_at,last_message_at) VALUES
-(CONCAT(LEAST(@buyer1_id,@shop1_id),'_',GREATEST(@buyer1_id,@shop1_id)),
- LEAST(@buyer1_id,@shop1_id),GREATEST(@buyer1_id,@shop1_id),DATE_SUB(NOW(),INTERVAL 2 DAY),DATE_SUB(NOW(),INTERVAL 3 HOUR));
+    (CONCAT(LEAST(@buyer1_id,@shop1_id),'_',GREATEST(@buyer1_id,@shop1_id)),
+     LEAST(@buyer1_id,@shop1_id),GREATEST(@buyer1_id,@shop1_id),DATE_SUB(NOW(),INTERVAL 2 DAY),DATE_SUB(NOW(),INTERVAL 3 HOUR));
 SET @conv1=(SELECT id FROM conversations WHERE room_key=CONCAT(LEAST(@buyer1_id,@shop1_id),'_',GREATEST(@buyer1_id,@shop1_id)));
 
 INSERT INTO chat_messages (conversation_id,sender_id,content,sent_at,is_read) VALUES
-(@conv1,@buyer1_id,'Chào shop, cà rốt của shop có tươi không ạ?',DATE_SUB(NOW(),INTERVAL 2 DAY),TRUE),
-(@conv1,@shop1_id,'Chào bạn! Cà rốt Đà Lạt tươi mỗi ngày, đảm bảo chất lượng nhé! 🥕',DATE_SUB(NOW(),INTERVAL 47 HOUR),TRUE),
-(@conv1,@buyer1_id,'Vậy 1kg khoảng bao nhiêu củ vậy shop?',DATE_SUB(NOW(),INTERVAL 46 HOUR),TRUE),
-(@conv1,@shop1_id,'Thường 5-7 củ/kg bạn nhé, mình chọn củ to đều cho bạn 😊',DATE_SUB(NOW(),INTERVAL 45 HOUR),TRUE),
-(@conv1,@buyer1_id,'Ok shop, mình đặt 2kg cà rốt với 1kg khoai tây nhé!',DATE_SUB(NOW(),INTERVAL 44 HOUR),TRUE),
-(@conv1,@shop1_id,'Được bạn! Đặt qua app nhé, mình xác nhận ngay. Giao trong 2-3 tiếng 🚚',DATE_SUB(NOW(),INTERVAL 43 HOUR),TRUE),
-(@conv1,@buyer1_id,'Cảm ơn shop nhiều! Lần sau mình sẽ tiếp tục ủng hộ 😄',DATE_SUB(NOW(),INTERVAL 5 HOUR),TRUE),
-(@conv1,@shop1_id,'Cảm ơn bạn đã tin tưởng! Hàng tươi ngon đảm bảo nha 🌱',DATE_SUB(NOW(),INTERVAL 3 HOUR),FALSE);
+                                                                                  (@conv1,@buyer1_id,'Chào shop, cà rốt của shop có tươi không ạ?',DATE_SUB(NOW(),INTERVAL 2 DAY),TRUE),
+                                                                                  (@conv1,@shop1_id,'Chào bạn! Cà rốt Đà Lạt tươi mỗi ngày, đảm bảo chất lượng nhé! 🥕',DATE_SUB(NOW(),INTERVAL 47 HOUR),TRUE),
+                                                                                  (@conv1,@buyer1_id,'Vậy 1kg khoảng bao nhiêu củ vậy shop?',DATE_SUB(NOW(),INTERVAL 46 HOUR),TRUE),
+                                                                                  (@conv1,@shop1_id,'Thường 5-7 củ/kg bạn nhé, mình chọn củ to đều cho bạn 😊',DATE_SUB(NOW(),INTERVAL 45 HOUR),TRUE),
+                                                                                  (@conv1,@buyer1_id,'Ok shop, mình đặt 2kg cà rốt với 1kg khoai tây nhé!',DATE_SUB(NOW(),INTERVAL 44 HOUR),TRUE),
+                                                                                  (@conv1,@shop1_id,'Được bạn! Đặt qua app nhé, mình xác nhận ngay. Giao trong 2-3 tiếng 🚚',DATE_SUB(NOW(),INTERVAL 43 HOUR),TRUE),
+                                                                                  (@conv1,@buyer1_id,'Cảm ơn shop nhiều! Lần sau mình sẽ tiếp tục ủng hộ 😄',DATE_SUB(NOW(),INTERVAL 5 HOUR),TRUE),
+                                                                                  (@conv1,@shop1_id,'Cảm ơn bạn đã tin tưởng! Hàng tươi ngon đảm bảo nha 🌱',DATE_SUB(NOW(),INTERVAL 3 HOUR),FALSE);
 
 INSERT INTO conversations (room_key,user1_id,user2_id,created_at,last_message_at) VALUES
-(CONCAT(LEAST(@buyer1_id,@shop2_id),'_',GREATEST(@buyer1_id,@shop2_id)),
- LEAST(@buyer1_id,@shop2_id),GREATEST(@buyer1_id,@shop2_id),DATE_SUB(NOW(),INTERVAL 1 DAY),DATE_SUB(NOW(),INTERVAL 1 HOUR));
+    (CONCAT(LEAST(@buyer1_id,@shop2_id),'_',GREATEST(@buyer1_id,@shop2_id)),
+     LEAST(@buyer1_id,@shop2_id),GREATEST(@buyer1_id,@shop2_id),DATE_SUB(NOW(),INTERVAL 1 DAY),DATE_SUB(NOW(),INTERVAL 1 HOUR));
 SET @conv2=(SELECT id FROM conversations WHERE room_key=CONCAT(LEAST(@buyer1_id,@shop2_id),'_',GREATEST(@buyer1_id,@shop2_id)));
 
 INSERT INTO chat_messages (conversation_id,sender_id,content,sent_at,is_read) VALUES
-(@conv2,@buyer1_id,'Shop ơi, xoài cát Hòa Lộc còn hàng không?',DATE_SUB(NOW(),INTERVAL 1 DAY),TRUE),
-(@conv2,@shop2_id,'Còn hàng bạn ơi! Xoài đang vào mùa, ngọt lắm. Còn khoảng 25kg 🥭',DATE_SUB(NOW(),INTERVAL 23 HOUR),TRUE),
-(@conv2,@buyer1_id,'Xoài có chín cây không hay chín ép vậy shop?',DATE_SUB(NOW(),INTERVAL 23 HOUR),TRUE),
-(@conv2,@shop2_id,'Toàn chín cây bạn nhé! Lấy thẳng từ vườn Tiền Giang, cam kết không ép 🌿',DATE_SUB(NOW(),INTERVAL 22 HOUR),TRUE),
-(@conv2,@buyer1_id,'Mình muốn đặt 2kg xoài và 3kg cam sành nhé shop!',DATE_SUB(NOW(),INTERVAL 2 HOUR),TRUE),
-(@conv2,@shop2_id,'Được bạn! Đặt qua app nhé, shop xác nhận ngay và giao trong 2-3 tiếng 🚀',DATE_SUB(NOW(),INTERVAL 90 MINUTE),TRUE),
-(@conv2,@buyer1_id,'Cảm ơn shop! Mình đặt rồi nha 😊',DATE_SUB(NOW(),INTERVAL 1 HOUR),FALSE),
-(@conv2,@shop2_id,'Shop nhận đơn rồi! Đang chuẩn bị hàng cho bạn 🍊',DATE_SUB(NOW(),INTERVAL 1 HOUR),FALSE);
+                                                                                  (@conv2,@buyer1_id,'Shop ơi, xoài cát Hòa Lộc còn hàng không?',DATE_SUB(NOW(),INTERVAL 1 DAY),TRUE),
+                                                                                  (@conv2,@shop2_id,'Còn hàng bạn ơi! Xoài đang vào mùa, ngọt lắm. Còn khoảng 25kg 🥭',DATE_SUB(NOW(),INTERVAL 23 HOUR),TRUE),
+                                                                                  (@conv2,@buyer1_id,'Xoài có chín cây không hay chín ép vậy shop?',DATE_SUB(NOW(),INTERVAL 23 HOUR),TRUE),
+                                                                                  (@conv2,@shop2_id,'Toàn chín cây bạn nhé! Lấy thẳng từ vườn Tiền Giang, cam kết không ép 🌿',DATE_SUB(NOW(),INTERVAL 22 HOUR),TRUE),
+                                                                                  (@conv2,@buyer1_id,'Mình muốn đặt 2kg xoài và 3kg cam sành nhé shop!',DATE_SUB(NOW(),INTERVAL 2 HOUR),TRUE),
+                                                                                  (@conv2,@shop2_id,'Được bạn! Đặt qua app nhé, shop xác nhận ngay và giao trong 2-3 tiếng 🚀',DATE_SUB(NOW(),INTERVAL 90 MINUTE),TRUE),
+                                                                                  (@conv2,@buyer1_id,'Cảm ơn shop! Mình đặt rồi nha 😊',DATE_SUB(NOW(),INTERVAL 1 HOUR),FALSE),
+                                                                                  (@conv2,@shop2_id,'Shop nhận đơn rồi! Đang chuẩn bị hàng cho bạn 🍊',DATE_SUB(NOW(),INTERVAL 1 HOUR),FALSE);
 
 INSERT INTO conversations (room_key,user1_id,user2_id,created_at,last_message_at) VALUES
-(CONCAT(LEAST(@buyer1_id,@admin_id),'_',GREATEST(@buyer1_id,@admin_id)),
- LEAST(@buyer1_id,@admin_id),GREATEST(@buyer1_id,@admin_id),DATE_SUB(NOW(),INTERVAL 3 DAY),DATE_SUB(NOW(),INTERVAL 2 DAY));
+    (CONCAT(LEAST(@buyer1_id,@admin_id),'_',GREATEST(@buyer1_id,@admin_id)),
+     LEAST(@buyer1_id,@admin_id),GREATEST(@buyer1_id,@admin_id),DATE_SUB(NOW(),INTERVAL 3 DAY),DATE_SUB(NOW(),INTERVAL 2 DAY));
 SET @conv3=(SELECT id FROM conversations WHERE room_key=CONCAT(LEAST(@buyer1_id,@admin_id),'_',GREATEST(@buyer1_id,@admin_id)));
 
 INSERT INTO chat_messages (conversation_id,sender_id,content,sent_at,is_read) VALUES
-(@conv3,@buyer1_id,'Xin chào Admin, mình có đơn hàng bị giao nhầm địa chỉ, phải làm sao ạ?',DATE_SUB(NOW(),INTERVAL 3 DAY),TRUE),
-(@conv3,@admin_id,'Chào bạn! Bạn cung cấp mã đơn hàng cho mình kiểm tra nhé.',DATE_SUB(NOW(),INTERVAL 3 DAY),TRUE),
-(@conv3,@buyer1_id,'Mã đơn là FM-001234, shipper giao nhầm số nhà ạ.',DATE_SUB(NOW(),INTERVAL 3 DAY),TRUE),
-(@conv3,@admin_id,'Mình đã xem đơn rồi. Mình sẽ liên hệ shipper ngay để xử lý. Bạn chờ khoảng 15 phút nhé.',DATE_SUB(NOW(),INTERVAL 3 DAY),TRUE),
-(@conv3,@admin_id,'Đã liên hệ xong rồi bạn! Shipper sẽ quay lại giao đúng địa chỉ trong 20 phút.',DATE_SUB(NOW(),INTERVAL 3 DAY),TRUE),
-(@conv3,@buyer1_id,'Cảm ơn Admin đã hỗ trợ nhanh! 🙏',DATE_SUB(NOW(),INTERVAL 2 DAY),TRUE);
+                                                                                  (@conv3,@buyer1_id,'Xin chào Admin, mình có đơn hàng bị giao nhầm địa chỉ, phải làm sao ạ?',DATE_SUB(NOW(),INTERVAL 3 DAY),TRUE),
+                                                                                  (@conv3,@admin_id,'Chào bạn! Bạn cung cấp mã đơn hàng cho mình kiểm tra nhé.',DATE_SUB(NOW(),INTERVAL 3 DAY),TRUE),
+                                                                                  (@conv3,@buyer1_id,'Mã đơn là FM-001234, shipper giao nhầm số nhà ạ.',DATE_SUB(NOW(),INTERVAL 3 DAY),TRUE),
+                                                                                  (@conv3,@admin_id,'Mình đã xem đơn rồi. Mình sẽ liên hệ shipper ngay để xử lý. Bạn chờ khoảng 15 phút nhé.',DATE_SUB(NOW(),INTERVAL 3 DAY),TRUE),
+                                                                                  (@conv3,@admin_id,'Đã liên hệ xong rồi bạn! Shipper sẽ quay lại giao đúng địa chỉ trong 20 phút.',DATE_SUB(NOW(),INTERVAL 3 DAY),TRUE),
+                                                                                  (@conv3,@buyer1_id,'Cảm ơn Admin đã hỗ trợ nhanh! 🙏',DATE_SUB(NOW(),INTERVAL 2 DAY),TRUE);
 
 INSERT INTO conversations (room_key,user1_id,user2_id,created_at,last_message_at) VALUES
-(CONCAT(LEAST(@shop1_id,@admin_id),'_',GREATEST(@shop1_id,@admin_id)),
- LEAST(@shop1_id,@admin_id),GREATEST(@shop1_id,@admin_id),DATE_SUB(NOW(),INTERVAL 5 DAY),DATE_SUB(NOW(),INTERVAL 4 DAY));
+    (CONCAT(LEAST(@shop1_id,@admin_id),'_',GREATEST(@shop1_id,@admin_id)),
+     LEAST(@shop1_id,@admin_id),GREATEST(@shop1_id,@admin_id),DATE_SUB(NOW(),INTERVAL 5 DAY),DATE_SUB(NOW(),INTERVAL 4 DAY));
 SET @conv4=(SELECT id FROM conversations WHERE room_key=CONCAT(LEAST(@shop1_id,@admin_id),'_',GREATEST(@shop1_id,@admin_id)));
 
 INSERT INTO chat_messages (conversation_id,sender_id,content,sent_at,is_read) VALUES
-(@conv4,@shop1_id,'Admin ơi, shop mình muốn thêm sản phẩm mới thì cần thủ tục gì không?',DATE_SUB(NOW(),INTERVAL 5 DAY),TRUE),
-(@conv4,@admin_id,'Chào shop! Shop chỉ cần đăng nhập vào dashboard và thêm sản phẩm là được ngay nhé.',DATE_SUB(NOW(),INTERVAL 5 DAY),TRUE),
-(@conv4,@shop1_id,'Vậy có cần upload giấy tờ VietGAP không Admin?',DATE_SUB(NOW(),INTERVAL 5 DAY),TRUE),
-(@conv4,@admin_id,'Không bắt buộc, nhưng nếu có thì tỉ lệ mua hàng cao hơn ~30% bạn nhé. Nên upload!',DATE_SUB(NOW(),INTERVAL 5 DAY),TRUE),
-(@conv4,@shop1_id,'Còn về phí hoa hồng thì bao nhiêu % vậy Admin?',DATE_SUB(NOW(),INTERVAL 4 DAY),TRUE),
-(@conv4,@admin_id,'Hiện tại Food Market thu 3% trên mỗi đơn thành công. Không có phí cố định nhé 😊',DATE_SUB(NOW(),INTERVAL 4 DAY),TRUE),
-(@conv4,@shop1_id,'Oke, hợp lý! Cảm ơn Admin đã giải đáp.',DATE_SUB(NOW(),INTERVAL 4 DAY),TRUE);
+                                                                                  (@conv4,@shop1_id,'Admin ơi, shop mình muốn thêm sản phẩm mới thì cần thủ tục gì không?',DATE_SUB(NOW(),INTERVAL 5 DAY),TRUE),
+                                                                                  (@conv4,@admin_id,'Chào shop! Shop chỉ cần đăng nhập vào dashboard và thêm sản phẩm là được ngay nhé.',DATE_SUB(NOW(),INTERVAL 5 DAY),TRUE),
+                                                                                  (@conv4,@shop1_id,'Vậy có cần upload giấy tờ VietGAP không Admin?',DATE_SUB(NOW(),INTERVAL 5 DAY),TRUE),
+                                                                                  (@conv4,@admin_id,'Không bắt buộc, nhưng nếu có thì tỉ lệ mua hàng cao hơn ~30% bạn nhé. Nên upload!',DATE_SUB(NOW(),INTERVAL 5 DAY),TRUE),
+                                                                                  (@conv4,@shop1_id,'Còn về phí hoa hồng thì bao nhiêu % vậy Admin?',DATE_SUB(NOW(),INTERVAL 4 DAY),TRUE),
+                                                                                  (@conv4,@admin_id,'Hiện tại Food Market thu 3% trên mỗi đơn thành công. Không có phí cố định nhé 😊',DATE_SUB(NOW(),INTERVAL 4 DAY),TRUE),
+                                                                                  (@conv4,@shop1_id,'Oke, hợp lý! Cảm ơn Admin đã giải đáp.',DATE_SUB(NOW(),INTERVAL 4 DAY),TRUE);
 
 INSERT INTO conversations (room_key,user1_id,user2_id,created_at,last_message_at) VALUES
-(CONCAT(LEAST(@shipper1_id,@admin_id),'_',GREATEST(@shipper1_id,@admin_id)),
- LEAST(@shipper1_id,@admin_id),GREATEST(@shipper1_id,@admin_id),DATE_SUB(NOW(),INTERVAL 4 DAY),DATE_SUB(NOW(),INTERVAL 3 DAY));
+    (CONCAT(LEAST(@shipper1_id,@admin_id),'_',GREATEST(@shipper1_id,@admin_id)),
+     LEAST(@shipper1_id,@admin_id),GREATEST(@shipper1_id,@admin_id),DATE_SUB(NOW(),INTERVAL 4 DAY),DATE_SUB(NOW(),INTERVAL 3 DAY));
 SET @conv5=(SELECT id FROM conversations WHERE room_key=CONCAT(LEAST(@shipper1_id,@admin_id),'_',GREATEST(@shipper1_id,@admin_id)));
 
 INSERT INTO chat_messages (conversation_id,sender_id,content,sent_at,is_read) VALUES
-(@conv5,@shipper1_id,'Admin ơi, mình muốn đăng ký nhận đơn khu vực Bình Dương được không?',DATE_SUB(NOW(),INTERVAL 4 DAY),TRUE),
-(@conv5,@admin_id,'Được bạn! Bạn cập nhật khu vực hoạt động trong profile là được ngay nhé.',DATE_SUB(NOW(),INTERVAL 4 DAY),TRUE),
-(@conv5,@shipper1_id,'Khi nhận đơn Bình Dương có phụ cấp thêm không Admin?',DATE_SUB(NOW(),INTERVAL 4 DAY),TRUE),
-(@conv5,@admin_id,'Có! Thêm 5.000đ/đơn cho khu vực ngoại thành nhé. Đang áp dụng từ tháng này.',DATE_SUB(NOW(),INTERVAL 3 DAY),TRUE),
-(@conv5,@shipper1_id,'Tuyệt! Mình đăng ký luôn. Cảm ơn Admin.',DATE_SUB(NOW(),INTERVAL 3 DAY),TRUE);
+                                                                                  (@conv5,@shipper1_id,'Admin ơi, mình muốn đăng ký nhận đơn khu vực Bình Dương được không?',DATE_SUB(NOW(),INTERVAL 4 DAY),TRUE),
+                                                                                  (@conv5,@admin_id,'Được bạn! Bạn cập nhật khu vực hoạt động trong profile là được ngay nhé.',DATE_SUB(NOW(),INTERVAL 4 DAY),TRUE),
+                                                                                  (@conv5,@shipper1_id,'Khi nhận đơn Bình Dương có phụ cấp thêm không Admin?',DATE_SUB(NOW(),INTERVAL 4 DAY),TRUE),
+                                                                                  (@conv5,@admin_id,'Có! Thêm 5.000đ/đơn cho khu vực ngoại thành nhé. Đang áp dụng từ tháng này.',DATE_SUB(NOW(),INTERVAL 3 DAY),TRUE),
+                                                                                  (@conv5,@shipper1_id,'Tuyệt! Mình đăng ký luôn. Cảm ơn Admin.',DATE_SUB(NOW(),INTERVAL 3 DAY),TRUE);
 
 -- ============================================================
 -- 17. BUILD PLANS (kế hoạch ăn uống - không dùng combo)
@@ -790,32 +790,32 @@ SET @plan3_id=(SELECT plan_id FROM build_plans WHERE buyer_id=@buyer1_id AND pla
 -- 18. BUILD PLAN ITEMS
 -- ============================================================
 INSERT INTO build_plan_items (plan_id,meal_name,servings,meal_date,completed) VALUES
-(@plan1_id,'Bữa sáng ngày 1 - Nước ép cà rốt gừng',       2,DATE_ADD(CURDATE(),INTERVAL 1 DAY),FALSE),
-(@plan1_id,'Bữa trưa ngày 1 - Salad dưa leo cà chua',      2,DATE_ADD(CURDATE(),INTERVAL 1 DAY),FALSE),
-(@plan1_id,'Bữa tối ngày 1 - Canh bí đỏ hầm khoai tây',   2,DATE_ADD(CURDATE(),INTERVAL 1 DAY),FALSE),
-(@plan1_id,'Bữa sáng ngày 2 - Nước ép cà rốt táo',         2,DATE_ADD(CURDATE(),INTERVAL 2 DAY),FALSE),
-(@plan1_id,'Bữa trưa ngày 2 - Xào củ thập cẩm',            2,DATE_ADD(CURDATE(),INTERVAL 2 DAY),FALSE),
-(@plan1_id,'Bữa tối ngày 2 - Súp bí đao tôm khô',          2,DATE_ADD(CURDATE(),INTERVAL 2 DAY),FALSE),
-(@plan1_id,'Bữa sáng ngày 3 - Sinh tố dưa hấu cam',        2,DATE_ADD(CURDATE(),INTERVAL 3 DAY),FALSE),
-(@plan1_id,'Bữa trưa ngày 3 - Salad ớt chuông dưa leo',    2,DATE_ADD(CURDATE(),INTERVAL 3 DAY),FALSE),
-(@plan1_id,'Bữa tối ngày 3 - Hầm củ bổ dưỡng',            2,DATE_ADD(CURDATE(),INTERVAL 3 DAY),FALSE),
-(@plan2_id,'Bữa sáng ngày 1 - Nước ép cà rốt gừng',        4,DATE_ADD(CURDATE(),INTERVAL 1 DAY),FALSE),
-(@plan2_id,'Bữa trưa ngày 1 - Xào củ thập cẩm',            4,DATE_ADD(CURDATE(),INTERVAL 1 DAY),FALSE),
-(@plan2_id,'Bữa tối ngày 1 - Lẩu củ quả gia đình',         4,DATE_ADD(CURDATE(),INTERVAL 1 DAY),FALSE),
-(@plan2_id,'Bữa phụ ngày 1 - Trái cây tráng miệng',        4,DATE_ADD(CURDATE(),INTERVAL 1 DAY),FALSE),
-(@plan3_id,'Bữa sáng ngày 1 - Sinh tố cam bưởi',           2,DATE_ADD(CURDATE(),INTERVAL 1 DAY),FALSE),
-(@plan3_id,'Bữa trưa ngày 1 - Xào cà tím hành tỏi',        2,DATE_ADD(CURDATE(),INTERVAL 1 DAY),FALSE),
-(@plan3_id,'Bữa tối ngày 1 - Canh bí đao su su chay',      2,DATE_ADD(CURDATE(),INTERVAL 1 DAY),FALSE),
-(@plan3_id,'Bữa sáng ngày 2 - Nước ép cà rốt táo gừng',   2,DATE_ADD(CURDATE(),INTERVAL 2 DAY),FALSE),
-(@plan3_id,'Bữa trưa ngày 2 - Salad dưa leo ớt chuông',    2,DATE_ADD(CURDATE(),INTERVAL 2 DAY),FALSE),
-(@plan3_id,'Bữa tối ngày 2 - Hầm khoai môn khoai lang',    2,DATE_ADD(CURDATE(),INTERVAL 2 DAY),FALSE);
+                                                                                  (@plan1_id,'Bữa sáng ngày 1 - Nước ép cà rốt gừng',       2,DATE_ADD(CURDATE(),INTERVAL 1 DAY),FALSE),
+                                                                                  (@plan1_id,'Bữa trưa ngày 1 - Salad dưa leo cà chua',      2,DATE_ADD(CURDATE(),INTERVAL 1 DAY),FALSE),
+                                                                                  (@plan1_id,'Bữa tối ngày 1 - Canh bí đỏ hầm khoai tây',   2,DATE_ADD(CURDATE(),INTERVAL 1 DAY),FALSE),
+                                                                                  (@plan1_id,'Bữa sáng ngày 2 - Nước ép cà rốt táo',         2,DATE_ADD(CURDATE(),INTERVAL 2 DAY),FALSE),
+                                                                                  (@plan1_id,'Bữa trưa ngày 2 - Xào củ thập cẩm',            2,DATE_ADD(CURDATE(),INTERVAL 2 DAY),FALSE),
+                                                                                  (@plan1_id,'Bữa tối ngày 2 - Súp bí đao tôm khô',          2,DATE_ADD(CURDATE(),INTERVAL 2 DAY),FALSE),
+                                                                                  (@plan1_id,'Bữa sáng ngày 3 - Sinh tố dưa hấu cam',        2,DATE_ADD(CURDATE(),INTERVAL 3 DAY),FALSE),
+                                                                                  (@plan1_id,'Bữa trưa ngày 3 - Salad ớt chuông dưa leo',    2,DATE_ADD(CURDATE(),INTERVAL 3 DAY),FALSE),
+                                                                                  (@plan1_id,'Bữa tối ngày 3 - Hầm củ bổ dưỡng',            2,DATE_ADD(CURDATE(),INTERVAL 3 DAY),FALSE),
+                                                                                  (@plan2_id,'Bữa sáng ngày 1 - Nước ép cà rốt gừng',        4,DATE_ADD(CURDATE(),INTERVAL 1 DAY),FALSE),
+                                                                                  (@plan2_id,'Bữa trưa ngày 1 - Xào củ thập cẩm',            4,DATE_ADD(CURDATE(),INTERVAL 1 DAY),FALSE),
+                                                                                  (@plan2_id,'Bữa tối ngày 1 - Lẩu củ quả gia đình',         4,DATE_ADD(CURDATE(),INTERVAL 1 DAY),FALSE),
+                                                                                  (@plan2_id,'Bữa phụ ngày 1 - Trái cây tráng miệng',        4,DATE_ADD(CURDATE(),INTERVAL 1 DAY),FALSE),
+                                                                                  (@plan3_id,'Bữa sáng ngày 1 - Sinh tố cam bưởi',           2,DATE_ADD(CURDATE(),INTERVAL 1 DAY),FALSE),
+                                                                                  (@plan3_id,'Bữa trưa ngày 1 - Xào cà tím hành tỏi',        2,DATE_ADD(CURDATE(),INTERVAL 1 DAY),FALSE),
+                                                                                  (@plan3_id,'Bữa tối ngày 1 - Canh bí đao su su chay',      2,DATE_ADD(CURDATE(),INTERVAL 1 DAY),FALSE),
+                                                                                  (@plan3_id,'Bữa sáng ngày 2 - Nước ép cà rốt táo gừng',   2,DATE_ADD(CURDATE(),INTERVAL 2 DAY),FALSE),
+                                                                                  (@plan3_id,'Bữa trưa ngày 2 - Salad dưa leo ớt chuông',    2,DATE_ADD(CURDATE(),INTERVAL 2 DAY),FALSE),
+                                                                                  (@plan3_id,'Bữa tối ngày 2 - Hầm khoai môn khoai lang',    2,DATE_ADD(CURDATE(),INTERVAL 2 DAY),FALSE);
 
 SET @bpi1=(SELECT id FROM build_plan_items WHERE plan_id=@plan1_id AND meal_name LIKE '%cà rốt gừng%' AND meal_date=DATE_ADD(CURDATE(),INTERVAL 1 DAY) LIMIT 1);
 SET @bpi2=(SELECT id FROM build_plan_items WHERE plan_id=@plan1_id AND meal_name LIKE '%dưa leo%' AND meal_date=DATE_ADD(CURDATE(),INTERVAL 1 DAY) LIMIT 1);
 
 INSERT INTO meal_products (meal_id,product_id) VALUES
-(@bpi1,@p_ca_rot),(@bpi1,@p_gung),
-(@bpi2,@p_dua_leo),(@bpi2,@p_ca_chua),(@bpi2,@p_ot_chuong);
+                                                   (@bpi1,@p_ca_rot),(@bpi1,@p_gung),
+                                                   (@bpi2,@p_dua_leo),(@bpi2,@p_ca_chua),(@bpi2,@p_ot_chuong);
 
 -- ============================================================
 -- 19. CART + CART ITEMS (chỉ sản phẩm từ shop1)
@@ -824,10 +824,10 @@ INSERT INTO cart (user_id) VALUES (@buyer1_id);
 SET @cart_buyer1=(SELECT id FROM cart WHERE user_id=@buyer1_id LIMIT 1);
 
 INSERT INTO cart_item (cart_id,product_product_id,mystery_box_id,build_combo_id,quantity) VALUES
-(@cart_buyer1,@p_ca_rot,   NULL,NULL,2),
-(@cart_buyer1,@p_khoai_tay,NULL,NULL,1),
-(@cart_buyer1,@p_dau_tay,  NULL,NULL,1),
-(@cart_buyer1,NULL,@box1_s1,NULL,1);
+                                                                                              (@cart_buyer1,@p_ca_rot,   NULL,NULL,2),
+                                                                                              (@cart_buyer1,@p_khoai_tay,NULL,NULL,1),
+                                                                                              (@cart_buyer1,@p_dau_tay,  NULL,NULL,1),
+                                                                                              (@cart_buyer1,NULL,@box1_s1,NULL,1);
 
 -- ============================================================
 -- 20. ORDER MYSTERY BOXES
@@ -848,19 +848,19 @@ INSERT INTO order_mystery_boxes (order_id,mystery_box_id,quantity) VALUES (@od_b
 -- 5 đơn thêm cho shipper1 (tổng cộng 12 đơn × 15000 = 180000đ)
 INSERT INTO orders (buyer_id,shop_owner_id,shipper_id,shipping_fee,recipient_name,recipient_phone,shipping_address,shipping_latitude,shipping_longitude,shop_latitude,shop_longitude,note,status,total_amount,payment_method,created_at)
 VALUES
-(@buyer1_id,@shop1_id,@shipper1_id,15000,'Ngô Gia Sang','0911111111','Đ. Võ Trường Toản, Linh Trung, Thủ Đức, TP.HCM',10.8651,106.7752,10.8697,106.7717,'Cà rốt hữu cơ, rau cải sạch','DELIVERED',98000,'COD',DATE_SUB(NOW(),INTERVAL 1 DAY)),
-(@buyer1_id,@shop2_id,@shipper1_id,15000,'Ngô Gia Sang','0911111111','A15 Tiền Giang, Đông Hòa, Dĩ An, Bình Dương',10.8978,106.7731,10.9021,106.7698,'Xoài cát Hòa Lộc ngon tuyệt','DELIVERED',145000,'PAYOS',DATE_SUB(NOW(),INTERVAL 2 DAY)),
-(@buyer1_id,@shop1_id,@shipper1_id,15000,'Ngô Gia Sang','0911111111','Đ. Võ Trường Toản, Linh Trung, Thủ Đức, TP.HCM',10.8651,106.7752,10.8697,106.7717,'Khoai lang mật siêu ngọt','DELIVERED',112000,'COD',DATE_SUB(NOW(),INTERVAL 3 DAY)),
-(@buyer1_id,@shop2_id,@shipper1_id,15000,'Ngô Gia Sang','0911111111','A15 Tiền Giang, Đông Hòa, Dĩ An, Bình Dương',10.8978,106.7731,10.9021,106.7698,'Bưởi da xanh, cam sành tươi','DELIVERED',178000,'PAYOS',DATE_SUB(NOW(),INTERVAL 4 DAY)),
-(@buyer1_id,@shop1_id,@shipper1_id,15000,'Ngô Gia Sang','0911111111','Đ. Võ Trường Toản, Linh Trung, Thủ Đức, TP.HCM',10.8651,106.7752,10.8697,106.7717,'Giao đúng giờ, rất hài lòng','DELIVERED',135000,'COD',DATE_SUB(NOW(),INTERVAL 7 DAY));
+    (@buyer1_id,@shop1_id,@shipper1_id,15000,'Ngô Gia Sang','0911111111','Đ. Võ Trường Toản, Linh Trung, Thủ Đức, TP.HCM',10.8651,106.7752,10.8697,106.7717,'Cà rốt hữu cơ, rau cải sạch','DELIVERED',98000,'COD',DATE_SUB(NOW(),INTERVAL 1 DAY)),
+    (@buyer1_id,@shop2_id,@shipper1_id,15000,'Ngô Gia Sang','0911111111','A15 Tiền Giang, Đông Hòa, Dĩ An, Bình Dương',10.8978,106.7731,10.9021,106.7698,'Xoài cát Hòa Lộc ngon tuyệt','DELIVERED',145000,'PAYOS',DATE_SUB(NOW(),INTERVAL 2 DAY)),
+    (@buyer1_id,@shop1_id,@shipper1_id,15000,'Ngô Gia Sang','0911111111','Đ. Võ Trường Toản, Linh Trung, Thủ Đức, TP.HCM',10.8651,106.7752,10.8697,106.7717,'Khoai lang mật siêu ngọt','DELIVERED',112000,'COD',DATE_SUB(NOW(),INTERVAL 3 DAY)),
+    (@buyer1_id,@shop2_id,@shipper1_id,15000,'Ngô Gia Sang','0911111111','A15 Tiền Giang, Đông Hòa, Dĩ An, Bình Dương',10.8978,106.7731,10.9021,106.7698,'Bưởi da xanh, cam sành tươi','DELIVERED',178000,'PAYOS',DATE_SUB(NOW(),INTERVAL 4 DAY)),
+    (@buyer1_id,@shop1_id,@shipper1_id,15000,'Ngô Gia Sang','0911111111','Đ. Võ Trường Toản, Linh Trung, Thủ Đức, TP.HCM',10.8651,106.7752,10.8697,106.7717,'Giao đúng giờ, rất hài lòng','DELIVERED',135000,'COD',DATE_SUB(NOW(),INTERVAL 7 DAY));
 
 -- 4 đơn cho shipper3 (tổng 4 đơn × 15000 = 60000đ)
 INSERT INTO orders (buyer_id,shop_owner_id,shipper_id,shipping_fee,recipient_name,recipient_phone,shipping_address,shipping_latitude,shipping_longitude,shop_latitude,shop_longitude,note,status,total_amount,payment_method,created_at)
 VALUES
-(@buyer1_id,@shop1_id,@shipper3_id,15000,'Ngô Gia Sang','0911111111','Đ. Võ Trường Toản, Linh Trung, Thủ Đức, TP.HCM',10.8651,106.7752,10.8697,106.7717,'Rau củ tươi ngon','DELIVERED',89000,'COD',DATE_SUB(NOW(),INTERVAL 8 DAY)),
-(@buyer1_id,@shop2_id,@shipper3_id,15000,'Ngô Gia Sang','0911111111','A15 Tiền Giang, Đông Hòa, Dĩ An, Bình Dương',10.8978,106.7731,10.9021,106.7698,'Trái cây nhiệt đới ngon','DELIVERED',125000,'PAYOS',DATE_SUB(NOW(),INTERVAL 10 DAY)),
-(@buyer1_id,@shop1_id,@shipper3_id,15000,'Ngô Gia Sang','0911111111','Đ. Võ Trường Toản, Linh Trung, Thủ Đức, TP.HCM',10.8651,106.7752,10.8697,106.7717,'Hàng tươi sạch như mô tả','DELIVERED',97000,'COD',DATE_SUB(NOW(),INTERVAL 12 DAY)),
-(@buyer1_id,@shop2_id,@shipper3_id,15000,'Ngô Gia Sang','0911111111','A15 Tiền Giang, Đông Hòa, Dĩ An, Bình Dương',10.8978,106.7731,10.9021,106.7698,'Dứa mật siêu thơm','DELIVERED',110000,'PAYOS',DATE_SUB(NOW(),INTERVAL 14 DAY));
+    (@buyer1_id,@shop1_id,@shipper3_id,15000,'Ngô Gia Sang','0911111111','Đ. Võ Trường Toản, Linh Trung, Thủ Đức, TP.HCM',10.8651,106.7752,10.8697,106.7717,'Rau củ tươi ngon','DELIVERED',89000,'COD',DATE_SUB(NOW(),INTERVAL 8 DAY)),
+    (@buyer1_id,@shop2_id,@shipper3_id,15000,'Ngô Gia Sang','0911111111','A15 Tiền Giang, Đông Hòa, Dĩ An, Bình Dương',10.8978,106.7731,10.9021,106.7698,'Trái cây nhiệt đới ngon','DELIVERED',125000,'PAYOS',DATE_SUB(NOW(),INTERVAL 10 DAY)),
+    (@buyer1_id,@shop1_id,@shipper3_id,15000,'Ngô Gia Sang','0911111111','Đ. Võ Trường Toản, Linh Trung, Thủ Đức, TP.HCM',10.8651,106.7752,10.8697,106.7717,'Hàng tươi sạch như mô tả','DELIVERED',97000,'COD',DATE_SUB(NOW(),INTERVAL 12 DAY)),
+    (@buyer1_id,@shop2_id,@shipper3_id,15000,'Ngô Gia Sang','0911111111','A15 Tiền Giang, Đông Hòa, Dĩ An, Bình Dương',10.8978,106.7731,10.9021,106.7698,'Dứa mật siêu thơm','DELIVERED',110000,'PAYOS',DATE_SUB(NOW(),INTERVAL 14 DAY));
 
 -- ============================================================
 -- 21. TRANSACTIONS
@@ -986,15 +986,15 @@ INSERT INTO order_details (order_id,product_id,quantity,unit_price,is_requested_
 -- ----------------------------------------------------------------
 INSERT INTO shipper_locations (shipper_id, order_id, latitude, longitude, updated_at)
 VALUES (@shipper1_id, NULL, 10.8670, 106.7730, NOW())
-ON DUPLICATE KEY UPDATE order_id=NULL, latitude=10.8670, longitude=106.7730, updated_at=NOW();
+    ON DUPLICATE KEY UPDATE order_id=NULL, latitude=10.8670, longitude=106.7730, updated_at=NOW();
 
 INSERT INTO shipper_locations (shipper_id, order_id, latitude, longitude, updated_at)
 VALUES (@shipper2_id, @os1, 10.8720, 106.7680, NOW())
-ON DUPLICATE KEY UPDATE order_id=@os1, latitude=10.8720, longitude=106.7680, updated_at=NOW();
+    ON DUPLICATE KEY UPDATE order_id=@os1, latitude=10.8720, longitude=106.7680, updated_at=NOW();
 
 INSERT INTO shipper_locations (shipper_id, order_id, latitude, longitude, updated_at)
 VALUES (@shipper3_id, NULL, 10.8651, 106.7752, NOW())
-ON DUPLICATE KEY UPDATE order_id=NULL, latitude=10.8651, longitude=106.7752, updated_at=NOW();
+    ON DUPLICATE KEY UPDATE order_id=NULL, latitude=10.8651, longitude=106.7752, updated_at=NOW();
 
 -- ----------------------------------------------------------------
 -- TÍNH NĂNG 3: PIPELINE STAFF — đơn ở các trạng thái kho

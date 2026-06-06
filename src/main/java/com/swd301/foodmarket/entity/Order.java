@@ -119,6 +119,7 @@ public class Order {
 
     // tiền hoàn khi kiểm tra có vấn đề về hàng sau kiem tra chat luong
     BigDecimal refundAmount = BigDecimal.ZERO;
+    @Column(columnDefinition = "TEXT")
     String refundReason;
     @ManyToOne
     @JoinColumn(name="trip_stop_id")
