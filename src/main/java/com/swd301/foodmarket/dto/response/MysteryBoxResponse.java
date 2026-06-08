@@ -32,6 +32,7 @@ public class MysteryBoxResponse {
 
     private Integer totalQuantity;
 
+    private Integer soldQuantity;
 
     private Boolean isActive;
 
