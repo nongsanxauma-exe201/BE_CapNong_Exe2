@@ -24,6 +24,8 @@ public class ProductUpdateRequest {
     String description;
     String imageUrl;
     ProductStatus status;
+    Integer categoryId ;
+
 
     @JsonFormat(pattern = "yyyy-MM-dd")
     @JsonDeserialize(using = LocalDateDeserializer.class)

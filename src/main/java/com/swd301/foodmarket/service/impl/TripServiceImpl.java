@@ -168,7 +168,7 @@ public class TripServiceImpl implements TripService {
 // trip minh tao ra
     @Override
     public Page<TripResponse> getMyTripByStatus(int page, int size, TripStatus status) {
-        Pageable pageable = PageRequest.of(page, size, Sort.by("departureTime").descending());
+        Pageable pageable = PageRequest.of(page, size, Sort.by("departureTime").ascending());
         Page<Trip> tripPage = null;
         if(status != null)
         {

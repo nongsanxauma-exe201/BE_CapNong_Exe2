@@ -76,6 +76,9 @@ public class ProductServiceImpl implements ProductService {
         if (!product.getShopOwner().getId().equals(getCurrentUser().getId())) {
             throw new AppException(ErrorCode.UNAUTHORIZED);
         }
+        Category category = categoryRepository.findById(
+               request.getCategoryId()
+        ).orElseThrow(() -> new RuntimeException("Category not found"));
 
         productMapper.update(product, request);
 
@@ -83,6 +86,7 @@ public class ProductServiceImpl implements ProductService {
             String imageUrl = cloudinaryService.uploadImage(image);
             product.setImageUrl(imageUrl);
         }
+        product.setCategory(category);
 
         return productMapper.toResponse(productRepository.save(product));
     }
