@@ -16,6 +16,7 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 
 import java.time.LocalDateTime;
+import java.time.ZoneId;
 
 @Service
 @RequiredArgsConstructor
@@ -51,7 +52,7 @@ public class TripTrackingServiceImpl
                         .lng(request.getLng())
                         .speed(request.getSpeed())
                         .heading(request.getHeading())
-                        .createdAt(LocalDateTime.now())
+                        .createdAt(LocalDateTime.now(ZoneId.of("Asia/Ho_Chi_Minh")))
                         .build();
 
         tripTrackingRepository.save(tracking);

@@ -12,6 +12,7 @@ import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
 
 import java.time.LocalDateTime;
+import java.time.ZoneId;
 import java.util.List;
 
 @Component
@@ -26,7 +27,7 @@ public class UserUnlockScheduler {
     public void autoUnlockUsers() {
 
 
-        LocalDateTime sevenDaysAgo = LocalDateTime.now().minusDays(7);
+        LocalDateTime sevenDaysAgo = LocalDateTime.now(ZoneId.of("Asia/Ho_Chi_Minh")).minusDays(7);
 
         List<User> lockedUsers = userRepository.findUsersLockedBefore(sevenDaysAgo);
 

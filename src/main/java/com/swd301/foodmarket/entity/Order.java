@@ -8,6 +8,7 @@ import lombok.experimental.FieldDefaults;
 
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
+import java.time.ZoneId;
 import java.util.ArrayList;
 import java.util.List;
 
@@ -112,7 +113,7 @@ public class Order {
 
     @PrePersist
     void onCreate() {
-        createdAt = LocalDateTime.now();
+        createdAt = LocalDateTime.now(ZoneId.of("Asia/Ho_Chi_Minh"));
     }
     @OneToMany(mappedBy = "order")
     List<Tracking> trackings = new ArrayList<>();

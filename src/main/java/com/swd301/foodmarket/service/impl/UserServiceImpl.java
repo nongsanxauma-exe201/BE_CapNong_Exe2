@@ -42,6 +42,7 @@ import java.io.InputStream;
 import java.math.BigDecimal;
 import java.nio.charset.StandardCharsets;
 import java.time.LocalDateTime;
+import java.time.ZoneId;
 import java.util.List;
 import java.util.stream.Collectors;
 
@@ -81,7 +82,7 @@ public class UserServiceImpl implements UserService {
                 .orElseThrow(() -> new AppException(ErrorCode.ROLE_NOT_FOUND));
 
         user.setRole(role);
-        user.setCreateAt(LocalDateTime.now());
+        user.setCreateAt(LocalDateTime.now(ZoneId.of("Asia/Ho_Chi_Minh")));
 
         // ===== STATUS BASED ON ROLE =====
 
@@ -418,7 +419,7 @@ public class UserServiceImpl implements UserService {
                 .orElseThrow(() -> new AppException(ErrorCode.USER_NOT_EXISTED));
 
         user.setStatus(UserStatus.INACTIVE);
-        user.setLockedAt(LocalDateTime.now());
+        user.setLockedAt(LocalDateTime.now(ZoneId.of("Asia/Ho_Chi_Minh")));
         userRepository.save(user);
 
         log.info("User deactivated successfully: {}", userId);

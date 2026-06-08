@@ -32,6 +32,7 @@ import org.springframework.web.multipart.MultipartFile;
 
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
+import java.time.ZoneId;
 import java.util.List;
 
 @Service
@@ -65,7 +66,7 @@ public class ReviewServiceImpl implements ReviewService {
             shopOwner = orderDetail.getProduct().getShopOwner();
 
             review.setBuyer(buyer);
-            review.setCreateAt(LocalDateTime.now());
+            review.setCreateAt(LocalDateTime.now(ZoneId.of("Asia/Ho_Chi_Minh")));
             review.setShopOwner(shopOwner);
             review.setOrderDetail(orderDetail);
 

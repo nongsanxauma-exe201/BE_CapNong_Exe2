@@ -33,6 +33,7 @@ import org.springframework.web.multipart.MultipartFile;
 import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.time.LocalDateTime;
+import java.time.ZoneId;
 import java.util.List;
 
 @Service
@@ -266,9 +267,9 @@ public class WalletServiceImpl implements WalletService {
         wr.setAdmin(admin);
         wr.setStatus(WithdrawRequestStatus.SUCCESS);
         wr.setAdminNote(adminNote);
-        wr.setProcessedAt(LocalDateTime.now());
+        wr.setProcessedAt(LocalDateTime.now(ZoneId.of("Asia/Ho_Chi_Minh")));
         wr.setPayoutStatus(PayoutStatus.SUCCESS);
-        wr.setPayoutAt(LocalDateTime.now());
+        wr.setPayoutAt(LocalDateTime.now(ZoneId.of("Asia/Ho_Chi_Minh")));
 
         withdrawRequestRepository.save(wr);
         // insert evident
@@ -363,7 +364,7 @@ log.info("Wallet balance: {}, request amount {}", wallet.getTotalBalance(),reque
         wr.setAdmin(admin);
         wr.setStatus(WithdrawRequestStatus.REJECTED);
         wr.setAdminNote(adminNote);
-        wr.setProcessedAt(LocalDateTime.now());
+        wr.setProcessedAt(LocalDateTime.now(ZoneId.of("Asia/Ho_Chi_Minh")));
 
         Wallet wallet = wr.getWallet();
 
