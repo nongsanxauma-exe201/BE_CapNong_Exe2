@@ -106,6 +106,12 @@ public enum ErrorCode {
     ACCOUNT_NOT_FOUND(11002, "accountNo is required", HttpStatus.BAD_REQUEST),
     INVALID_MONEY(12001, "amount must be greater than 0", HttpStatus.BAD_REQUEST),
 
+    // Product Gallery
+    IMAGE_NOT_FOUND(12001, "Image not found", HttpStatus.NOT_FOUND),
+    CANNOT_DELETE_PRIMARY_IMAGE(12002, "Cannot delete primary image. Set another image as primary first.", HttpStatus.BAD_REQUEST),
+    MIN_IMAGES_REQUIRED(12003, "Product must have at least 1 image", HttpStatus.BAD_REQUEST),
+    MAX_IMAGES_EXCEEDED(12004, "Product cannot have more than 8 images", HttpStatus.BAD_REQUEST),
+
     // Vehical
     VEHICLE_NOT_FOUND(13001, "Vehicle not found", HttpStatus.NOT_FOUND),
     VEHICLE_NUMBER_ALREADY_EXISTED(13002, "Vehicle number already existed", HttpStatus.BAD_REQUEST),

@@ -21,12 +21,25 @@ public class CloudinaryServiceImpl implements CloudinaryService {
         try {
             Map<?, ?> result = cloudinary.uploader().upload(
                     file.getBytes(),
-                    ObjectUtils.asMap(
-                            "folder", "brands",
-                            "resource_type", "image"
-                    )
+                    ObjectUtils.asMap("folder", "brands", "resource_type", "image")
             );
             return result.get("secure_url").toString();
+        } catch (IOException e) {
+            throw new RuntimeException("Upload image to Cloudinary failed");
+        }
+    }
+
+    @Override
+    public Map<String, String> uploadImageAndGetDetails(MultipartFile file) {
+        try {
+            Map<?, ?> result = cloudinary.uploader().upload(
+                    file.getBytes(),
+                    ObjectUtils.asMap("folder", "brands", "resource_type", "image")
+            );
+            return Map.of(
+                    "url", result.get("secure_url").toString(),
+                    "publicId", result.get("public_id").toString()
+            );
         } catch (IOException e) {
             throw new RuntimeException("Upload image to Cloudinary failed");
         }
