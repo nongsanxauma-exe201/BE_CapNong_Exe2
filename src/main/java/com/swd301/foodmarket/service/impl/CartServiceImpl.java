@@ -192,7 +192,9 @@ public class CartServiceImpl implements CartService {
                         .imageUrl(box.getImageUrl())
                         .shopName(box.getShopOwner() != null ? box.getShopOwner().getShopName() : null)
                         .itemType("MYSTERY_BOX")
-                        .shopOwnerId(box.getShopOwner() != null ? box.getShopOwner().getId() : null);
+                        .shopOwnerId(box.getShopOwner() != null ? box.getShopOwner().getId() : null)
+                        .stockQuantity(box.getTotalQuantity() != null && box.getSoldQuantity() != null
+                                ? box.getTotalQuantity() - box.getSoldQuantity() : null);
 
             } else if (item.getProduct() != null) {
                 Product product = item.getProduct();
@@ -204,8 +206,8 @@ public class CartServiceImpl implements CartService {
                         .imageUrl(product.getImageUrl())
                         .shopName(product.getShopOwner() != null ? product.getShopOwner().getShopName() : null)
                         .itemType("PRODUCT")
-                        // ✅ shopOwnerId
-                        .shopOwnerId(product.getShopOwner() != null ? product.getShopOwner().getId() : null);
+                        .shopOwnerId(product.getShopOwner() != null ? product.getShopOwner().getId() : null)
+                        .stockQuantity(product.getStockQuantity());
             }else if (item.getBuildCombo() != null) {
                 BuildCombo combo = item.getBuildCombo();
                 builder.buildComboId(combo.getId())

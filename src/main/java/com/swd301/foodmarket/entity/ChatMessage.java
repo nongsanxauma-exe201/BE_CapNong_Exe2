@@ -5,6 +5,7 @@ import lombok.*;
 import lombok.experimental.FieldDefaults;
 
 import java.time.LocalDateTime;
+import java.time.ZoneId;
 
 @Entity
 @Table(name = "chat_messages")
@@ -38,6 +39,6 @@ public class ChatMessage {
 
     @PrePersist
     void onCreate() {
-        sentAt = LocalDateTime.now();
+        sentAt = LocalDateTime.now(ZoneId.of("Asia/Ho_Chi_Minh"));
     }
 }

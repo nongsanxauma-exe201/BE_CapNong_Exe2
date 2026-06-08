@@ -18,6 +18,7 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 
 import java.time.LocalDateTime;
+import java.time.ZoneId;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.stream.Collectors;
@@ -66,7 +67,7 @@ public class ChatServiceImpl implements ChatService {
         ChatMessage saved = chatMessageRepository.save(message);
 
         // 5. Cập nhật lastMessageAt để inbox sort đúng
-        conversation.setLastMessageAt(LocalDateTime.now());
+        conversation.setLastMessageAt(LocalDateTime.now(ZoneId.of("Asia/Ho_Chi_Minh")));
         conversationRepository.save(conversation);
 
         log.info("Message saved | {} -> {} | content: {}", sender.getId(), receiver.getId(), request.getContent());

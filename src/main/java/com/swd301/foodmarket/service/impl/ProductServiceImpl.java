@@ -5,6 +5,7 @@ import com.swd301.foodmarket.dto.request.ProductUpdateRequest;
 import com.swd301.foodmarket.dto.response.PageResponse;
 import com.swd301.foodmarket.dto.response.ProductResponse;
 import com.swd301.foodmarket.entity.Category;
+import com.swd301.foodmarket.entity.Notification;
 import com.swd301.foodmarket.entity.Product;
 import com.swd301.foodmarket.entity.User;
 import com.swd301.foodmarket.enums.OrderStatus;
@@ -14,8 +15,8 @@ import com.swd301.foodmarket.exception.ErrorCode;
 import com.swd301.foodmarket.mapper.ProductMapper;
 import com.swd301.foodmarket.repository.*;
 import com.swd301.foodmarket.service.CloudinaryService;
+import com.swd301.foodmarket.service.NotificationService;
 import com.swd301.foodmarket.service.ProductService;
-import com.swd301.foodmarket.service.UserService;
 import lombok.AccessLevel;
 import lombok.RequiredArgsConstructor;
 import lombok.experimental.FieldDefaults;
@@ -44,6 +45,7 @@ public class ProductServiceImpl implements ProductService {
     private final CloudinaryService cloudinaryService;
     private final OrderRepository orderRepository;
     private final OrderDetailRepository orderDetailRepository;
+    private final NotificationService notificationService;
 
     @Override
     public ProductResponse createProduct(ProductCreationRequest request, MultipartFile image){
@@ -199,7 +201,20 @@ public class ProductServiceImpl implements ProductService {
         Product product = productRepository.findById(id)
                 .orElseThrow(() -> new AppException(ErrorCode.PRODUCT_NOT_FOUND));
         product.setStatus(ProductStatus.AVAILABLE);
-        return productMapper.toResponse(productRepository.save(product));
+        ProductResponse response = productMapper.toResponse(productRepository.save(product));
+
+        User shopOwner = product.getShopOwner();
+        if (shopOwner != null) {
+            Notification notification = Notification.builder()
+                    .admin(getCurrentUser())
+                    .title("Sản phẩm đã được duyệt")
+                    .message("Sản phẩm \"" + product.getProductName() + "\" của bạn đã được quản trị viên duyệt và đang được bày bán.")
+                    .receiverType("SHOP_OWNER")
+                    .build();
+            notificationService.sendNotificationWebsocket(shopOwner, notification);
+        }
+
+        return response;
     }
 
     @Override
@@ -211,7 +226,23 @@ public class ProductServiceImpl implements ProductService {
             String existing = product.getDescription() != null ? product.getDescription() : "";
             product.setDescription("[TỪ CHỐI: " + reason + "] " + existing);
         }
-        return productMapper.toResponse(productRepository.save(product));
+        ProductResponse response = productMapper.toResponse(productRepository.save(product));
+
+        User shopOwner = product.getShopOwner();
+        if (shopOwner != null) {
+            String msg = reason != null && !reason.isBlank()
+                    ? "Sản phẩm \"" + product.getProductName() + "\" bị từ chối. Lý do: " + reason
+                    : "Sản phẩm \"" + product.getProductName() + "\" của bạn đã bị từ chối bởi quản trị viên.";
+            Notification notification = Notification.builder()
+                    .admin(getCurrentUser())
+                    .title("Sản phẩm bị từ chối")
+                    .message(msg)
+                    .receiverType("SHOP_OWNER")
+                    .build();
+            notificationService.sendNotificationWebsocket(shopOwner, notification);
+        }
+
+        return response;
     }
 
     @Override
