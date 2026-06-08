@@ -85,10 +85,9 @@ public class UserController {
     }
 
     /**
-     * Get user by ID (Admin only)
+     * Get user by ID (authenticated users — buyers need this for viewing shop profiles)
      */
     @GetMapping("/{userId}")
-    @PreAuthorize("hasRole('ADMIN')")
     public ApiResponse<UserResponse> getUserById(@PathVariable Integer userId) {
         log.info("Get user by ID: {}", userId);
         return ApiResponse.<UserResponse>builder()
