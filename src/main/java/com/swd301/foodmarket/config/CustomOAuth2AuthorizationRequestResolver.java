@@ -39,6 +39,12 @@ public class CustomOAuth2AuthorizationRequestResolver implements OAuth2Authoriza
             request.getSession().setAttribute("pending_role", role);
         }
 
+        // Lưu client type (mobile/web) để OAuth2LoginSuccessHandler redirect đúng scheme
+        String client = request.getParameter("client");
+        if ("mobile".equals(client)) {
+            request.getSession().setAttribute("client_type", "mobile");
+        }
+
         if (role == null || role.isBlank()) {
             return authRequest;
         }

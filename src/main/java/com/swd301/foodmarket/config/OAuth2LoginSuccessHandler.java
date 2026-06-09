@@ -48,35 +48,41 @@ public class OAuth2LoginSuccessHandler implements AuthenticationSuccessHandler {
             request.getSession().removeAttribute("pending_role");
         }
 
+        // Kiểm tra client type từ session
+        String clientType = (String) request.getSession().getAttribute("client_type");
+        request.getSession().removeAttribute("client_type");
+        boolean isMobile = "mobile".equals(clientType);
+
+        // App scheme cho mobile deep link
+        final String APP_SCHEME = "nongsanxauma://";
+
         User user = userRepository.findByEmail(email).orElse(null);
 
-        if (user == null) {
-            // User doesn't exist. Instead of auto-creating, we redirect to the frontend registration form
-            // URL encode the parameters to ensure safe transmission
-            String encodedEmail = java.net.URLEncoder.encode(email, java.nio.charset.StandardCharsets.UTF_8);
-            String encodedName = fullName != null ? java.net.URLEncoder.encode(fullName, java.nio.charset.StandardCharsets.UTF_8) : "";
-            String encodedAvatar = avatar != null ? java.net.URLEncoder.encode(avatar, java.nio.charset.StandardCharsets.UTF_8) : "";
+        String encodedEmail = java.net.URLEncoder.encode(email, java.nio.charset.StandardCharsets.UTF_8);
+        String encodedName = fullName != null ? java.net.URLEncoder.encode(fullName, java.nio.charset.StandardCharsets.UTF_8) : "";
+        String encodedAvatar = avatar != null ? java.net.URLEncoder.encode(avatar, java.nio.charset.StandardCharsets.UTF_8) : "";
 
-            // Determine if a role was pre-selected on the frontend
-            String roleQuery = (roleParam != null && !roleParam.isBlank()) 
+        if (user == null) {
+            String roleQuery = (roleParam != null && !roleParam.isBlank())
                                 ? "&role=" + java.net.URLEncoder.encode(roleParam, java.nio.charset.StandardCharsets.UTF_8)
                                 : "";
 
-            response.sendRedirect(
-                    FE_URL+"/oauth-register?email=" + encodedEmail
-                    + "&name=" + encodedName 
-                    + "&avatar=" + encodedAvatar 
-                    + roleQuery
-            );
+            String registerUrl = isMobile
+                    ? APP_SCHEME + "oauth-register?email=" + encodedEmail + "&name=" + encodedName + "&avatar=" + encodedAvatar + roleQuery
+                    : FE_URL + "/oauth-register?email=" + encodedEmail + "&name=" + encodedName + "&avatar=" + encodedAvatar + roleQuery;
+
+            response.sendRedirect(registerUrl);
             return;
         }
 
         // ===== GENERATE JWT =====
         String token = jwtService.generateToken(user);
 
-        // ===== REDIRECT VỀ FRONTEND =====
-        response.sendRedirect(
-                FE_URL+"/oauth-success?token=" + token
-        );
+        // ===== REDIRECT VỀ FRONTEND hoặc APP =====
+        String successUrl = isMobile
+                ? APP_SCHEME + "oauth-success?token=" + token
+                : FE_URL + "/oauth-success?token=" + token;
+
+        response.sendRedirect(successUrl);
     }
 }
