@@ -472,6 +472,7 @@ public class UserServiceImpl implements UserService {
         User approvedUser = userRepository.save(user);
 
         log.info("Shipper approved successfully: {}", userId);
+        sendShipperApprovedEmail(approvedUser);
 
         return userMapper.toUserResponse(approvedUser);
     }
@@ -504,6 +505,25 @@ public class UserServiceImpl implements UserService {
             javaMailSender.send(message);
         } catch (Exception e) {
             log.error("Failed to send approval email to shop owner {}", user.getId());
+        }
+    }
+
+    private void sendShipperApprovedEmail(User user) {
+        try {
+            ClassPathResource resource = new ClassPathResource("templates/shipper_approved_template.html");
+            InputStream inputStream = resource.getInputStream();
+            String html = new String(inputStream.readAllBytes(), StandardCharsets.UTF_8)
+                    .replace("${fullName}", user.getFullName());
+
+            MimeMessage message = javaMailSender.createMimeMessage();
+            MimeMessageHelper helper = new MimeMessageHelper(message, true, "UTF-8");
+            helper.setTo(user.getEmail());
+            helper.setFrom("vinhhien8882004@gmail.com");
+            helper.setSubject("Hồ sơ tài xế của bạn đã được duyệt - Nông sản xấu mã");
+            helper.setText(html, true);
+            javaMailSender.send(message);
+        } catch (Exception e) {
+            log.error("Failed to send approval email to shipper {}", user.getId());
         }
     }
 
