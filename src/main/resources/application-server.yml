@@ -12,6 +12,7 @@ spring:
           google:
             client-id: ${GOOGLE_CLIENT_ID}
             client-secret: ${GOOGLE_CLIENT_SECRET}
+            redirect-uri: "https://nongsanxauma.vn/api/v1/login/oauth2/code/google"
             scope:
               - email
               - profile
