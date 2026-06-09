@@ -129,6 +129,17 @@ public class ShipperServiceImpl implements ShipperService {
         // Lấy kho từ DB — đây là điểm shipper phải đến để lấy hàng
         Warehouse warehouse = getActiveWarehouse();
 
+        // Lazy-geocode tọa độ giao hàng nếu chưa có trong DB (cache lại luôn)
+        if (order.getShippingLatitude() == null || order.getShippingLongitude() == null) {
+            getOrGeocodeShippingLocation(order);
+        }
+
+        // Lazy-geocode tọa độ kho nếu cả warehouse lẫn cache order đều null
+        if ((warehouse == null || warehouse.getLatitude() == null)
+                && (order.getShopLatitude() == null || order.getShopLongitude() == null)) {
+            getOrGeocodeShopLocation(order);
+        }
+
         return ShipperOrderResponse.builder()
                 .orderId(order.getId())
                 .buyerName(order.getBuyer().getFullName())
@@ -656,6 +667,7 @@ public class ShipperServiceImpl implements ShipperService {
 //
 //    }
     @Override
+    @Transactional
     public List<ShipperOrderResponse> getMyOrders() {
         User shipper = getCurrentShipper();
         return orderRepository.findByShipper(shipper).stream()
