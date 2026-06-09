@@ -8,7 +8,10 @@ import org.mapstruct.*;
 
 @Mapper(componentModel = "spring")
 public interface ProductMapper {
+
+    @Mapping(target = "images", ignore = true)
     Product toProduct(ProductCreationRequest request);
+
     @Mapping(source = "shopOwner.shopName", target = "shopName")
     @Mapping(source = "shopOwner.id", target = "shopId")
     @Mapping(source = "category.id", target = "categoryId")
@@ -16,11 +19,13 @@ public interface ProductMapper {
     @Mapping(source = "status", target = "status")
     @Mapping(source = "expiryDate", target = "expiryDate")
     @Mapping(target = "categoryName", source = "category.name")
+    @Mapping(target = "images", ignore = true)
     ProductResponse toResponse(Product product);
 
     @BeanMapping(nullValuePropertyMappingStrategy = NullValuePropertyMappingStrategy.IGNORE)
     @Mapping(target = "id", ignore = true)
     @Mapping(target = "category", ignore = true)
     @Mapping(target = "shopOwner", ignore = true)
+    @Mapping(target = "images", ignore = true)
     void update(@MappingTarget Product product, ProductUpdateRequest request);
 }

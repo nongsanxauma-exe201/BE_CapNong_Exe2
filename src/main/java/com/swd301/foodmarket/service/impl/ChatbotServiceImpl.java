@@ -21,6 +21,7 @@ import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.stereotype.Service;
 
 import java.time.LocalDateTime;
+import java.time.ZoneId;
 import java.util.*;
 import java.util.stream.Collectors;
 
@@ -56,7 +57,7 @@ public class ChatbotServiceImpl implements ChatbotService {
 
         return ChatResponse.builder()
                 .reply(botReply)
-                .timestamp(LocalDateTime.now())
+                .timestamp(LocalDateTime.now(ZoneId.of("Asia/Ho_Chi_Minh")))
                 .suggestedProducts(suggestedProducts)
                 .build();
     }

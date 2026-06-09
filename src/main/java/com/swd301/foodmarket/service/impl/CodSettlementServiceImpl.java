@@ -18,6 +18,7 @@ import org.springframework.stereotype.Service;
 
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
+import java.time.ZoneId;
 import java.util.List;
 
 @Service
@@ -356,7 +357,7 @@ public class CodSettlementServiceImpl implements CodSettlementService {
 
         order.setCodAmount(codAmount);
         order.setCodSettled(true);
-        order.setCodSettledAt(LocalDateTime.now());
+        order.setCodSettledAt(LocalDateTime.now(ZoneId.of("Asia/Ho_Chi_Minh")));
 
         walletRepository.save(platformWallet);
         walletRepository.save(shopWallet);

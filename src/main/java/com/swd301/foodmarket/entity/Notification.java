@@ -6,6 +6,7 @@ import lombok.*;
 import lombok.experimental.FieldDefaults;
 
 import java.time.LocalDateTime;
+import java.time.ZoneId;
 
 @Entity
 @Table(name = "notifications")
@@ -56,6 +57,6 @@ public class Notification {
 
     @PrePersist
     void onCreate() {
-        createAt = LocalDateTime.now();
+        createAt = LocalDateTime.now(ZoneId.of("Asia/Ho_Chi_Minh"));
     }
 }

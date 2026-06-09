@@ -9,6 +9,7 @@ import lombok.experimental.FieldDefaults;
 
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
+import java.time.ZoneId;
 import java.util.List;
 
 @Entity
@@ -95,7 +96,7 @@ public class Wallet {
 
     @PrePersist
     void onCreate() {
-        createAt = LocalDateTime.now();
+        createAt = LocalDateTime.now(ZoneId.of("Asia/Ho_Chi_Minh"));
 
         if (totalBalance == null) totalBalance = BigDecimal.ZERO;
         if (frozenBalance == null) frozenBalance = BigDecimal.ZERO;

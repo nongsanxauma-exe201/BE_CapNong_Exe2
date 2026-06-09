@@ -42,6 +42,7 @@ import java.io.InputStream;
 import java.math.BigDecimal;
 import java.nio.charset.StandardCharsets;
 import java.time.LocalDateTime;
+import java.time.ZoneId;
 import java.util.List;
 import java.util.stream.Collectors;
 
@@ -81,7 +82,7 @@ public class UserServiceImpl implements UserService {
                 .orElseThrow(() -> new AppException(ErrorCode.ROLE_NOT_FOUND));
 
         user.setRole(role);
-        user.setCreateAt(LocalDateTime.now());
+        user.setCreateAt(LocalDateTime.now(ZoneId.of("Asia/Ho_Chi_Minh")));
 
         // ===== STATUS BASED ON ROLE =====
 
@@ -418,7 +419,7 @@ public class UserServiceImpl implements UserService {
                 .orElseThrow(() -> new AppException(ErrorCode.USER_NOT_EXISTED));
 
         user.setStatus(UserStatus.INACTIVE);
-        user.setLockedAt(LocalDateTime.now());
+        user.setLockedAt(LocalDateTime.now(ZoneId.of("Asia/Ho_Chi_Minh")));
         userRepository.save(user);
 
         log.info("User deactivated successfully: {}", userId);
@@ -471,6 +472,7 @@ public class UserServiceImpl implements UserService {
         User approvedUser = userRepository.save(user);
 
         log.info("Shipper approved successfully: {}", userId);
+        sendShipperApprovedEmail(approvedUser);
 
         return userMapper.toUserResponse(approvedUser);
     }
@@ -503,6 +505,25 @@ public class UserServiceImpl implements UserService {
             javaMailSender.send(message);
         } catch (Exception e) {
             log.error("Failed to send approval email to shop owner {}", user.getId());
+        }
+    }
+
+    private void sendShipperApprovedEmail(User user) {
+        try {
+            ClassPathResource resource = new ClassPathResource("templates/shipper_approved_template.html");
+            InputStream inputStream = resource.getInputStream();
+            String html = new String(inputStream.readAllBytes(), StandardCharsets.UTF_8)
+                    .replace("${fullName}", user.getFullName());
+
+            MimeMessage message = javaMailSender.createMimeMessage();
+            MimeMessageHelper helper = new MimeMessageHelper(message, true, "UTF-8");
+            helper.setTo(user.getEmail());
+            helper.setFrom("vinhhien8882004@gmail.com");
+            helper.setSubject("Hồ sơ tài xế của bạn đã được duyệt - Nông sản xấu mã");
+            helper.setText(html, true);
+            javaMailSender.send(message);
+        } catch (Exception e) {
+            log.error("Failed to send approval email to shipper {}", user.getId());
         }
     }
 
