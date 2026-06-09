@@ -28,6 +28,7 @@ import org.springframework.stereotype.Service;
 
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
+import java.time.ZoneId;
 import java.util.List;
 
 @Service
@@ -59,8 +60,8 @@ public class PaymentServiceImpl implements PaymentService {
                 .amount(order.getTotalAmount())
                 .paymentGateway(gateway)
                 .status(PaymentStatus.PENDING)
-                .paymentDate(LocalDateTime.now())
-                .createdAt(LocalDateTime.now())
+                .paymentDate(LocalDateTime.now(ZoneId.of("Asia/Ho_Chi_Minh")))
+                .createdAt(LocalDateTime.now(ZoneId.of("Asia/Ho_Chi_Minh")))
                 .build();
 
         paymentRepository.save(payment);
@@ -100,7 +101,7 @@ public class PaymentServiceImpl implements PaymentService {
                 .orElseThrow(() -> new AppException(ErrorCode.PAYMENT_NOT_FOUND));
 
         payment.setStatus(PaymentStatus.valueOf(status));
-        payment.setUpdatedAt(LocalDateTime.now());
+        payment.setUpdatedAt(LocalDateTime.now(ZoneId.of("Asia/Ho_Chi_Minh")));
 
         paymentRepository.save(payment);
 
@@ -129,8 +130,8 @@ public class PaymentServiceImpl implements PaymentService {
         payment.setAmount(amount);
         payment.setPaymentGateway(gateway);
         payment.setStatus(PaymentStatus.PENDING);
-        payment.setCreatedAt(LocalDateTime.now());
-        payment.setUpdatedAt(LocalDateTime.now());
+        payment.setCreatedAt(LocalDateTime.now(ZoneId.of("Asia/Ho_Chi_Minh")));
+        payment.setUpdatedAt(LocalDateTime.now(ZoneId.of("Asia/Ho_Chi_Minh")));
 
         paymentRepository.save(payment);
 
@@ -154,7 +155,7 @@ public class PaymentServiceImpl implements PaymentService {
         payment.setPayosOrderCode(String.valueOf(orderCode));
         payment.setCheckoutUrl(qr.getCheckoutUrl());
         payment.setQrCodeUrl(qr.getQrCodeUrl());
-        payment.setUpdatedAt(LocalDateTime.now());
+        payment.setUpdatedAt(LocalDateTime.now(ZoneId.of("Asia/Ho_Chi_Minh")));
 
         paymentRepository.save(payment);
 
@@ -189,8 +190,8 @@ public class PaymentServiceImpl implements PaymentService {
         log.info("Order found: id={}, status={}", order.getId(), order.getStatus());
 
         payment.setStatus(PaymentStatus.SUCCESS);
-        payment.setPaymentDate(LocalDateTime.now());
-        payment.setUpdatedAt(LocalDateTime.now());
+        payment.setPaymentDate(LocalDateTime.now(ZoneId.of("Asia/Ho_Chi_Minh")));
+        payment.setUpdatedAt(LocalDateTime.now(ZoneId.of("Asia/Ho_Chi_Minh")));
 
         order.setStatus(OrderStatus.PAID);
         orderRepository.save(order);
@@ -281,7 +282,7 @@ public class PaymentServiceImpl implements PaymentService {
                 shopWallet.getFrozenBalance().add(shopGross)
         );
 
-        shopWallet.setUpdatedAt(LocalDateTime.now());
+        shopWallet.setUpdatedAt(LocalDateTime.now(ZoneId.of("Asia/Ho_Chi_Minh")));
 
         walletRepository.save(shopWallet);
 
@@ -308,7 +309,7 @@ public class PaymentServiceImpl implements PaymentService {
 ////                    shipperWallet.getTotalRevenueAllTime().add(shipperNet)
 ////            );
 //
-//            shipperWallet.setUpdatedAt(LocalDateTime.now());
+//            shipperWallet.setUpdatedAt(LocalDateTime.now(ZoneId.of("Asia/Ho_Chi_Minh")));
 //
 //            walletRepository.save(shipperWallet);
 //
@@ -369,7 +370,7 @@ public class PaymentServiceImpl implements PaymentService {
         // ======================
 
         payment.setStatus(PaymentStatus.FAILED);
-        payment.setUpdatedAt(LocalDateTime.now());
+        payment.setUpdatedAt(LocalDateTime.now(ZoneId.of("Asia/Ho_Chi_Minh")));
 
         order.setStatus(OrderStatus.FAILED);
         orderRepository.save(order);

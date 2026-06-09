@@ -1,15 +1,15 @@
 package com.swd301.foodmarket.controller;
 
-
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.swd301.foodmarket.dto.request.ProductCreationRequest;
+import com.swd301.foodmarket.dto.request.ProductImageReorderRequest;
 import com.swd301.foodmarket.dto.request.ProductUpdateRequest;
+import com.swd301.foodmarket.dto.request.SetPrimaryImageRequest;
 import com.swd301.foodmarket.dto.response.ApiResponse;
 import com.swd301.foodmarket.dto.response.PageResponse;
+import com.swd301.foodmarket.dto.response.ProductImageResponse;
 import com.swd301.foodmarket.dto.response.ProductResponse;
-import com.swd301.foodmarket.entity.Product;
 import com.swd301.foodmarket.service.ProductService;
-import jakarta.validation.Valid;
 import lombok.AccessLevel;
 import lombok.RequiredArgsConstructor;
 import lombok.experimental.FieldDefaults;
@@ -28,7 +28,7 @@ import java.util.List;
 @Slf4j
 public class ProductController {
     ProductService productService;
-
+    ObjectMapper objectMapper;
 
     @GetMapping
     public ApiResponse<List<ProductResponse>> getAll() {
@@ -47,7 +47,6 @@ public class ProductController {
                 .build();
     }
 
-
     @GetMapping("/shop/{shopId}/paged")
     public ApiResponse<PageResponse<ProductResponse>> getByShopIdPaged(
             @PathVariable Integer shopId,
@@ -59,18 +58,14 @@ public class ProductController {
                 .build();
     }
 
-    @PostMapping
+    @PostMapping(consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
     public ApiResponse<ProductResponse> createProduct(
             @RequestPart("data") String data,
-            @RequestPart(value = "image", required = false) MultipartFile image
+            @RequestPart(value = "images", required = false) List<MultipartFile> images
     ) throws Exception {
-
-        ObjectMapper objectMapper = new ObjectMapper();
-        ProductCreationRequest request =
-                objectMapper.readValue(data, ProductCreationRequest.class);
-
+        ProductCreationRequest request = objectMapper.readValue(data, ProductCreationRequest.class);
         return ApiResponse.<ProductResponse>builder()
-                .result(productService.createProduct(request, image))
+                .result(productService.createProduct(request, images))
                 .build();
     }
 
@@ -80,39 +75,22 @@ public class ProductController {
             @RequestPart("data") String data,
             @RequestPart(value = "image", required = false) MultipartFile image
     ) throws Exception {
-
-        ObjectMapper objectMapper = new ObjectMapper();
-        ProductUpdateRequest request =
-                objectMapper.readValue(data, ProductUpdateRequest.class);
-
+        ProductUpdateRequest request = objectMapper.readValue(data, ProductUpdateRequest.class);
         return ApiResponse.<ProductResponse>builder()
                 .result(productService.updateProduct(id, request, image))
                 .build();
     }
 
     @DeleteMapping("/{id}")
-    public ApiResponse<Void> deleteProduct(
-            @PathVariable Integer id
-    ) {
-        log.info("Delete product id={}", id);
-
+    public ApiResponse<Void> deleteProduct(@PathVariable Integer id) {
         productService.deleteProduct(id);
-
-        return ApiResponse.<Void>builder()
-                .message("PRODUCT_DELETED")
-                .build();
+        return ApiResponse.<Void>builder().message("PRODUCT_DELETED").build();
     }
+
     @PutMapping("/active/{id}")
-    public ApiResponse<Void> activateProduct(
-            @PathVariable Integer id
-    ) {
-        log.info("active product id={}", id);
-
+    public ApiResponse<Void> activateProduct(@PathVariable Integer id) {
         productService.activeProduct(id);
-
-        return ApiResponse.<Void>builder()
-                .message("Active product")
-                .build();
+        return ApiResponse.<Void>builder().message("Active product").build();
     }
 
     @GetMapping("/{id}")
@@ -155,10 +133,59 @@ public class ProductController {
                 .result(productService.rejectProduct(id, reason))
                 .build();
     }
+
     @GetMapping("/buyer")
     public ApiResponse<List<ProductResponse>> getByBuyer() {
-        return  ApiResponse.<List<ProductResponse>>builder()
+        return ApiResponse.<List<ProductResponse>>builder()
                 .result(productService.getProductForBuyer())
+                .build();
+    }
+
+    // ─── Gallery endpoints ────────────────────────────────────────────────────
+
+    @GetMapping("/{id}/images")
+    public ApiResponse<List<ProductImageResponse>> getImages(@PathVariable Integer id) {
+        return ApiResponse.<List<ProductImageResponse>>builder()
+                .result(productService.getImages(id))
+                .build();
+    }
+
+    @PostMapping(value = "/{id}/images", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
+    public ApiResponse<List<ProductImageResponse>> addImages(
+            @PathVariable Integer id,
+            @RequestPart("images") List<MultipartFile> images
+    ) {
+        return ApiResponse.<List<ProductImageResponse>>builder()
+                .result(productService.addImages(id, images))
+                .build();
+    }
+
+    @DeleteMapping("/{id}/images/{imageId}")
+    public ApiResponse<Void> deleteImage(
+            @PathVariable Integer id,
+            @PathVariable Long imageId
+    ) {
+        productService.deleteImage(id, imageId);
+        return ApiResponse.<Void>builder().message("IMAGE_DELETED").build();
+    }
+
+    @PatchMapping("/{id}/images/primary")
+    public ApiResponse<ProductImageResponse> setPrimaryImage(
+            @PathVariable Integer id,
+            @RequestBody SetPrimaryImageRequest request
+    ) {
+        return ApiResponse.<ProductImageResponse>builder()
+                .result(productService.setPrimaryImage(id, request))
+                .build();
+    }
+
+    @PatchMapping("/{id}/images/reorder")
+    public ApiResponse<List<ProductImageResponse>> reorderImages(
+            @PathVariable Integer id,
+            @RequestBody ProductImageReorderRequest request
+    ) {
+        return ApiResponse.<List<ProductImageResponse>>builder()
+                .result(productService.reorderImages(id, request))
                 .build();
     }
 }

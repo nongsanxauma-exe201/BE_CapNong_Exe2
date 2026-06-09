@@ -7,6 +7,7 @@ import lombok.NoArgsConstructor;
 
 import java.math.BigDecimal;
 import java.time.LocalDate;
+import java.util.List;
 
 @Data
 @AllArgsConstructor
@@ -29,4 +30,6 @@ public class ProductResponse {
     String categoryName;
     Long sold;
 
+    // Gallery: populated only in getById endpoint, null in list endpoints
+    List<ProductImageResponse> images;
 }

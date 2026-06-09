@@ -27,6 +27,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDateTime;
+import java.time.ZoneId;
 import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.List;
@@ -162,7 +163,7 @@ public class TripServiceImpl implements TripService {
     public List<Trip> getShareableTrips() {
 //
 //        Pageable pageable = PageRequest.of(page, size, Sort.by("departureTime").ascending());
-        return tripRepository.findByIsShareableAndDepartureTimeIsAfterAndStatusAndOwnerIsNot(true, LocalDateTime.now(),TripStatus.CREATED, getCurrentUser());
+        return tripRepository.findByIsShareableAndDepartureTimeIsAfterAndStatusAndOwnerIsNot(true, LocalDateTime.now(ZoneId.of("Asia/Ho_Chi_Minh")),TripStatus.CREATED, getCurrentUser());
 
     }
 // trip minh tao ra

@@ -50,6 +50,11 @@
         @JsonIgnore
         List<ProductMystery> productMysteries;
 
+        // Product gallery images
+        @OneToMany(mappedBy = "product", cascade = CascadeType.ALL, orphanRemoval = true, fetch = FetchType.LAZY)
+        @JsonIgnore
+        List<ProductImage> images;
+
         // ================= DATA =================
 
         @Column(name = "product_name", nullable = false)

@@ -40,6 +40,7 @@ import org.springframework.web.filter.RequestContextFilter;
 
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
+import java.time.ZoneId;
 import java.util.*;
 import java.util.stream.Collectors;
 
@@ -453,7 +454,7 @@ public class ShipperServiceImpl implements ShipperService {
                 shopWallet.getTotalRevenueAllTime().add(finalShopRevenue)
         );
 
-        shopWallet.setUpdatedAt(LocalDateTime.now());
+        shopWallet.setUpdatedAt(LocalDateTime.now(ZoneId.of("Asia/Ho_Chi_Minh")));
 
         // Shipper nhận 90% phí ship khi delivered
         shipperWallet.setTotalBalance(
@@ -464,7 +465,7 @@ public class ShipperServiceImpl implements ShipperService {
                 shipperWallet.getTotalRevenueAllTime().add(shipperNet)
         );
 
-        shipperWallet.setUpdatedAt(LocalDateTime.now());
+        shipperWallet.setUpdatedAt(LocalDateTime.now(ZoneId.of("Asia/Ho_Chi_Minh")));
 
         // PayOS refund về ví buyer
         if (refundAmount.compareTo(BigDecimal.ZERO) > 0) {

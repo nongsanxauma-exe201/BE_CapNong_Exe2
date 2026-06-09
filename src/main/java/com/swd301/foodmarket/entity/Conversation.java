@@ -5,6 +5,7 @@ import lombok.*;
 import lombok.experimental.FieldDefaults;
 
 import java.time.LocalDateTime;
+import java.time.ZoneId;
 import java.util.List;
 
 /**
@@ -48,7 +49,7 @@ public class Conversation {
 
     @PrePersist
     void onCreate() {
-        createdAt = LocalDateTime.now();
-        lastMessageAt = LocalDateTime.now();
+        createdAt = LocalDateTime.now(ZoneId.of("Asia/Ho_Chi_Minh"));
+        lastMessageAt = LocalDateTime.now(ZoneId.of("Asia/Ho_Chi_Minh"));
     }
 }
