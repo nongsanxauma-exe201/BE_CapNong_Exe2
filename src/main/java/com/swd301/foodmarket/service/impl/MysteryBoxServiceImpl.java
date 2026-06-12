@@ -69,15 +69,17 @@ public class MysteryBoxServiceImpl implements MysteryBoxService {
             Product product = productRepository.findById(item.getProductId())
                     .orElseThrow(() -> new AppException(ErrorCode.PRODUCT_NOT_FOUND));
 
-            // check product thuộc shop
             if (!product.getShopOwner().getId().equals(shopOwner.getId())) {
                 throw new AppException(ErrorCode.UNAUTHORIZED);
             }
 
-            // check stock
-            if (product.getStockQuantity() < item.getQuantity()) {
+            // Lock toàn bộ nguyên liệu cần cho tất cả các túi ngay lúc tạo
+            int totalNeeded = box.getTotalQuantity() * item.getQuantity();
+            if (product.getStockQuantity() < totalNeeded) {
                 throw new AppException(ErrorCode.OUT_OF_STOCK);
             }
+            product.setStockQuantity(product.getStockQuantity() - totalNeeded);
+            productRepository.save(product);
 
             ProductMystery pm = ProductMystery.builder()
                     .product(product)
@@ -86,7 +88,6 @@ public class MysteryBoxServiceImpl implements MysteryBoxService {
                     .build();
 
             productMysteryRepository.save(pm);
-
         }
 
         return mysteryBoxMapper.toResponse(box);
@@ -107,9 +108,25 @@ public class MysteryBoxServiceImpl implements MysteryBoxService {
             throw new AppException(ErrorCode.UNAUTHORIZED);
         }
 
-        // update thông tin cơ bản
+        // Hoàn trả stock nguyên liệu cho số túi chưa bán (trước khi đổi công thức)
+        int oldRemaining = box.getTotalQuantity() - box.getSoldQuantity();
+        if (oldRemaining > 0) {
+            List<ProductMystery> oldItems = productMysteryRepository.findByMysteryBox_Id(id);
+            for (ProductMystery oldItem : oldItems) {
+                Product product = oldItem.getProduct();
+                product.setStockQuantity(product.getStockQuantity() + oldRemaining * oldItem.getQuantity());
+                productRepository.save(product);
+            }
+        }
+
+        // update thông tin cơ bản (totalQuantity được cập nhật ở đây)
         mysteryBoxMapper.update(box, request);
         box.setIsActive(request.isActive());
+
+        // Validate totalQuantity mới không nhỏ hơn số đã bán
+        if (box.getTotalQuantity() < box.getSoldQuantity()) {
+            throw new AppException(ErrorCode.INVALID_REQUEST);
+        }
 
         // update image
         if (image != null && !image.isEmpty()) {
@@ -117,23 +134,11 @@ public class MysteryBoxServiceImpl implements MysteryBoxService {
             box.setImageUrl(imageUrl);
         }
 
-
-        List<ProductMystery> oldItems =
-                productMysteryRepository.findByMysteryBox_Id(id);
-
-        for (ProductMystery oldItem : oldItems) {
-            Product product = oldItem.getProduct();
-            product.setStockQuantity(
-                    product.getStockQuantity() + oldItem.getQuantity()
-            );
-            productRepository.save(product);
-        }
-
-
         box.getProductMysteries().clear();
         mysteryBoxRepository.save(box);
         mysteryBoxRepository.flush();
 
+        int newRemaining = box.getTotalQuantity() - box.getSoldQuantity();
 
         if (request.getProducts() != null && !request.getProducts().isEmpty()) {
 
@@ -142,14 +147,18 @@ public class MysteryBoxServiceImpl implements MysteryBoxService {
                 Product product = productRepository.findById(item.getProductId())
                         .orElseThrow(() -> new AppException(ErrorCode.PRODUCT_NOT_FOUND));
 
-                // check product thuộc shop
                 if (!product.getShopOwner().getId().equals(currentUser.getId())) {
                     throw new AppException(ErrorCode.UNAUTHORIZED);
                 }
 
-                // check stock
-                if (product.getStockQuantity() < item.getQuantity()) {
-                    throw new AppException(ErrorCode.OUT_OF_STOCK);
+                // Lock nguyên liệu cho số túi chưa bán với công thức mới
+                if (newRemaining > 0) {
+                    int totalNeeded = newRemaining * item.getQuantity();
+                    if (product.getStockQuantity() < totalNeeded) {
+                        throw new AppException(ErrorCode.OUT_OF_STOCK);
+                    }
+                    product.setStockQuantity(product.getStockQuantity() - totalNeeded);
+                    productRepository.save(product);
                 }
 
                 ProductMystery pm = ProductMystery.builder()
@@ -159,12 +168,6 @@ public class MysteryBoxServiceImpl implements MysteryBoxService {
                         .build();
 
                 box.getProductMysteries().add(pm);
-
-                // trừ stock
-                product.setStockQuantity(
-                        product.getStockQuantity() - item.getQuantity()
-                );
-                productRepository.save(product);
             }
         }
 
@@ -177,13 +180,24 @@ public class MysteryBoxServiceImpl implements MysteryBoxService {
     @Override
     public void deleteMysteryBox(Integer id) {
 
-        MysteryBox box = mysteryBoxRepository.findById(id)
+        MysteryBox box = mysteryBoxRepository.findByIdWithProducts(id)
                 .orElseThrow(() -> new AppException(ErrorCode.MYSTERY_BOX_NOT_FOUND));
 
         User currentUser = getCurrentUser();
 
         if (!box.getShopOwner().getId().equals(currentUser.getId())) {
             throw new AppException(ErrorCode.UNAUTHORIZED);
+        }
+
+        // Hoàn trả stock nguyên liệu cho số túi chưa bán (đã bán thì nguyên liệu đã dùng)
+        int remaining = box.getTotalQuantity() - box.getSoldQuantity();
+        if (remaining > 0) {
+            List<ProductMystery> productMysteries = productMysteryRepository.findByMysteryBox_Id(id);
+            for (ProductMystery pm : productMysteries) {
+                Product product = pm.getProduct();
+                product.setStockQuantity(product.getStockQuantity() + remaining * pm.getQuantity());
+                productRepository.save(product);
+            }
         }
 
         mysteryBoxRepository.delete(box);
