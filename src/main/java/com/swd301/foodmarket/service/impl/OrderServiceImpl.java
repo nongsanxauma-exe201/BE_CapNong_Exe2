@@ -340,7 +340,8 @@ public class OrderServiceImpl implements OrderService {
         }
 
         return result;
-    }private OrderShopReport.ReportOrderDay buildChartItem(
+    }
+    private OrderShopReport.ReportOrderDay buildChartItem(
             String label,
             LocalDateTime from,
             LocalDateTime to
