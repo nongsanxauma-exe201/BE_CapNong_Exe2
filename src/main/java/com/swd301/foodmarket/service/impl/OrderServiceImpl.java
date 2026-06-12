@@ -509,6 +509,9 @@ public class OrderServiceImpl implements OrderService {
                     );
                 }
 
+                product.setStockQuantity(product.getStockQuantity() - item.getQuantity());
+                productRepository.save(product);
+
                 if (shopOwner == null) {
                     shopOwner = product.getShopOwner();
                 }
@@ -537,6 +540,12 @@ public class OrderServiceImpl implements OrderService {
                 }
 
                 validateMysteryBoxStock(box, item.getQuantity());
+
+                box.setSoldQuantity(box.getSoldQuantity() + item.getQuantity());
+                if (box.getSoldQuantity() >= box.getTotalQuantity()) {
+                    box.setIsActive(false);
+                }
+                mysteryBoxRepository.save(box);
 
                 if (shopOwner == null && box.getShopOwner() != null) {
                     shopOwner = box.getShopOwner();
@@ -644,112 +653,20 @@ public class OrderServiceImpl implements OrderService {
                 .orElseThrow(() -> new AppException(ErrorCode.ORDER_NOT_FOUND));
 
 
-        if (request.getStatus() == OrderStatus.CONFIRMED
-                && order.getStatus() != OrderStatus.CONFIRMED) {
-
-            List<Product> productsToUpdate = new ArrayList<>();
-
-            // -------- PRODUCT THƯỜNG --------
-            for (OrderDetail detail : order.getOrderDetails()) {
-                Product product = detail.getProduct();
-                if (product.getStockQuantity() < detail.getQuantity()) {
-                    throw new AppException(ErrorCode.PRODUCT_OUT_OF_STOCK);
-                }
-                product.setStockQuantity(
-                        product.getStockQuantity() - detail.getQuantity()
-                );
-
-                productsToUpdate.add(product);
-            }
-
-
-            // -------- MYSTERY BOX --------
-            for (OrderMysteryBox orderBox : order.getMysteryBoxes()) {
-
-
-                MysteryBox box = orderBox.getMysteryBox();
-                int boxQuantity = orderBox.getQuantity();
-
-                if (box.getSoldQuantity() + boxQuantity > box.getTotalQuantity()) {
-                    throw new AppException(ErrorCode.MYSTERY_BOX_SOLD_OUT);
-                }
-
-                box.setSoldQuantity(box.getSoldQuantity() + boxQuantity);
-
-                if (box.getSoldQuantity() >= box.getTotalQuantity()) {
-                    box.setIsActive(false);
-                }
-
-                mysteryBoxRepository.save(box);
-
-                List<ProductMystery> productMysteries =
-                        productMysteryRepository.findByMysteryBox_Id(box.getId());
-
-                log.info("Processing mystery box: {}, ProductMysteries count: {}",
-                        box.getId(), productMysteries.size());
-
-                boolean outOfStock = false;
-
-                for (ProductMystery pm : productMysteries) {
-
-                    Product product = pm.getProduct();
-
-                    int required = pm.getQuantity() * boxQuantity;
-
-                    if (product.getStockQuantity() < required) {
-                        outOfStock = true;
-                        break;
-                    }
-                }
-
-                // nếu thiếu stock → xoá box
-                if (outOfStock) {
-
-                    log.warn("MysteryBox {} is out of stock -> disabling", box.getId());
-
-                    box.setIsActive(false);
-
-                    mysteryBoxRepository.save(box);
-
-                    continue;
-                }
-
-                for (ProductMystery pm : productMysteries) {
-                    Product product = pm.getProduct();
-                    int required = pm.getQuantity() * boxQuantity;
-
-                    log.info("Reducing stock for product: {}, from {} to {}",
-                            product.getProductName(), product.getStockQuantity(),
-                            product.getStockQuantity() - required);
-
-                    product.setStockQuantity(
-                            product.getStockQuantity() - required
-
-                    );
-
-                    productsToUpdate.add(product);
-                    checkMysteryBoxAvailability(product);
-                }
-            }
-
-            productRepository.saveAll(productsToUpdate);
-        }
+        // soldQuantity, nguyên liệu và product stock đã được cập nhật tại PENDING
+        // → không cần thay đổi stock khi CONFIRMED
 
         // ================= CANCELLED =================
+        // Hoàn trả stock khi huỷ từ bất kỳ trạng thái nào (PENDING hoặc CONFIRMED)
         if (request.getStatus() == OrderStatus.CANCELLED
-                && order.getStatus() == OrderStatus.CONFIRMED) {
+                && order.getStatus() != OrderStatus.CANCELLED) {
 
             Map<Integer, Product> productsToUpdate = new HashMap<>();
 
-
+            // Hoàn trả stockQuantity cho product thường (đã giảm tại PENDING)
             for (OrderDetail detail : order.getOrderDetails()) {
                 Product product = detail.getProduct();
-
-
-                product.setStockQuantity(
-                        product.getStockQuantity() + detail.getQuantity()
-                );
-
+                product.setStockQuantity(product.getStockQuantity() + detail.getQuantity());
                 productsToUpdate.put(product.getId(), product);
             }
 
@@ -758,21 +675,12 @@ public class OrderServiceImpl implements OrderService {
                 MysteryBox box = orderBox.getMysteryBox();
                 int boxQuantity = orderBox.getQuantity();
 
-                List<ProductMystery> productMysteries =
-                        productMysteryRepository.findByMysteryBox_Id(box.getId());
-
-                for (ProductMystery pm : productMysteries) {
-
-                    Product product = pm.getProduct();
-
-                    int restore = pm.getQuantity() * boxQuantity;
-
-                    product.setStockQuantity(
-                            product.getStockQuantity() + restore
-                    );
-
-                    productsToUpdate.put(product.getId(), product);
+                // Hoàn trả soldQuantity (đã tăng tại PENDING)
+                box.setSoldQuantity(Math.max(0, box.getSoldQuantity() - boxQuantity));
+                if (!Boolean.TRUE.equals(box.getIsActive()) && box.getSoldQuantity() < box.getTotalQuantity()) {
+                    box.setIsActive(true);
                 }
+                mysteryBoxRepository.save(box);
             }
 
             productRepository.saveAll(productsToUpdate.values());
@@ -842,20 +750,9 @@ public class OrderServiceImpl implements OrderService {
 
 
     private void validateMysteryBoxStock(MysteryBox box, Integer quantity) {
-
-        List<ProductMystery> items =
-                productMysteryRepository.findByMysteryBox_Id(box.getId());
-
-        for (ProductMystery item : items) {
-
-            Product product = item.getProduct();
-
-            int requiredQuantity = item.getQuantity() * quantity;
-
-            if (product.getStockQuantity() < requiredQuantity) {
-
-                throw new AppException(ErrorCode.MYSTERY_BOX_OUT_OF_STOCK);
-            }
+        int remaining = box.getTotalQuantity() - box.getSoldQuantity();
+        if (remaining < quantity) {
+            throw new AppException(ErrorCode.MYSTERY_BOX_SOLD_OUT);
         }
     }
 
