@@ -2,10 +2,12 @@ package com.swd301.foodmarket.service;
 
 import com.swd301.foodmarket.dto.request.UserCreationRequest;
 import com.swd301.foodmarket.dto.request.UserUpdateRequest;
+import com.swd301.foodmarket.dto.response.AdminUserReport;
 import com.swd301.foodmarket.dto.response.PageResponse;
 import com.swd301.foodmarket.dto.response.UserResponse;
 import org.springframework.web.multipart.MultipartFile;
 
+import java.time.LocalDate;
 import java.util.List;
 
 public interface UserService {
@@ -36,4 +38,7 @@ public interface UserService {
     UserResponse approveShipper(Integer userId);
 
     UserResponse updateStatusShop(Integer userId, boolean open);
+
+
+    AdminUserReport generateAdminUserReport(String type, LocalDate from,  LocalDate to);
 }

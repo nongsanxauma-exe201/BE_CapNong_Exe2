@@ -1,5 +1,6 @@
 package com.swd301.foodmarket.service.impl;
 
+import com.swd301.foodmarket.dto.response.AdminUserReport;
 import com.swd301.foodmarket.entity.Role;
 import com.swd301.foodmarket.entity.Wallet;
 import com.swd301.foodmarket.enums.RoleName;
@@ -41,8 +42,11 @@ import org.springframework.core.io.ClassPathResource;
 import java.io.InputStream;
 import java.math.BigDecimal;
 import java.nio.charset.StandardCharsets;
+import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.ZoneId;
+import java.time.temporal.ChronoUnit;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.stream.Collectors;
 
@@ -50,6 +54,8 @@ import java.util.stream.Collectors;
 @RequiredArgsConstructor
 @FieldDefaults(level = AccessLevel.PRIVATE, makeFinal = true)
 @Slf4j
+
+
 public class UserServiceImpl implements UserService {
 
     UserRepository userRepository;
@@ -88,8 +94,7 @@ public class UserServiceImpl implements UserService {
 
         if (request.getRoleName() == RoleName.BUYER) {
             user.setStatus(UserStatus.ACTIVE);
-        }
-        else if (request.getRoleName() == RoleName.SHOP_OWNER
+        } else if (request.getRoleName() == RoleName.SHOP_OWNER
                 || request.getRoleName() == RoleName.SHIPPER) {
             user.setStatus(UserStatus.PENDING);
         }
@@ -203,7 +208,7 @@ public class UserServiceImpl implements UserService {
                 log.info("Wallet created for shipper ID: {}", savedUser.getId());
             }
         }
-        if(request.getRoleName().equals(RoleName.BUYER)) {
+        if (request.getRoleName().equals(RoleName.BUYER)) {
             if (!walletRepository.existsByBuyer(savedUser)) {
 
                 Wallet wallet = Wallet.builder()
@@ -481,14 +486,144 @@ public class UserServiceImpl implements UserService {
     public UserResponse updateStatusShop(Integer userId, boolean open) {
 
         User user = userRepository.findById(userId).orElseThrow(
-                ()-> new AppException(ErrorCode.USER_NOT_EXISTED)
+                () -> new AppException(ErrorCode.USER_NOT_EXISTED)
         );
         user.setShopActive(open);
 
         return userMapper.toUserResponse(userRepository.save(user));
     }
 
+    @Override
+    public AdminUserReport generateAdminUserReport(String type, LocalDate from, LocalDate to) {
 
+        LocalDate now = LocalDate.now();
+        long step;
+
+        if (type != null && !type.isBlank()) {
+            if (type.equalsIgnoreCase("week")) {
+                from = now.minusDays(6);
+                to = now;
+                step = 1;
+            } else if (type.equalsIgnoreCase("month")) {
+                from = now.minusDays(29);
+                to = now;
+                step = 7;
+            } else if (type.equalsIgnoreCase("year")) {
+                from = now.minusMonths(11).withDayOfMonth(1);
+                to = now;
+                step = 30;
+            } else if (type.equalsIgnoreCase("all")) {
+                from = LocalDate.of(now.getYear() - 5, 1, 1);
+                to = now;
+                step = 365;
+            } else {
+                from = now.minusDays(6);
+                to = now;
+                step = 1;
+            }
+        } else {
+            if (from == null || to == null) {
+                from = now.minusDays(6);
+                to = now;
+            }
+
+            if (from.isAfter(to)) {
+                throw new AppException(ErrorCode.INVALID_DATE);
+            }
+
+            long days = ChronoUnit.DAYS.between(from, to) + 1;
+
+            if (days <= 14) {
+                step = 1;
+            } else if (days <= 90) {
+                step = 7;
+            } else if (days <= 365) {
+                step = 30;
+            } else {
+                step = 365;
+            }
+        }
+
+        AdminUserReport report = AdminUserReport.builder()
+                .totalUsers(userRepository.count())
+                .totalBuyers(userRepository.countByRole_Name(RoleName.BUYER))
+                .totalShops(userRepository.countByRole_Name(RoleName.SHOP_OWNER))
+                .totalActiveUsers(userRepository.countByStatus(UserStatus.ACTIVE))
+                .totalInactiveUsers(userRepository.countByStatus(UserStatus.INACTIVE))
+                .totalShopPending(userRepository.countByRole_NameAndStatus(RoleName.SHOP_OWNER, UserStatus.PENDING))
+                .totalShopNotSelling(userRepository.countByRole_NameAndShopActive(RoleName.SHOP_OWNER, false))
+                .totalShopSelling(userRepository.countByRole_NameAndShopActive(RoleName.SHOP_OWNER, true))
+                .totalUserLock(userRepository.countUserLocked())
+                .build();
+
+        report.setUserReports(generateReport(from, to, step));
+
+        return report;
+    }
+
+    public List<AdminUserReport.UserReport> generateReport(LocalDate from, LocalDate to, long step) {
+        List<AdminUserReport.UserReport> userReports = new ArrayList<>();
+
+        LocalDate cursor = from;
+
+        while (!cursor.isAfter(to)) {
+
+            LocalDate toDate = cursor.plusDays(step - 1);
+
+            if (toDate.isAfter(to)) {
+                toDate = to;
+            }
+
+            LocalDateTime startDateTime = cursor.atStartOfDay();
+            LocalDateTime endDateTime = toDate.plusDays(1).atStartOfDay();
+
+            String label;
+
+            if (step == 1) {
+                label = formatDayLabel(cursor);
+            } else if (step == 7) {
+                label = cursor.getDayOfMonth() + "/" + cursor.getMonthValue()
+                        + " - "
+                        + toDate.getDayOfMonth() + "/" + toDate.getMonthValue();
+            } else if (step == 30) {
+                label = "Tháng " + cursor.getMonthValue();
+            } else {
+                label = "Năm " + cursor.getYear();
+            }
+
+            AdminUserReport.UserReport userReport = AdminUserReport.UserReport.builder()
+                    .fromDate(cursor)
+                    .toDate(toDate)
+                    .label(label)
+                    .totalBuyers(
+                            userRepository.countByRole_NameAndCreateAtGreaterThanEqualAndCreateAtLessThan(
+                                    RoleName.BUYER,
+                                    startDateTime,
+                                    endDateTime
+                            )
+                    )
+                    .totalShops(
+                            userRepository.countByRole_NameAndCreateAtGreaterThanEqualAndCreateAtLessThan(
+                                    RoleName.SHOP_OWNER,
+                                    startDateTime,
+                                    endDateTime
+                            )
+                    )
+                    .totalUserLock(
+                            userRepository.countByLockedAtGreaterThanEqualAndLockedAtLessThan(
+                                    startDateTime,
+                                    endDateTime
+                            )
+                    )
+                    .build();
+
+            userReports.add(userReport);
+
+            cursor = toDate.plusDays(1);
+        }
+
+        return userReports;
+    }
     private void sendShopOwnerApprovedEmail(User user) {
         try {
             ClassPathResource resource = new ClassPathResource("templates/shop_owner_approved_template.html");
@@ -538,12 +673,12 @@ public class UserServiceImpl implements UserService {
             helper.setSubject("Tài khoản của bạn đã bị khóa");
 
             String html = """
-                <h2>Tài khoản của bạn đã bị khóa</h2>
-                <p>Xin chào %s,</p>
-                <p>Tài khoản của bạn đã bị khóa do có <b>3 đơn hàng thất bại</b>.</p>
-                <p>Tài khoản sẽ được mở khóa sau <b>7 ngày</b>.</p>
-                <p>Nếu có thắc mắc vui lòng liên hệ hệ thống.</p>
-                """.formatted(user.getFullName());
+                    <h2>Tài khoản của bạn đã bị khóa</h2>
+                    <p>Xin chào %s,</p>
+                    <p>Tài khoản của bạn đã bị khóa do có <b>3 đơn hàng thất bại</b>.</p>
+                    <p>Tài khoản sẽ được mở khóa sau <b>7 ngày</b>.</p>
+                    <p>Nếu có thắc mắc vui lòng liên hệ hệ thống.</p>
+                    """.formatted(user.getFullName());
 
             helper.setText(html, true);
 
@@ -552,5 +687,16 @@ public class UserServiceImpl implements UserService {
         } catch (Exception e) {
             log.error("Failed to send lock email to user {}", user.getId());
         }
+    }
+    private String formatDayLabel(LocalDate date) {
+        return switch (date.getDayOfWeek()) {
+            case MONDAY -> "T2";
+            case TUESDAY -> "T3";
+            case WEDNESDAY -> "T4";
+            case THURSDAY -> "T5";
+            case FRIDAY -> "T6";
+            case SATURDAY -> "T7";
+            case SUNDAY -> "CN";
+        };
     }
 }

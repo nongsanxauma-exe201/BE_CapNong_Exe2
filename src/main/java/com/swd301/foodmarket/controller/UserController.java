@@ -17,6 +17,7 @@ import com.swd301.foodmarket.dto.response.UserResponse;
 import com.swd301.foodmarket.service.UserService;
 import org.springframework.web.multipart.MultipartFile;
 
+import java.time.LocalDate;
 import java.util.List;
 
 @RestController
@@ -222,5 +223,16 @@ public class UserController {
     public ApiResponse<UserResponse> openShop(@PathVariable Integer shopId,@RequestParam boolean open ) {
 
         return  ApiResponse.<UserResponse>builder().result(userService.updateStatusShop(shopId,open)).build();
+    }
+    @PostMapping("/report")
+    @PreAuthorize("hasRole('ADMIN')")
+    public ApiResponse<?> generateAdminUserReport(
+            @RequestParam(required = false) String type,
+            @RequestParam(required = false) LocalDate from,
+            @RequestParam(required = false) LocalDate to
+    ) {
+        return ApiResponse.builder()
+                .result(userService.generateAdminUserReport(type, from, to))
+                .build();
     }
 }
