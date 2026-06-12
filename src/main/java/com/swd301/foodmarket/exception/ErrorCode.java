@@ -123,8 +123,15 @@ public enum ErrorCode {
     INVALID_PAYMENT_METHOD(16001, "Invalid payment method", HttpStatus.BAD_REQUEST),
     COD_ALREADY_SETTLED(16002, "COD amount has already been settled for this order", HttpStatus.BAD_REQUEST),
     SHIPPER_NOT_FOUND(16003, "Shipper not found for this order",HttpStatus.BAD_REQUEST),
-    ;
 
+ // reprot user
+    INVALID_TYPE(17001, "Invalid report type", HttpStatus.BAD_REQUEST),
+    INVALID_DATE(17002, "from date must be before or equal to to date", HttpStatus.BAD_REQUEST),
+
+
+
+
+            ;
     private final int code;
     private final String message;
     private final HttpStatus statusCode;
