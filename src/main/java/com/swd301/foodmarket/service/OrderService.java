@@ -22,6 +22,9 @@ public interface OrderService {
     void deleteOrder(Integer id);
 
     BigDecimal calculateShippingFee(String shippingAddress, Integer shopId);
+
+    /** Tính phí ship khi đã biết placeId — bỏ qua geocoding, dùng Place Detail trực tiếp. */
+    BigDecimal calculateShippingFeeByPlaceId(String placeId, Integer shopId);
     Page<OrderResponse> getOrdersForStaff(int page, int size, OrderStatus status);
     StaffOrderReportResponse generateStaffOrderReport();
     OrderShopReport  orderShopReport(String type);

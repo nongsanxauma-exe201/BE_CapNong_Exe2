@@ -75,14 +75,22 @@ public class OrderController {
      * FE gọi khi buyer nhập địa chỉ ở trang Checkout
      *
      * GET /orders/shipping-fee?shippingAddress=...&shopId=...
+     * GET /orders/shipping-fee?shippingAddress=...&shopId=...&placeId=...  ← khi chọn từ suggestion
      */
     @GetMapping("/shipping-fee")
     public ApiResponse<BigDecimal> getShippingFee(
             @RequestParam String shippingAddress,
-            @RequestParam Integer shopId
+            @RequestParam Integer shopId,
+            @RequestParam(required = false) String placeId
     ) {
-        log.info("[ShippingFee] Preview: address='{}', shopId={}", shippingAddress, shopId);
-        BigDecimal fee = orderService.calculateShippingFee(shippingAddress, shopId);
+        BigDecimal fee;
+        if (placeId != null && !placeId.isBlank()) {
+            log.info("[ShippingFee] placeId mode: placeId='{}', shopId={}", placeId, shopId);
+            fee = orderService.calculateShippingFeeByPlaceId(placeId, shopId);
+        } else {
+            log.info("[ShippingFee] Preview: address='{}', shopId={}", shippingAddress, shopId);
+            fee = orderService.calculateShippingFee(shippingAddress, shopId);
+        }
         return ApiResponse.<BigDecimal>builder()
                 .result(fee)
                 .build();

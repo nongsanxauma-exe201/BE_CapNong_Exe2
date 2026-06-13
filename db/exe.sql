@@ -1062,7 +1062,7 @@ VALUES
 -- WAREHOUSES
 -- ============================================================
 INSERT INTO warehouses (name, address, latitude, longitude, active) VALUES
-('Kho Bãi', 'Hẻm C21, đường 449, Lê Văn Việt, Phường Tăng Nhơn Phú A, TP HCM', 10.8490, 106.7720, TRUE);
+    ('Kho Bãi', 'Hẻm C21, đường 449, Lê Văn Việt, Phường Tăng Nhơn Phú A, TP HCM', 10.8490, 106.7720, TRUE);
 
 -- ============================================================
 -- TỔNG KẾT DỮ LIỆU

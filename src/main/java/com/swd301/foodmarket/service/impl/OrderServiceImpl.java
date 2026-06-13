@@ -17,7 +17,9 @@ import org.springframework.transaction.annotation.Transactional;
 import lombok.AccessLevel;
 import lombok.RequiredArgsConstructor;
 import lombok.experimental.FieldDefaults;
+import lombok.experimental.NonFinal;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
@@ -55,9 +57,14 @@ public class OrderServiceImpl implements OrderService {
 
     ProductMysteryRepository productMysteryRepository;
 
-    GoongMapService goongMapService;   // ✅ dùng để geocode địa chỉ
+    GoongMapService goongMapService;
     TrackingService trackingService;
-    private final ReviewRepository reviewRepository;
+    ReviewRepository reviewRepository;
+    WarehouseRepository warehouseRepository;
+
+    @NonFinal
+    @Value("${ADDRESS_WAREHOUSE}")
+    String warehouseAddress;
 
     // ===================== SHIPPING FEE =====================
 
@@ -103,28 +110,28 @@ public class OrderServiceImpl implements OrderService {
     @Override
     public BigDecimal calculateShippingFee(String shippingAddress, Integer shopId) {
         try {
-            // 1. Lấy địa chỉ shop
-            User shop = userRepository.findById(shopId)
-                    .orElseThrow(() -> new AppException(ErrorCode.USER_NOT_EXISTED));
-            String shopAddress = shop.getAddress();
-
-            if (shopAddress == null || shopAddress.isBlank()) {
-                log.warn("[ShippingFee] Shop {} không có địa chỉ, dùng phí mặc định", shopId);
+            // 1. Lấy toạ độ kho (origin) — shipper giao hàng từ kho, không phải từ shop
+            LatLong warehouseLatLng = getWarehouseLatLng();
+            if (warehouseLatLng == null) {
+                log.warn("[ShippingFee] Không lấy được toạ độ kho, dùng phí mặc định");
                 return BigDecimal.valueOf(15_000);
             }
 
-            // 2. Geocode 2 địa chỉ
-            LatLong shopLatLng = goongMapService.geocodeAddress(shopAddress);
+            // 2. Geocode địa chỉ buyer (destination)
             LatLong buyerLatLng = goongMapService.geocodeAddress(shippingAddress);
-
-            if (shopLatLng == null || buyerLatLng == null) {
-                log.warn("[ShippingFee] Geocode thất bại, dùng phí mặc định");
+            if (buyerLatLng == null) {
+                log.warn("[ShippingFee] Geocode địa chỉ buyer thất bại: '{}', dùng phí mặc định", shippingAddress);
                 return BigDecimal.valueOf(15_000);
             }
 
-            // 3. Tính khoảng cách Haversine
-            double distKm = goongMapService.getDistanceKm(shopLatLng, buyerLatLng);
-            if (distKm == Double.MAX_VALUE) {
+            log.info("[ShippingFee] Kho ({}, {}) → Buyer ({}, {})",
+                    warehouseLatLng.getLatitude(), warehouseLatLng.getLongitude(),
+                    buyerLatLng.getLatitude(), buyerLatLng.getLongitude());
+
+            // 3. Tính khoảng cách kho → buyer
+            double distKm = goongMapService.getDistanceKm(warehouseLatLng, buyerLatLng);
+            if (distKm == Double.MAX_VALUE || distKm > 150.0) {
+                log.warn("[ShippingFee] Khoảng cách bất thường: {} km — dùng phí mặc định", distKm);
                 return BigDecimal.valueOf(15_000);
             }
 
@@ -135,6 +142,62 @@ public class OrderServiceImpl implements OrderService {
             log.error("[ShippingFee] Lỗi tính phí ship: {}", e.getMessage());
             return BigDecimal.valueOf(15_000);
         }
+    }
+
+    @Override
+    public BigDecimal calculateShippingFeeByPlaceId(String placeId, Integer shopId) {
+        try {
+            LatLong warehouseLatLng = getWarehouseLatLng();
+            if (warehouseLatLng == null) {
+                log.warn("[ShippingFee] Không lấy được toạ độ kho, dùng phí mặc định");
+                return BigDecimal.valueOf(15_000);
+            }
+
+            // Dùng Place Detail trực tiếp — không chạy AutoComplete nữa
+            LatLong buyerLatLng = goongMapService.geocodeByPlaceId(placeId);
+            if (buyerLatLng == null) {
+                log.warn("[ShippingFee] Place Detail thất bại cho placeId='{}', dùng phí mặc định", placeId);
+                return BigDecimal.valueOf(15_000);
+            }
+
+            log.info("[ShippingFee][placeId] Kho ({}, {}) → Buyer ({}, {})",
+                    warehouseLatLng.getLatitude(), warehouseLatLng.getLongitude(),
+                    buyerLatLng.getLatitude(), buyerLatLng.getLongitude());
+
+            double distKm = goongMapService.getDistanceKm(warehouseLatLng, buyerLatLng);
+            if (distKm == Double.MAX_VALUE || distKm > 150.0) {
+                log.warn("[ShippingFee][placeId] Khoảng cách bất thường: {} km — dùng phí mặc định", distKm);
+                return BigDecimal.valueOf(15_000);
+            }
+
+            return calcFeeByDistance(distKm);
+
+        } catch (Exception e) {
+            log.error("[ShippingFee][placeId] Lỗi: {}", e.getMessage());
+            return BigDecimal.valueOf(15_000);
+        }
+    }
+
+    /**
+     * Lấy toạ độ kho đang active.
+     * Ưu tiên lat/lng đã lưu trong DB (không cần geocode).
+     * Fallback: geocode địa chỉ kho từ DB hoặc config ADDRESS_WAREHOUSE.
+     */
+    private LatLong getWarehouseLatLng() {
+        Warehouse warehouse = warehouseRepository.findAllByActive(true)
+                .stream().findFirst().orElse(null);
+
+        if (warehouse != null && warehouse.getLatitude() != null && warehouse.getLongitude() != null) {
+            log.info("[ShippingFee] Dùng toạ độ kho từ DB: id={} ({}, {})",
+                    warehouse.getId(), warehouse.getLatitude(), warehouse.getLongitude());
+            return new LatLong(warehouse.getLatitude(), warehouse.getLongitude());
+        }
+
+        String addr = (warehouse != null && warehouse.getAddress() != null && !warehouse.getAddress().isBlank())
+                ? warehouse.getAddress()
+                : warehouseAddress;
+        log.info("[ShippingFee] Geocode địa chỉ kho: '{}'", addr);
+        return goongMapService.geocodeAddress(addr);
     }
 
     @Override
