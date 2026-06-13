@@ -19,6 +19,7 @@ public class AdminUserReport {
     Long totalShopSelling;
     Long totalShopNotSelling;
     Long totalUserLock;
+    Long totalShipper;
     List<UserReport> userReports;
 
     @Builder
@@ -27,6 +28,7 @@ public class AdminUserReport {
         Long totalBuyers;
         Long totalUserLock;
         Long totalShops;
+        Long totalShipper;
         LocalDate fromDate;
         LocalDate toDate;
        String label;
