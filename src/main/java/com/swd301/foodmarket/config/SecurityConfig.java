@@ -52,7 +52,8 @@ public class SecurityConfig {
             "/mystery-boxes/**",
             "/reviews/**",
             "/blogs/**",
-            "/build-combos/**"
+            "/build-combos/**",
+            "/address/suggestions"
     };
 
     @Autowired
