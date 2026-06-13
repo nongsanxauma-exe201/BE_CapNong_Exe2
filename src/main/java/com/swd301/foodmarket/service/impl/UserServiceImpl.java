@@ -537,7 +537,7 @@ public class UserServiceImpl implements UserService {
                 step = 1;
             } else if (days <= 90) {
                 step = 7;
-            } else if (days <= 365) {
+            } else if (days <= 366) {
                 step = 30;
             } else {
                 step = 365;
@@ -554,14 +554,15 @@ public class UserServiceImpl implements UserService {
                 .totalShopNotSelling(userRepository.countByRole_NameAndShopActive(RoleName.SHOP_OWNER, false))
                 .totalShopSelling(userRepository.countByRole_NameAndShopActive(RoleName.SHOP_OWNER, true))
                 .totalUserLock(userRepository.countUserLocked())
+                .totalShipper(userRepository.countByRole_Name(RoleName.SHIPPER))
                 .build();
 
-        report.setUserReports(generateReport(from, to, step));
+        report.setUserReports(generateReport(from, to, step,type));
 
         return report;
     }
 
-    public List<AdminUserReport.UserReport> generateReport(LocalDate from, LocalDate to, long step) {
+    public List<AdminUserReport.UserReport> generateReport(LocalDate from, LocalDate to, long step,String type) {
         List<AdminUserReport.UserReport> userReports = new ArrayList<>();
 
         LocalDate cursor = from;
@@ -569,6 +570,12 @@ public class UserServiceImpl implements UserService {
         while (!cursor.isAfter(to)) {
 
             LocalDate toDate = cursor.plusDays(step - 1);
+            if(step == 30)
+            {
+                toDate = cursor.plusMonths(1).minusDays(1);
+            }else if(step == 365){
+                toDate = cursor.plusYears(1).minusDays(1);
+            }
 
             if (toDate.isAfter(to)) {
                 toDate = to;
@@ -579,9 +586,14 @@ public class UserServiceImpl implements UserService {
 
             String label;
 
-            if (step == 1) {
+            if (step == 1 && type != null && !type.isBlank()) {
                 label = formatDayLabel(cursor);
-            } else if (step == 7) {
+            }
+            else if(step ==1 && type == null )
+            {
+                label = cursor.getDayOfMonth() + "/" + cursor.getMonthValue();
+            }
+            else if (step == 7 ) {
                 label = cursor.getDayOfMonth() + "/" + cursor.getMonthValue()
                         + " - "
                         + toDate.getDayOfMonth() + "/" + toDate.getMonthValue();
@@ -615,6 +627,11 @@ public class UserServiceImpl implements UserService {
                                     endDateTime
                             )
                     )
+                    .totalShipper(userRepository.countByRole_NameAndCreateAtGreaterThanEqualAndCreateAtLessThan(
+                            RoleName.SHIPPER,
+                            startDateTime,
+                            endDateTime
+                    ))
                     .build();
 
             userReports.add(userReport);
