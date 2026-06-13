@@ -122,6 +122,11 @@ goong:
   distance:
     matrix:
       url: "https://rsapi.goong.io/DistanceMatrix"
+  places:
+    autocomplete:
+      url: "https://rsapi.goong.io/Place/AutoComplete"
+    detail:
+      url: "https://rsapi.goong.io/Place/Detail"
 
 # ===============================
 # CHATGPT CONFIG (MAP FROM .env)
