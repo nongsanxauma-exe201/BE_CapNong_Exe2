@@ -18,6 +18,8 @@ public class AiCartItemResponse {
     private String imageUrl;
     private Double quantity;
     private String unit;
-    private BigDecimal unitPrice;
+    private BigDecimal unitPrice;       // Giá hiệu lực (salePrice nếu đang giảm, ngược lại price)
+    private BigDecimal originalPrice;   // Giá gốc (null nếu không có giảm giá)
+    private Integer discountPercent;    // % giảm (null nếu không có giảm giá)
     private BigDecimal totalPrice;
 }
