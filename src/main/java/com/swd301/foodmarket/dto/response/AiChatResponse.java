@@ -16,6 +16,7 @@ public class AiChatResponse {
     private String message;
     private List<AiProductOptionResponse> itemOptions;
     private AiProductOptionResponse selectedProduct;
+    private AiNavigationResponse navigation;
     private AiCartPreviewResponse cart;
     private AiCheckoutDraftResponse checkout;
 
@@ -46,6 +47,14 @@ public class AiChatResponse {
                 .type(AiResponseType.PRODUCT_DETAIL)
                 .message(message)
                 .selectedProduct(product)
+                .build();
+    }
+
+    public static AiChatResponse navigation(String message, AiNavigationResponse navigation) {
+        return AiChatResponse.builder()
+                .type(AiResponseType.NAVIGATION)
+                .message(message)
+                .navigation(navigation)
                 .build();
     }
 

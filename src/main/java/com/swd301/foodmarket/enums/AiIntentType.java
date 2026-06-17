@@ -6,5 +6,6 @@ public enum AiIntentType {
     BUY_ITEM,
     CHECKOUT,
     SELECT_ITEM_OPTION,
+    ACCOUNT_ACTION,
     UNKNOWN
 }

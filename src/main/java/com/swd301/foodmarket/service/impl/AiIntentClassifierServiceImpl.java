@@ -6,6 +6,7 @@ import com.swd301.foodmarket.dto.internal.AiLlmIntentPayload;
 import com.swd301.foodmarket.dto.internal.AiLlmItemPayload;
 import com.swd301.foodmarket.dto.request.AiDetectedIntent;
 import com.swd301.foodmarket.dto.request.AiItemCommand;
+import com.swd301.foodmarket.enums.AiAccountActionType;
 import com.swd301.foodmarket.enums.AiIntentType;
 import com.swd301.foodmarket.enums.AiItemType;
 import com.swd301.foodmarket.service.AiIntentClassifierService;
@@ -85,8 +86,25 @@ public class AiIntentClassifierServiceImpl implements AiIntentClassifierService 
                    Ví dụ: "phí ship tính sao", "giao hàng bao lâu", "shop ở đâu", "đổi trả thế nào"
                    JSON: { "intent": "ASK_INFORMATION", "topic": "phí ship", "items": [] }
 
-                7) UNKNOWN — không hiểu
+                7) ACCOUNT_ACTION — thao tác tài khoản/đơn hàng trên web (CẦN đăng nhập)
+                   accountAction hợp lệ:
+                   - VIEW_PROFILE: xem thông tin tài khoản, hồ sơ cá nhân
+                   - EDIT_PROFILE: cập nhật/sửa thông tin cá nhân (chỉ dẫn sang trang hồ sơ)
+                   - VIEW_ORDERS: xem danh sách đơn hàng của tôi
+                   - VIEW_ORDER_DETAIL: xem chi tiết 1 đơn (kèm orderId nếu có)
+                   - VIEW_CART: xem giỏ hàng, liệt kê món trong giỏ
+                   - VIEW_WALLET: xem ví, số dư
+                   - VIEW_RETURNS: xem đơn trả hàng
+                   Ví dụ: "xem tài khoản", "đơn hàng của tôi", "liệt kê món trong giỏ", "giỏ có gì", "số dư ví", "xem đơn 45"
+                   JSON: { "intent": "ACCOUNT_ACTION", "accountAction": "VIEW_ORDERS", "orderId": null, "items": [] }
+
+                8) UNKNOWN — không hiểu
                    JSON: { "intent": "UNKNOWN", "items": [] }
+
+                === BẢO MẬT (bắt buộc) ===
+                - KHÔNG trả userId, email người khác, mật khẩu, OTP
+                - KHÔNG hỗ trợ: đổi mật khẩu, rút tiền, xóa tài khoản qua chat → trả ASK_INFORMATION hoặc hướng dẫn vào trang web
+                - orderId chỉ dùng khi khách nói rõ số đơn
 
                 === QUY TẮC ===
                 - Phân biệt LIST_CATALOG (hỏi chung shop bán gì) vs SEARCH_ITEM (hỏi 1 món cụ thể)
@@ -98,10 +116,12 @@ public class AiIntentClassifierServiceImpl implements AiIntentClassifierService 
 
                 === SCHEMA JSON (bắt buộc) ===
                 {
-                  "intent": "BUY_ITEM|SEARCH_ITEM|LIST_CATALOG|CHECKOUT|SELECT_OPTION|ASK_INFORMATION|UNKNOWN",
+                  "intent": "BUY_ITEM|SEARCH_ITEM|LIST_CATALOG|CHECKOUT|SELECT_OPTION|ASK_INFORMATION|ACCOUNT_ACTION|UNKNOWN",
                   "productName": "string hoặc null",
                   "selectedIndex": number hoặc null,
                   "topic": "string hoặc null",
+                  "accountAction": "VIEW_PROFILE|EDIT_PROFILE|VIEW_ORDERS|VIEW_ORDER_DETAIL|VIEW_CART|VIEW_WALLET|VIEW_RETURNS hoặc null",
+                  "orderId": number hoặc null,
                   "items": [
                     { "name": "tên món", "quantity": 1, "unit": "kg" }
                   ]
@@ -178,7 +198,31 @@ public class AiIntentClassifierServiceImpl implements AiIntentClassifierService 
             builder.items(items);
         }
 
+        if (intent == AiIntentType.ACCOUNT_ACTION) {
+            builder.accountAction(mapAccountAction(payload.getAccountAction()));
+            builder.orderId(payload.getOrderId());
+        }
+
         return builder.build();
+    }
+
+    private AiAccountActionType mapAccountAction(String rawAction) {
+        if (rawAction == null || rawAction.isBlank()) {
+            return null;
+        }
+
+        String normalized = rawAction.trim().toUpperCase();
+
+        return switch (normalized) {
+            case "VIEW_PROFILE", "PROFILE", "MY_PROFILE", "ACCOUNT" -> AiAccountActionType.VIEW_PROFILE;
+            case "EDIT_PROFILE", "UPDATE_PROFILE", "EDIT_ACCOUNT" -> AiAccountActionType.EDIT_PROFILE;
+            case "VIEW_ORDERS", "MY_ORDERS", "ORDERS", "ORDER_LIST" -> AiAccountActionType.VIEW_ORDERS;
+            case "VIEW_ORDER_DETAIL", "ORDER_DETAIL", "TRACK_ORDER" -> AiAccountActionType.VIEW_ORDER_DETAIL;
+            case "VIEW_CART", "MY_CART", "CART" -> AiAccountActionType.VIEW_CART;
+            case "VIEW_WALLET", "MY_WALLET", "WALLET", "BALANCE" -> AiAccountActionType.VIEW_WALLET;
+            case "VIEW_RETURNS", "MY_RETURNS", "RETURNS" -> AiAccountActionType.VIEW_RETURNS;
+            default -> null;
+        };
     }
 
     private String resolveProductName(AiLlmIntentPayload payload) {
@@ -205,6 +249,7 @@ public class AiIntentClassifierServiceImpl implements AiIntentClassifierService 
             case "CHECKOUT" -> AiIntentType.CHECKOUT;
             case "SELECT_OPTION", "SELECT_ITEM_OPTION", "SELECT" -> AiIntentType.SELECT_ITEM_OPTION;
             case "ASK_INFORMATION", "ASK_INFO", "INFORMATION" -> AiIntentType.ASK_INFORMATION;
+            case "ACCOUNT_ACTION", "ACCOUNT", "MY_ACCOUNT" -> AiIntentType.ACCOUNT_ACTION;
             case "UNKNOWN" -> AiIntentType.UNKNOWN;
             default -> AiIntentType.UNKNOWN;
         };

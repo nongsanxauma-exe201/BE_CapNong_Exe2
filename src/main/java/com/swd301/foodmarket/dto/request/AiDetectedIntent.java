@@ -1,5 +1,6 @@
 package com.swd301.foodmarket.dto.request;
 
+import com.swd301.foodmarket.enums.AiAccountActionType;
 import com.swd301.foodmarket.enums.AiIntentType;
 import lombok.*;
 
@@ -16,4 +17,6 @@ public class AiDetectedIntent {
     private String keyword;
     private Integer selectedIndex;
     private List<AiItemCommand> items;
+    private AiAccountActionType accountAction;
+    private Integer orderId;
 }
