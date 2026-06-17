@@ -103,6 +103,10 @@ public class AiIntentServiceImpl implements AiIntentService {
             return intent.getSelectedIndex() != null && intent.getSelectedIndex() > 0;
         }
 
+        if (intent.getIntent() == AiIntentType.ACCOUNT_ACTION) {
+            return intent.getAccountAction() != null;
+        }
+
         return true;
     }
 

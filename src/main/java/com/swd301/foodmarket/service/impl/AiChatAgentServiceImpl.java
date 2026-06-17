@@ -25,6 +25,7 @@ public class AiChatAgentServiceImpl implements AiChatAgentService {
     private final AiActionService aiActionService;
     private final RagService ragService;
     private final AiAnswerService aiAnswerService;
+    private final AiAccountActionService aiAccountActionService;
     private final ProductRepository productRepository;
 
     @Override
@@ -53,6 +54,13 @@ public class AiChatAgentServiceImpl implements AiChatAgentService {
 
             case CHECKOUT ->
                     aiActionService.createCheckoutDraft(user);
+
+            case ACCOUNT_ACTION ->
+                    aiAccountActionService.execute(
+                            user,
+                            detectedIntent.getAccountAction(),
+                            detectedIntent.getOrderId()
+                    );
 
             case ASK_INFORMATION -> {
                 String context = ragService.buildContext(message);

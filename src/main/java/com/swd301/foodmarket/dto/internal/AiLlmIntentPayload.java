@@ -26,4 +26,10 @@ public class AiLlmIntentPayload {
 
     /** Chủ đề câu hỏi chung (ASK_INFORMATION), vd: "phí ship", "giao hàng" */
     private String topic;
+
+    /** Thao tác tài khoản (ACCOUNT_ACTION) */
+    private String accountAction;
+
+    /** Mã đơn hàng khi xem chi tiết đơn (ACCOUNT_ACTION + VIEW_ORDER_DETAIL) */
+    private Integer orderId;
 }
