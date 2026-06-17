@@ -39,7 +39,8 @@ public class SecurityConfig {
             "/otp-verification/send-otp",
             "/otp-verification/verify-otp",
             "/forgot-password/reset/**",
-            "/mystery-boxes"
+            "/mystery-boxes",
+            "/products"
     };
 
     private final String[] PUBLIC_ENDPOINTS_GET = {

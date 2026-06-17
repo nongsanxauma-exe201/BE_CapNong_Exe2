@@ -209,7 +209,9 @@ public class AiAccountActionServiceImpl implements AiAccountActionService {
             message.append("**").append(index++).append(". ")
                     .append(nullToDash(item.getProductName())).append("**\n");
             message.append("  - **Số lượng:** ").append(item.getQuantity() != null ? item.getQuantity() : 1).append('\n');
-            message.append("  - **Đơn giá:** ").append(formatMoney(item.getPrice())).append('\n');
+            BigDecimal effectiveUnitPrice = (item.getSalePrice() != null && item.getDiscountPercent() != null && item.getDiscountPercent() > 0)
+                    ? item.getSalePrice() : item.getPrice();
+            message.append("  - **Đơn giá:** ").append(formatMoney(effectiveUnitPrice)).append('\n');
             message.append("  - **Thành tiền:** ").append(formatMoney(calcLineTotal(item))).append('\n');
             if (item.getShopName() != null && !item.getShopName().isBlank()) {
                 message.append("  - **Shop:** ").append(item.getShopName()).append('\n');
@@ -351,23 +353,33 @@ public class AiAccountActionServiceImpl implements AiAccountActionService {
                 ? item.getMysteryBoxId()
                 : item.getProductId();
 
+        // Dùng salePrice nếu đang có giảm giá, ngược lại dùng price
+        boolean hasDiscount = item.getSalePrice() != null
+                && item.getDiscountPercent() != null
+                && item.getDiscountPercent() > 0;
+        BigDecimal effectivePrice = hasDiscount ? item.getSalePrice() : item.getPrice();
+
         return AiCartItemResponse.builder()
                 .itemType(itemType)
                 .itemId(itemId)
                 .name(item.getProductName())
                 .imageUrl(item.getImageUrl())
                 .quantity(item.getQuantity() != null ? item.getQuantity().doubleValue() : 1.0)
-                .unitPrice(item.getPrice())
+                .unitPrice(effectivePrice)
+                .originalPrice(hasDiscount ? item.getPrice() : null)
+                .discountPercent(hasDiscount ? item.getDiscountPercent() : null)
                 .totalPrice(calcLineTotal(item))
                 .build();
     }
 
     private BigDecimal calcLineTotal(CartItemResponse item) {
-        if (item.getPrice() == null) {
-            return null;
-        }
+        boolean hasDiscount = item.getSalePrice() != null
+                && item.getDiscountPercent() != null
+                && item.getDiscountPercent() > 0;
+        BigDecimal effectivePrice = hasDiscount ? item.getSalePrice() : item.getPrice();
+        if (effectivePrice == null) return null;
         int qty = item.getQuantity() != null ? item.getQuantity() : 1;
-        return item.getPrice().multiply(BigDecimal.valueOf(qty));
+        return effectivePrice.multiply(BigDecimal.valueOf(qty));
     }
 
     private String formatOrderItemsDetailed(OrderResponse order) {
