@@ -24,4 +24,6 @@ public class CartItemResponse {
     private Integer buildComboId;
     private Integer shopOwnerId;
     private Integer stockQuantity;
+    private Integer discountPercent;
+    private BigDecimal salePrice;
 }

@@ -19,6 +19,8 @@ public class AiCatalogOption {
     private String name;
     private String imageUrl;
     private BigDecimal price;
+    private BigDecimal salePrice;
+    private Integer discountPercent;
     private String unit;
     private Double availableQuantity;
     private String description;
