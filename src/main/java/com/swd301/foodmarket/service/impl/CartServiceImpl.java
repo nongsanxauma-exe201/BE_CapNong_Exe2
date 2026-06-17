@@ -15,6 +15,8 @@ import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.stereotype.Service;
 
 import java.math.BigDecimal;
+import java.math.RoundingMode;
+import java.time.LocalDateTime;
 import java.util.List;
 import java.util.stream.Collectors;
 
@@ -198,11 +200,27 @@ public class CartServiceImpl implements CartService {
 
             } else if (item.getProduct() != null) {
                 Product product = item.getProduct();
+                BigDecimal sellingPrice = product.getSellingPrice();
+                Integer pct = product.getDiscountPercent();
+                BigDecimal salePrice = null;
+                if (pct != null && pct > 0 && pct < 100 && sellingPrice != null) {
+                    LocalDateTime now   = LocalDateTime.now();
+                    LocalDateTime start = product.getDiscountStartDate();
+                    LocalDateTime end   = product.getDiscountEndDate();
+                    boolean active = (start == null || !now.isBefore(start))
+                                  && (end   == null || !now.isAfter(end));
+                    if (active) {
+                        salePrice = sellingPrice.multiply(BigDecimal.valueOf(100 - pct))
+                                .divide(BigDecimal.valueOf(100), 0, RoundingMode.HALF_UP);
+                    }
+                }
                 builder
                         .productId(product.getId())
                         .mysteryBoxId(null)
                         .productName(product.getProductName())
-                        .price(product.getSellingPrice())
+                        .price(sellingPrice)
+                        .discountPercent(salePrice != null ? pct : null)
+                        .salePrice(salePrice)
                         .imageUrl(product.getImageUrl())
                         .shopName(product.getShopOwner() != null ? product.getShopOwner().getShopName() : null)
                         .itemType("PRODUCT")
