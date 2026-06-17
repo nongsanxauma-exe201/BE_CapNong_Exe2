@@ -6,6 +6,10 @@ import com.swd301.foodmarket.dto.response.ProductResponse;
 import com.swd301.foodmarket.entity.Product;
 import org.mapstruct.*;
 
+import java.math.BigDecimal;
+import java.math.RoundingMode;
+import java.time.LocalDateTime;
+
 @Mapper(componentModel = "spring")
 public interface ProductMapper {
 
@@ -20,7 +24,24 @@ public interface ProductMapper {
     @Mapping(source = "expiryDate", target = "expiryDate")
     @Mapping(target = "categoryName", source = "category.name")
     @Mapping(target = "images", ignore = true)
+    @Mapping(target = "salePrice", ignore = true)
     ProductResponse toResponse(Product product);
+
+    @AfterMapping
+    default void computeSalePrice(Product product, @MappingTarget ProductResponse response) {
+        Integer pct = product.getDiscountPercent();
+        BigDecimal price = product.getSellingPrice();
+        if (pct != null && pct > 0 && pct < 100 && price != null) {
+            LocalDateTime now = LocalDateTime.now();
+            LocalDateTime start = product.getDiscountStartDate();
+            LocalDateTime end = product.getDiscountEndDate();
+            boolean active = (start == null || !now.isBefore(start)) && (end == null || !now.isAfter(end));
+            if (active) {
+                BigDecimal multiplier = BigDecimal.valueOf(100 - pct).divide(BigDecimal.valueOf(100));
+                response.setSalePrice(price.multiply(multiplier).setScale(0, RoundingMode.HALF_UP));
+            }
+        }
+    }
 
     @BeanMapping(nullValuePropertyMappingStrategy = NullValuePropertyMappingStrategy.IGNORE)
     @Mapping(target = "id", ignore = true)

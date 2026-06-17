@@ -8,6 +8,7 @@
 
     import java.math.BigDecimal;
     import java.time.LocalDate;
+    import java.time.LocalDateTime;
     import java.util.List;
 
     @Entity
@@ -79,4 +80,15 @@
 
         @Column(name = "expiry_date")
         LocalDate expiryDate;
+
+        // ================= DISCOUNT =================
+
+        @Column(name = "discount_percent")
+        Integer discountPercent;
+
+        @Column(name = "discount_start_date")
+        LocalDateTime discountStartDate;
+
+        @Column(name = "discount_end_date")
+        LocalDateTime discountEndDate;
     }

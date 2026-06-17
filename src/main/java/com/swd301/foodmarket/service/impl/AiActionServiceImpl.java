@@ -17,6 +17,8 @@ import com.swd301.foodmarket.service.AiCartGateway;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 
+import java.math.BigDecimal;
+import java.math.RoundingMode;
 import java.text.Normalizer;
 import java.time.LocalDateTime;
 import java.util.*;
@@ -429,12 +431,28 @@ public class AiActionServiceImpl implements AiActionService {
     }
 
     private AiCatalogOption toProductCatalogOption(Product product) {
+        BigDecimal sellingPrice = product.getSellingPrice();
+        Integer pct = product.getDiscountPercent();
+        BigDecimal salePrice = null;
+        if (pct != null && pct > 0 && pct < 100 && sellingPrice != null) {
+            LocalDateTime now   = LocalDateTime.now();
+            LocalDateTime start = product.getDiscountStartDate();
+            LocalDateTime end   = product.getDiscountEndDate();
+            boolean active = (start == null || !now.isBefore(start))
+                          && (end   == null || !now.isAfter(end));
+            if (active) {
+                salePrice = sellingPrice.multiply(BigDecimal.valueOf(100 - pct))
+                        .divide(BigDecimal.valueOf(100), 0, RoundingMode.HALF_UP);
+            }
+        }
         return AiCatalogOption.builder()
                 .itemType(AiItemType.PRODUCT)
                 .itemId(product.getId())
                 .name(product.getProductName())
                 .imageUrl(product.getImageUrl())
-                .price(product.getSellingPrice())
+                .price(sellingPrice)
+                .salePrice(salePrice)
+                .discountPercent(salePrice != null ? pct : null)
                 .unit(product.getUnit())
                 .availableQuantity(product.getStockQuantity() == null ? null : product.getStockQuantity().doubleValue())
                 .description(product.getDescription())
@@ -467,6 +485,8 @@ public class AiActionServiceImpl implements AiActionService {
                 .name(option.getName())
                 .imageUrl(option.getImageUrl())
                 .price(option.getPrice())
+                .salePrice(option.getSalePrice())
+                .discountPercent(option.getDiscountPercent())
                 .unit(option.getUnit())
                 .availableQuantity(option.getAvailableQuantity())
                 .description(option.getDescription())
