@@ -34,6 +34,7 @@ public class SecurityConfig {
 
     private final String[] PUBLIC_ENDPOINTS_POST = {
             "/auth/login",
+            "/auth/refresh",
             "/auth/google-mobile",
             "/users/register",
             "/otp-verification/send-otp",
