@@ -45,12 +45,17 @@ public class CustomOAuth2AuthorizationRequestResolver implements OAuth2Authoriza
             request.getSession().setAttribute("client_type", "mobile");
         }
 
-        if (role == null || role.isBlank()) {
-            return authRequest;
+        Map<String, Object> additionalParameters = new LinkedHashMap<>(authRequest.getAdditionalParameters());
+
+        if (role != null && !role.isBlank()) {
+            additionalParameters.put("role", role);
         }
 
-        Map<String, Object> additionalParameters = new LinkedHashMap<>(authRequest.getAdditionalParameters());
-        additionalParameters.put("role", role);
+        // Forward prompt=select_account lên Google để luôn hiện account picker
+        String prompt = request.getParameter("prompt");
+        if (prompt != null && !prompt.isBlank()) {
+            additionalParameters.put("prompt", prompt);
+        }
 
         return OAuth2AuthorizationRequest.from(authRequest)
                 .additionalParameters(additionalParameters)

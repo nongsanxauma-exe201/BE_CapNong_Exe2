@@ -4,8 +4,6 @@ package com.swd301.foodmarket.exception;
 import lombok.Getter;
 import org.springframework.http.HttpStatus;
 
-import java.math.BigDecimal;
-
 
 @Getter
 public enum ErrorCode {
@@ -119,19 +117,22 @@ public enum ErrorCode {
     WAREHOUSE_NOT_FOUND(14001, "Warehouse not found", HttpStatus.NOT_FOUND),
     // trip stop
     TRIP_STOP_NOT_FOUND(15001, "Trip stop not found", HttpStatus.NOT_FOUND),
-  ///  cost
+    ///  cost
     INVALID_PAYMENT_METHOD(16001, "Invalid payment method", HttpStatus.BAD_REQUEST),
     COD_ALREADY_SETTLED(16002, "COD amount has already been settled for this order", HttpStatus.BAD_REQUEST),
-    SHIPPER_NOT_FOUND(16003, "Shipper not found for this order",HttpStatus.BAD_REQUEST),
+    SHIPPER_NOT_FOUND(16003, "Shipper not found for this order", HttpStatus.BAD_REQUEST),
 
- // reprot user
+    // reprot user
     INVALID_TYPE(17001, "Invalid report type", HttpStatus.BAD_REQUEST),
     INVALID_DATE(17002, "from date must be before or equal to to date", HttpStatus.BAD_REQUEST),
-
-
-
-
-            ;
+    // VOUCHER
+    VOUCHER_NOT_FOUND(18001, "Voucher not found", HttpStatus.NOT_FOUND),
+    VOUCHER_RECEIVE_LIMIT_REACHED(18002, "Voucher receive limit reached", HttpStatus.BAD_REQUEST),
+    VOUCHER_ALREADY_CLAIMED(18003, "Voucher already claimed by this user", HttpStatus.BAD_REQUEST),
+    VOUCHER_USER_NOT_FOUND(18004, "User not found for this voucher", HttpStatus.NOT_FOUND),
+    VOUCHER_EXPIRED(18005, "Voucher has expired", HttpStatus.BAD_REQUEST),
+    VOUCHER_INACTIVE(18006, "Voucher not active ", HttpStatus.BAD_REQUEST)
+    ;
     private final int code;
     private final String message;
     private final HttpStatus statusCode;

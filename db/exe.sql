@@ -316,6 +316,35 @@ INSERT INTO product_mystery (product_id,mystery_id,quantity) VALUES
                                                                  (@p2_dua_hau, @box2_s2,2),(@p2_thanh_long,@box2_s2,1),(@p2_xoai,@box2_s2,1);
 
 -- ============================================================
+-- 6b. PRODUCT DISCOUNTS (demo: ~50% sản phẩm AVAILABLE có giảm giá)
+-- Tất cả đang trong thời gian hiệu lực (active khi chạy demo)
+-- ============================================================
+
+-- SHOP 1 — có discount
+UPDATE products SET discount_percent=15, discount_start_date='2026-06-01 00:00:00', discount_end_date='2026-06-30 23:59:59' WHERE product_id=@p_khoai_tay;
+UPDATE products SET discount_percent=10, discount_start_date='2026-06-05 00:00:00', discount_end_date='2026-07-05 23:59:59' WHERE product_id=@p_cu_cai;
+UPDATE products SET discount_percent=20, discount_start_date='2026-06-10 00:00:00', discount_end_date=NULL                   WHERE product_id=@p_gung;
+UPDATE products SET discount_percent=25, discount_start_date='2026-06-15 00:00:00', discount_end_date='2026-07-15 23:59:59' WHERE product_id=@p_dau_tay;
+UPDATE products SET discount_percent=12, discount_start_date='2026-06-01 00:00:00', discount_end_date='2026-07-31 23:59:59' WHERE product_id=@p_ca_chua;
+UPDATE products SET discount_percent=18, discount_start_date='2026-06-08 00:00:00', discount_end_date='2026-07-08 23:59:59' WHERE product_id=@p_ot_chuong;
+UPDATE products SET discount_percent=8,  discount_start_date='2026-06-12 00:00:00', discount_end_date=NULL                   WHERE product_id=@p_tao;
+
+-- SHOP 1 — không discount (để NULL)
+-- Cà rốt, Khoai lang, Bí đỏ, Hành tây, Tỏi, Nghệ, Cần tây, Dưa leo, Mướp, Chuối
+
+-- SHOP 2 — có discount
+UPDATE products SET discount_percent=10, discount_start_date='2026-06-03 00:00:00', discount_end_date='2026-06-30 23:59:59' WHERE product_id=@p2_bi_dao;
+UPDATE products SET discount_percent=12, discount_start_date='2026-06-07 00:00:00', discount_end_date='2026-07-07 23:59:59' WHERE product_id=@p2_su_su;
+UPDATE products SET discount_percent=15, discount_start_date='2026-06-10 00:00:00', discount_end_date=NULL                   WHERE product_id=@p2_hanh_tim;
+UPDATE products SET discount_percent=20, discount_start_date='2026-06-01 00:00:00', discount_end_date='2026-07-20 23:59:59' WHERE product_id=@p2_thanh_long;
+UPDATE products SET discount_percent=8,  discount_start_date='2026-06-14 00:00:00', discount_end_date='2026-07-14 23:59:59' WHERE product_id=@p2_oi;
+UPDATE products SET discount_percent=22, discount_start_date='2026-06-05 00:00:00', discount_end_date=NULL                   WHERE product_id=@p2_nho;
+UPDATE products SET discount_percent=5,  discount_start_date='2026-06-16 00:00:00', discount_end_date='2026-08-31 23:59:59' WHERE product_id=@p2_cam;
+
+-- SHOP 2 — không discount
+-- Bí ngòi, Cà tím, Khoai môn, Sả, Ớt đỏ, Tỏi tây, Dưa hấu, Xoài, Bưởi
+
+-- ============================================================
 -- 7. VOUCHERS
 -- ============================================================
 INSERT INTO vouchers (shop_id,voucher_code,discount_value,max_discount,min_order_value,usage_limit,expiry_date) VALUES

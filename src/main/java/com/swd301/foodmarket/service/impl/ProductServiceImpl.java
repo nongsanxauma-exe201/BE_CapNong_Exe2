@@ -34,6 +34,9 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.multipart.MultipartFile;
 
+import java.math.BigDecimal;
+import java.math.RoundingMode;
+import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
@@ -93,7 +96,7 @@ public class ProductServiceImpl implements ProductService {
             }
         }
 
-        return productMapper.toResponse(saved);
+        return mapToResponse(saved);
     }
 
     @Override
@@ -136,7 +139,7 @@ public class ProductServiceImpl implements ProductService {
             );
         }
 
-        return productMapper.toResponse(productRepository.save(product));
+        return mapToResponse(productRepository.save(product));
     }
 
     @Override
@@ -167,7 +170,7 @@ public class ProductServiceImpl implements ProductService {
     public List<ProductResponse> getAll() {
         return productRepository.findAll()
                 .stream()
-                .map(productMapper::toResponse)
+                .map(this::mapToResponse)
                 .toList();
     }
 
@@ -176,7 +179,7 @@ public class ProductServiceImpl implements ProductService {
         Pageable pageable = PageRequest.of(page, size, Sort.by("id").descending());
         Page<Product> pageResult = productRepository.findAllByStatus(ProductStatus.AVAILABLE, pageable);
         return PageResponse.<ProductResponse>builder()
-                .content(pageResult.getContent().stream().map(productMapper::toResponse).toList())
+                .content(pageResult.getContent().stream().map(this::mapToResponse).toList())
                 .page(pageResult.getNumber())
                 .size(pageResult.getSize())
                 .totalElements(pageResult.getTotalElements())
@@ -191,7 +194,7 @@ public class ProductServiceImpl implements ProductService {
         Product product = productRepository.findById(id)
                 .orElseThrow(() -> new AppException(ErrorCode.PRODUCT_NOT_FOUND));
 
-        ProductResponse response = productMapper.toResponse(product);
+        ProductResponse response = mapToResponse(product);
 
         // Load gallery images
         List<ProductImage> images = productImageRepository.findByProductIdOrderByDisplayOrderAsc(id);
@@ -214,7 +217,7 @@ public class ProductServiceImpl implements ProductService {
     public List<ProductResponse> getByShopId(Integer shopId) {
         return productRepository.findByShopOwnerId(shopId)
                 .stream()
-                .map(productMapper::toResponse)
+                .map(this::mapToResponse)
                 .toList();
     }
 
@@ -224,7 +227,7 @@ public class ProductServiceImpl implements ProductService {
         Page<Product> pageResult = productRepository.findByShopOwnerId(shopId, pageable);
         List<ProductResponse> productResponses = new ArrayList<>();
         for (Product p : pageResult.getContent()) {
-            ProductResponse pr = productMapper.toResponse(p);
+            ProductResponse pr = mapToResponse(p);
             pr.setSold(orderDetailRepository.calculateSold(p.getId(), OrderStatus.DELIVERED));
             productResponses.add(pr);
         }
@@ -243,7 +246,7 @@ public class ProductServiceImpl implements ProductService {
     public List<ProductResponse> getPendingProducts() {
         return productRepository.findByStatus(ProductStatus.PENDING)
                 .stream()
-                .map(productMapper::toResponse)
+                .map(this::mapToResponse)
                 .toList();
     }
 
@@ -252,7 +255,7 @@ public class ProductServiceImpl implements ProductService {
         Product product = productRepository.findById(id)
                 .orElseThrow(() -> new AppException(ErrorCode.PRODUCT_NOT_FOUND));
         product.setStatus(ProductStatus.AVAILABLE);
-        ProductResponse response = productMapper.toResponse(productRepository.save(product));
+        ProductResponse response = mapToResponse(productRepository.save(product));
 
         User shopOwner = product.getShopOwner();
         if (shopOwner != null) {
@@ -276,7 +279,7 @@ public class ProductServiceImpl implements ProductService {
             String existing = product.getDescription() != null ? product.getDescription() : "";
             product.setDescription("[TỪ CHỐI: " + reason + "] " + existing);
         }
-        ProductResponse response = productMapper.toResponse(productRepository.save(product));
+        ProductResponse response = mapToResponse(productRepository.save(product));
 
         User shopOwner = product.getShopOwner();
         if (shopOwner != null) {
@@ -298,7 +301,7 @@ public class ProductServiceImpl implements ProductService {
     public List<ProductResponse> getProductForBuyer() {
         return productRepository.findAllByStatusAndShopOwner_ShopActive(ProductStatus.AVAILABLE, true)
                 .stream()
-                .map(productMapper::toResponse)
+                .map(this::mapToResponse)
                 .toList();
     }
 
@@ -434,5 +437,23 @@ public class ProductServiceImpl implements ProductService {
 
     private List<ProductImageResponse> toImageResponseList(List<ProductImage> images) {
         return images.stream().map(this::toImageResponse).toList();
+    }
+
+    private ProductResponse mapToResponse(Product product) {
+        ProductResponse r = productMapper.toResponse(product);
+        Integer pct = product.getDiscountPercent();
+        BigDecimal price = product.getSellingPrice();
+        if (pct != null && pct > 0 && pct < 100 && price != null) {
+            LocalDateTime now = LocalDateTime.now();
+            LocalDateTime start = product.getDiscountStartDate();
+            LocalDateTime end   = product.getDiscountEndDate();
+            boolean active = (start == null || !now.isBefore(start))
+                          && (end   == null || !now.isAfter(end));
+            if (active) {
+                r.setSalePrice(price.multiply(BigDecimal.valueOf(100 - pct))
+                        .divide(BigDecimal.valueOf(100), 0, RoundingMode.HALF_UP));
+            }
+        }
+        return r;
     }
 }

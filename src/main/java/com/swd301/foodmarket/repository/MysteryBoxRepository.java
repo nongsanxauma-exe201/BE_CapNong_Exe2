@@ -25,4 +25,8 @@ public interface MysteryBoxRepository extends JpaRepository<MysteryBox, Integer>
     List<MysteryBox> findAllByShopOwner_ShopActive(boolean shopOwnerShopActive);
 
     List<MysteryBox> findAllByShopOwner_ShopActiveAndIsActive(boolean shopOwnerShopActive, Boolean isActive);
+
+    List<MysteryBox> findTop10ByBoxTypeContainingIgnoreCaseAndIsActiveTrue(String boxType);
+
+    List<MysteryBox> findByIsActiveTrue();
 }

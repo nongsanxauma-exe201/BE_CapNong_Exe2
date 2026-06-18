@@ -6,6 +6,7 @@ import lombok.Data;
 import lombok.NoArgsConstructor;
 
 import java.util.List;
+import java.util.UUID;
 
 @Data
 @Builder
@@ -17,6 +18,9 @@ public class OrderCreationRequest {
     String shippingAddress;
     String note;
     String paymentMethod;
+    UUID voucherUserId;
+    List<UUID> voucherUserIds;
+    List<String> voucherCodes;
 
     List<OrderItemRequest> items;
 }

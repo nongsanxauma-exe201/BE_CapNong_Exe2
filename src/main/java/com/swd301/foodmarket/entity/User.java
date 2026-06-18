@@ -7,6 +7,7 @@ import lombok.*;
 import lombok.experimental.FieldDefaults;
 
 import java.time.LocalDateTime;
+import java.util.ArrayList;
 import java.util.List;
 
 @Entity
@@ -156,4 +157,6 @@ public class User {
     LocalDateTime lockedAt;
 
     LocalDateTime createAt;
+    @OneToMany(mappedBy = "user", cascade = CascadeType.ALL, orphanRemoval = true)
+    private List<VoucherUser> voucherUsers = new ArrayList<>();
 }
