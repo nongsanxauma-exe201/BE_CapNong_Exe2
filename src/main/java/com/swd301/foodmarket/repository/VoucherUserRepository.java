@@ -1,0 +1,60 @@
+package com.swd301.foodmarket.repository;
+
+import com.swd301.foodmarket.entity.User;
+import com.swd301.foodmarket.entity.Voucher;
+import com.swd301.foodmarket.entity.VoucherUser;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
+import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Query;
+import org.springframework.data.repository.query.Param;
+
+import java.math.BigDecimal;
+import java.time.LocalDateTime;
+import java.util.UUID;
+
+public interface VoucherUserRepository extends JpaRepository<VoucherUser, UUID> {
+    Page<VoucherUser> findByUserAndVoucher_ExpiryDateAfterAndVoucher_Active(User user, LocalDateTime voucherExpiryDateAfter, boolean voucherActive, Pageable pageable);
+
+    boolean existsByUserAndVoucher(User user, Voucher voucher);
+
+    Page<VoucherUser> findByUserAndVoucher_ExpiryDateAfterAndVoucher_ActiveAndVoucher_ShopOwnerAndVoucher_MinOrderValueLessThanEqual(User user, LocalDateTime voucherExpiryDateAfter, boolean voucherActive, User voucherShopOwner, BigDecimal voucherMinOrderValueIsLessThan, Pageable pageable);
+
+    @Query("""
+    select vu
+    from VoucherUser vu
+    join vu.voucher v
+    where vu.user = :user
+      and v.expiryDate > :voucherExpiryDateAfter
+      and v.active = :voucherActive
+      and vu.quantity > 0
+      and v.usedCount < v.usageLimit
+""")
+    Page<VoucherUser> getMyVoucherOfBuyerCanUse(
+            @Param("user") User user,
+            @Param("voucherExpiryDateAfter") LocalDateTime voucherExpiryDateAfter,
+            @Param("voucherActive") boolean voucherActive,
+            Pageable pageable
+    );
+
+    @Query("""
+    select vu
+    from VoucherUser vu
+    join vu.voucher v
+    where vu.user = :user
+      and  v.shopOwner = :shop
+      and v.expiryDate > :voucherExpiryDateAfter
+      and v.active = :voucherActive
+      and vu.quantity > 0
+      and v.usedCount < v.usageLimit
+      and v.minOrderValue <= :amount
+""")
+    Page<VoucherUser> getMyVoucherForOrder(
+            @Param("user") User user,
+            @Param("voucherExpiryDateAfter") LocalDateTime voucherExpiryDateAfter,
+            @Param("voucherActive") boolean voucherActive,
+            @Param("amount") BigDecimal amount,
+            @Param("shop") User shop,
+            Pageable pageable
+    );
+}
