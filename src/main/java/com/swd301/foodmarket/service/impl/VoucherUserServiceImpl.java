@@ -6,9 +6,11 @@ import com.swd301.foodmarket.dto.response.VoucherUserResponse;
 import com.swd301.foodmarket.entity.*;
 import com.swd301.foodmarket.exception.AppException;
 import com.swd301.foodmarket.exception.ErrorCode;
+import com.swd301.foodmarket.mapper.VoucherUsageMapper;
 import com.swd301.foodmarket.mapper.VoucherUserMapper;
 import com.swd301.foodmarket.repository.UserRepository;
 import com.swd301.foodmarket.repository.VoucherRespository;
+import com.swd301.foodmarket.repository.VoucherUsageRepository;
 import com.swd301.foodmarket.repository.VoucherUserRepository;
 import jakarta.transaction.Transactional;
 import lombok.RequiredArgsConstructor;
@@ -19,9 +21,10 @@ import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.stereotype.Service;
 
 import java.math.BigDecimal;
+import java.math.RoundingMode;
 import java.time.LocalDateTime;
-import java.util.ArrayList;
 import java.util.List;
+import java.util.Optional;
 import java.util.UUID;
 
 @RequiredArgsConstructor
@@ -31,6 +34,8 @@ public class VoucherUserServiceImpl  implements  com.swd301.foodmarket.service.V
     private final VoucherUserRepository voucherUserRepository;
     private final VoucherRespository voucherRespository;
     private final VoucherUserMapper voucherUserMapper;
+    private final VoucherUsageRepository voucherUsageRepository;
+    private final VoucherUsageMapper voucherUsageMapper;
     private final UserRepository userRepository;
     @Transactional
     @Override
@@ -113,9 +118,129 @@ public class VoucherUserServiceImpl  implements  com.swd301.foodmarket.service.V
     }
 
     @Override
-    public VoucherUsageResponse useVoucherForOrder(Order order, List<String> voucherCode) {
+    public VoucherUsageResponse useVoucherForOrder(Order order, List<String> voucherIdentifiers) {
+        if (order == null || voucherIdentifiers == null || voucherIdentifiers.isEmpty()) {
+            return null;
+        }
 
-        return null;
+        User currentUser = getCurrentUser();
+        VoucherUser voucherUser = resolveVoucherUser(currentUser, voucherIdentifiers)
+                .orElseThrow(() -> new AppException(ErrorCode.VOUCHER_USER_NOT_FOUND));
+
+        Voucher voucher = voucherUser.getVoucher();
+        validateVoucherForOrder(voucherUser, order);
+
+        BigDecimal shippingFee = order.getShippingFee() == null ? BigDecimal.ZERO : order.getShippingFee();
+        BigDecimal orderSubtotal = order.getTotalAmount().subtract(shippingFee);
+        if (orderSubtotal.compareTo(BigDecimal.ZERO) < 0) {
+            orderSubtotal = BigDecimal.ZERO;
+        }
+
+        BigDecimal discountAmount = calculateDiscountAmount(voucher, orderSubtotal);
+        if (discountAmount.compareTo(BigDecimal.ZERO) <= 0) {
+            return null;
+        }
+
+        voucherUser.setQuantityUsed((voucherUser.getQuantityUsed() == null ? 0 : voucherUser.getQuantityUsed()) + 1);
+        voucherUser.setQuantity(Math.max(0, (voucherUser.getQuantity() == null ? 0 : voucherUser.getQuantity()) - 1));
+        voucherUserRepository.save(voucherUser);
+
+        voucher.setUsedCount((voucher.getUsedCount() == null ? 0 : voucher.getUsedCount()) + 1);
+        if (voucher.getUsageLimit() != null && voucher.getUsedCount() >= voucher.getUsageLimit()) {
+            voucher.setActive(false);
+        }
+        voucherRespository.save(voucher);
+
+        BigDecimal newTotal = order.getTotalAmount().subtract(discountAmount);
+        order.setTotalAmount(newTotal.max(BigDecimal.ZERO));
+
+        VoucherUsage usage = VoucherUsage.builder()
+                .voucher(voucher)
+                .user(currentUser)
+                .order(order)
+                .discountAmount(discountAmount)
+                .usedAt(LocalDateTime.now())
+                .build();
+
+        return voucherUsageMapper.toResponse(voucherUsageRepository.save(usage));
+    }
+
+    private Optional<VoucherUser> resolveVoucherUser(User currentUser, List<String> voucherIdentifiers) {
+        for (String rawIdentifier : voucherIdentifiers) {
+            if (rawIdentifier == null || rawIdentifier.isBlank()) {
+                continue;
+            }
+            String identifier = rawIdentifier.trim();
+
+            try {
+                UUID voucherUserId = UUID.fromString(identifier);
+                Optional<VoucherUser> byId = voucherUserRepository.findByIdAndUser(voucherUserId, currentUser);
+                if (byId.isPresent()) {
+                    return byId;
+                }
+            } catch (IllegalArgumentException ignored) {
+                // Not a UUID, continue checking by voucher code.
+            }
+
+            Optional<VoucherUser> byCode = voucherUserRepository.findByUserAndVoucher_VoucherCode(currentUser, identifier);
+            if (byCode.isPresent()) {
+                return byCode;
+            }
+        }
+        return Optional.empty();
+    }
+
+    private void validateVoucherForOrder(VoucherUser voucherUser, Order order) {
+        Voucher voucher = voucherUser.getVoucher();
+        if (voucher == null) {
+            throw new AppException(ErrorCode.VOUCHER_NOT_FOUND);
+        }
+        if (!voucher.isActive()) {
+            throw new AppException(ErrorCode.VOUCHER_INACTIVE);
+        }
+        if (voucher.getExpiryDate() != null && voucher.getExpiryDate().isBefore(LocalDateTime.now())) {
+            throw new AppException(ErrorCode.VOUCHER_EXPIRED);
+        }
+
+        int remainingQuantity = voucherUser.getQuantity() == null ? 0 : voucherUser.getQuantity();
+        if (remainingQuantity <= 0) {
+            throw new AppException(ErrorCode.INVALID_REQUEST);
+        }
+
+        int usedCount = voucher.getUsedCount() == null ? 0 : voucher.getUsedCount();
+        if (voucher.getUsageLimit() != null && usedCount >= voucher.getUsageLimit()) {
+            throw new AppException(ErrorCode.VOUCHER_INACTIVE);
+        }
+
+        if (voucher.getShopOwner() == null || order.getShopOwner() == null
+                || !voucher.getShopOwner().getId().equals(order.getShopOwner().getId())) {
+            throw new AppException(ErrorCode.INVALID_REQUEST);
+        }
+
+        BigDecimal shippingFee = order.getShippingFee() == null ? BigDecimal.ZERO : order.getShippingFee();
+        BigDecimal subtotal = order.getTotalAmount().subtract(shippingFee);
+        if (subtotal.compareTo(BigDecimal.ZERO) < 0) {
+            subtotal = BigDecimal.ZERO;
+        }
+        if (voucher.getMinOrderValue() != null && subtotal.compareTo(voucher.getMinOrderValue()) < 0) {
+            throw new AppException(ErrorCode.INVALID_REQUEST);
+        }
+    }
+
+    private BigDecimal calculateDiscountAmount(Voucher voucher, BigDecimal baseAmount) {
+        if (voucher.getDiscountValue() == null || baseAmount.compareTo(BigDecimal.ZERO) <= 0) {
+            return BigDecimal.ZERO;
+        }
+
+        BigDecimal discount = baseAmount
+                .multiply(voucher.getDiscountValue())
+                .divide(BigDecimal.valueOf(100), 2, RoundingMode.HALF_UP);
+
+        if (voucher.getMaxDiscount() != null && voucher.getMaxDiscount().compareTo(BigDecimal.ZERO) > 0) {
+            discount = discount.min(voucher.getMaxDiscount());
+        }
+
+        return discount.min(baseAmount);
     }
 
     private User getCurrentUser() {

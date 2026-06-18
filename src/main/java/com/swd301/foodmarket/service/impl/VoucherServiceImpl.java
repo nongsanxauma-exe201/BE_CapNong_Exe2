@@ -48,6 +48,7 @@ public class VoucherServiceImpl implements VoucherService {
         voucher.setClaimedCount(0);
         voucher.setUsedCount(0);
         voucher.setShopOwner(user);
+        voucher.setActive(true);
         voucher.setVoucherCode(generateUniqueVoucherCode());
         voucherRespository.save(voucher);
         return voucherMapper.toVoucherResponse(voucher);

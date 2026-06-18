@@ -7,6 +7,7 @@ import org.mapstruct.Mapping;
 
 @Mapper(componentModel ="spring",uses = {VoucherMapper.class})
 public interface VoucherUserMapper {
+    @Mapping(target = "voucherUserId", source = "id")
     @Mapping(target = "voucherResponse",source = "voucher")
     VoucherUserResponse toVoucherUserResponse(VoucherUser voucherUser);
 }
