@@ -30,7 +30,7 @@ public class VoucherUser {
     @Builder.Default
     private Integer quantityUsed = 0 ;
     @Builder.Default
-    private Integer quantity =0 ;
+    private Integer quantity = 0 ;
     @Builder.Default
     private LocalDateTime claimAt = LocalDateTime.now();
 }

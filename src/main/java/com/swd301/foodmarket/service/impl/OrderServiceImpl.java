@@ -12,7 +12,6 @@ import com.swd301.foodmarket.exception.ErrorCode;
 import com.swd301.foodmarket.mapper.OrderMapper;
 import com.swd301.foodmarket.repository.*;
 import com.swd301.foodmarket.service.*;
-import org.springframework.cglib.core.Local;
 import org.springframework.transaction.annotation.Transactional;
 import lombok.AccessLevel;
 import lombok.RequiredArgsConstructor;
@@ -29,11 +28,9 @@ import org.springframework.stereotype.Service;
 import org.springframework.web.multipart.MultipartFile;
 
 import java.math.BigDecimal;
-import java.math.RoundingMode;
 import java.time.DayOfWeek;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
-import java.time.LocalTime;
 import java.time.temporal.TemporalAdjusters;
 import java.util.*;
 
@@ -61,6 +58,7 @@ public class OrderServiceImpl implements OrderService {
     TrackingService trackingService;
     ReviewRepository reviewRepository;
     WarehouseRepository warehouseRepository;
+    VoucherUserService voucherUserService;
 
     @NonFinal
     @Value("${ADDRESS_WAREHOUSE}")
@@ -692,6 +690,14 @@ public class OrderServiceImpl implements OrderService {
             order.setCodSettledAt(null);
         }
         Order savedOrder = orderRepository.save(order);
+        List<String> voucherIdentifiers = collectVoucherIdentifiers(request);
+        if (!voucherIdentifiers.isEmpty()) {
+            voucherUserService.useVoucherForOrder(savedOrder, voucherIdentifiers);
+            if ("COD".equalsIgnoreCase(savedOrder.getPaymentMethod())) {
+                savedOrder.setCodAmount(savedOrder.getTotalAmount());
+            }
+            savedOrder = orderRepository.save(savedOrder);
+        }
 
         if (!orderDetails.isEmpty()) {
             for (OrderDetail detail : orderDetails) {
@@ -748,6 +754,7 @@ public class OrderServiceImpl implements OrderService {
             }
 
             productRepository.saveAll(productsToUpdate.values());
+            voucherUserService.restoreVoucherForOrder(order);
 
         }
 
@@ -856,5 +863,27 @@ public class OrderServiceImpl implements OrderService {
                 mysteryBoxRepository.save(box);
             }
         }
+    }
+
+    private List<String> collectVoucherIdentifiers(OrderCreationRequest request) {
+        LinkedHashSet<String> identifiers = new LinkedHashSet<>();
+        if (request.getVoucherUserId() != null) {
+            identifiers.add(request.getVoucherUserId().toString());
+        }
+        if (request.getVoucherUserIds() != null) {
+            for (UUID voucherUserId : request.getVoucherUserIds()) {
+                if (voucherUserId != null) {
+                    identifiers.add(voucherUserId.toString());
+                }
+            }
+        }
+        if (request.getVoucherCodes() != null) {
+            for (String voucherCode : request.getVoucherCodes()) {
+                if (voucherCode != null && !voucherCode.isBlank()) {
+                    identifiers.add(voucherCode.trim());
+                }
+            }
+        }
+        return new ArrayList<>(identifiers);
     }
 }

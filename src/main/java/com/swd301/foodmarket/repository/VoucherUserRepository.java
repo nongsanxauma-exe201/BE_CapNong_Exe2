@@ -14,6 +14,10 @@ import java.time.LocalDateTime;
 import java.util.UUID;
 
 public interface VoucherUserRepository extends JpaRepository<VoucherUser, UUID> {
+    java.util.Optional<VoucherUser> findByIdAndUser(UUID id, User user);
+    java.util.Optional<VoucherUser> findByUserAndVoucher_VoucherCode(User user, String voucherCode);
+    java.util.Optional<VoucherUser> findByUserAndVoucher(User user, Voucher voucher);
+
     Page<VoucherUser> findByUserAndVoucher_ExpiryDateAfterAndVoucher_Active(User user, LocalDateTime voucherExpiryDateAfter, boolean voucherActive, Pageable pageable);
 
     boolean existsByUserAndVoucher(User user, Voucher voucher);

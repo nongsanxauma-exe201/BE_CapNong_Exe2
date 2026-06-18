@@ -4,7 +4,6 @@ import com.swd301.foodmarket.dto.request.GetVoucherForOrder;
 import com.swd301.foodmarket.dto.response.VoucherUsageResponse;
 import com.swd301.foodmarket.dto.response.VoucherUserResponse;
 import com.swd301.foodmarket.entity.Order;
-import com.swd301.foodmarket.entity.VoucherUser;
 import org.springframework.data.domain.Page;
 
 import java.util.List;
@@ -19,4 +18,5 @@ public interface VoucherUserService {
     boolean canRecieveVoucher(String voucherCode);
     Page<VoucherUserResponse> getVoucherForOrder(GetVoucherForOrder request, int page, int size);
     VoucherUsageResponse useVoucherForOrder(Order order, List<String> voucherCode);
+    void restoreVoucherForOrder(Order order);
 }
