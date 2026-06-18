@@ -754,6 +754,7 @@ public class OrderServiceImpl implements OrderService {
             }
 
             productRepository.saveAll(productsToUpdate.values());
+            voucherUserService.restoreVoucherForOrder(order);
 
         }
 

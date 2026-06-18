@@ -1,9 +1,6 @@
 package com.swd301.foodmarket.service.impl;
 
 import com.swd301.foodmarket.dto.request.CreatePaymentRequest;
-import com.swd301.foodmarket.dto.request.PayOSCreateRequest;
-import com.swd301.foodmarket.dto.request.PayOSWebhookRequest;
-import com.swd301.foodmarket.dto.response.PayOSCreateResponse;
 import com.swd301.foodmarket.dto.response.PaymentResponse;
 import com.swd301.foodmarket.entity.*;
 import com.swd301.foodmarket.enums.OrderStatus;
@@ -17,19 +14,17 @@ import com.swd301.foodmarket.repository.OrderRepository;
 import com.swd301.foodmarket.repository.PaymentRepository;
 import com.swd301.foodmarket.repository.TransactionRepository;
 import com.swd301.foodmarket.repository.WalletRepository;
-import com.swd301.foodmarket.service.NotificationService;
 import com.swd301.foodmarket.service.PaymentService;
 import com.swd301.foodmarket.service.PayosService;
+import com.swd301.foodmarket.service.VoucherUserService;
 import jakarta.transaction.Transactional;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.checkerframework.checker.units.qual.C;
 import org.springframework.stereotype.Service;
 
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
 import java.time.ZoneId;
-import java.util.List;
 
 @Service
 @RequiredArgsConstructor
@@ -42,7 +37,7 @@ public class PaymentServiceImpl implements PaymentService {
     private final PayosService payosService;
     private final TransactionRepository transactionRepository;
     private final WalletRepository walletRepository;
-    private final NotificationService notificationService;
+    private final VoucherUserService voucherUserService;
 
     @Override
     public PaymentResponse createPayment(CreatePaymentRequest request) {
@@ -372,6 +367,7 @@ public class PaymentServiceImpl implements PaymentService {
         payment.setStatus(PaymentStatus.FAILED);
         payment.setUpdatedAt(LocalDateTime.now(ZoneId.of("Asia/Ho_Chi_Minh")));
 
+        voucherUserService.restoreVoucherForOrder(order);
         order.setStatus(OrderStatus.FAILED);
         orderRepository.save(order);
 

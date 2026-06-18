@@ -106,7 +106,6 @@ public class VoucherUserServiceImpl  implements  com.swd301.foodmarket.service.V
     @Override
     public Page<VoucherUserResponse> getVoucherForOrder(GetVoucherForOrder request,int page, int size) {
         Pageable pageable = PageRequest.of(page, size);
-          User user = getCurrentUser();
           User shop = userRepository.findById(request.getShopId()).orElseThrow(
                   () -> new AppException(ErrorCode.USER_NOT_EXISTED)
           );
@@ -163,6 +162,52 @@ public class VoucherUserServiceImpl  implements  com.swd301.foodmarket.service.V
                 .build();
 
         return voucherUsageMapper.toResponse(voucherUsageRepository.save(usage));
+    }
+
+    @Transactional
+    @Override
+    public void restoreVoucherForOrder(Order order) {
+        if (order == null || order.getId() == null) {
+            return;
+        }
+
+        Optional<VoucherUsage> usageOptional = voucherUsageRepository.findByOrder_Id(order.getId());
+        if (usageOptional.isEmpty()) {
+            return;
+        }
+
+        VoucherUsage usage = usageOptional.get();
+        Voucher voucher = usage.getVoucher();
+        if (voucher == null) {
+            voucherUsageRepository.delete(usage);
+            return;
+        }
+
+        Optional<VoucherUser> voucherUserOptional = voucherUserRepository.findByUserAndVoucher(usage.getUser(), voucher);
+        voucherUserOptional.ifPresent(voucherUser -> {
+            int currentUsed = voucherUser.getQuantityUsed() == null ? 0 : voucherUser.getQuantityUsed();
+            int currentRemaining = voucherUser.getQuantity() == null ? 0 : voucherUser.getQuantity();
+            voucherUser.setQuantityUsed(Math.max(0, currentUsed - 1));
+            voucherUser.setQuantity(currentRemaining + 1);
+            voucherUserRepository.save(voucherUser);
+        });
+
+        int usedCount = voucher.getUsedCount() == null ? 0 : voucher.getUsedCount();
+        voucher.setUsedCount(Math.max(0, usedCount - 1));
+        if (voucher.getUsageLimit() != null
+                && voucher.getUsedCount() < voucher.getUsageLimit()
+                && voucher.getExpiryDate() != null
+                && voucher.getExpiryDate().isAfter(LocalDateTime.now())) {
+            voucher.setActive(true);
+        }
+        voucherRespository.save(voucher);
+
+        BigDecimal discountAmount = usage.getDiscountAmount() == null ? BigDecimal.ZERO : usage.getDiscountAmount();
+        if (discountAmount.compareTo(BigDecimal.ZERO) > 0 && order.getTotalAmount() != null) {
+            order.setTotalAmount(order.getTotalAmount().add(discountAmount));
+        }
+
+        voucherUsageRepository.delete(usage);
     }
 
     private Optional<VoucherUser> resolveVoucherUser(User currentUser, List<String> voucherIdentifiers) {
