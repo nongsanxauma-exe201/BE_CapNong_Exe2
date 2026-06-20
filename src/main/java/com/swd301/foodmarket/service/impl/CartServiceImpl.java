@@ -17,7 +17,9 @@ import org.springframework.stereotype.Service;
 import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.time.LocalDateTime;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.stream.Collectors;
 
 @Service
@@ -342,6 +344,111 @@ public class CartServiceImpl implements CartService {
         }
 
         return getCart();
+    }
+
+    @Override
+    @Transactional
+    public void restoreOrderItemsToCart(Order order) {
+        if (order == null || order.getBuyer() == null) {
+            return;
+        }
+
+        Cart cart = getOrCreateCart(order.getBuyer());
+
+        if (order.getOrderDetails() != null && !order.getOrderDetails().isEmpty()) {
+            Map<Integer, Integer> productQuantities = new HashMap<>();
+            for (OrderDetail detail : order.getOrderDetails()) {
+                if (detail == null || detail.getProduct() == null || detail.getQuantity() == null || detail.getQuantity() <= 0) {
+                    continue;
+                }
+                Integer productId = detail.getProduct().getId();
+                if (productId == null) {
+                    continue;
+                }
+                productQuantities.merge(productId, detail.getQuantity(), Integer::sum);
+            }
+
+            for (Map.Entry<Integer, Integer> entry : productQuantities.entrySet()) {
+                Product product = productRepository.findById(entry.getKey()).orElse(null);
+                if (product == null) {
+                    continue;
+                }
+                CartItem item = cartItemRepository.findByCartAndProduct(cart, product).orElse(null);
+                if (item != null) {
+                    item.setQuantity(item.getQuantity() + entry.getValue());
+                } else {
+                    item = new CartItem();
+                    item.setCart(cart);
+                    item.setProduct(product);
+                    item.setMysteryBox(null);
+                    item.setBuildCombo(null);
+                    item.setQuantity(entry.getValue());
+                }
+                cartItemRepository.save(item);
+            }
+        }
+
+        if (order.getMysteryBoxes() != null && !order.getMysteryBoxes().isEmpty()) {
+            Map<Integer, Integer> boxQuantities = new HashMap<>();
+            for (OrderMysteryBox orderBox : order.getMysteryBoxes()) {
+                if (orderBox == null || orderBox.getMysteryBox() == null || orderBox.getQuantity() == null || orderBox.getQuantity() <= 0) {
+                    continue;
+                }
+                Integer boxId = orderBox.getMysteryBox().getId();
+                if (boxId == null) {
+                    continue;
+                }
+                boxQuantities.merge(boxId, orderBox.getQuantity(), Integer::sum);
+            }
+
+            for (Map.Entry<Integer, Integer> entry : boxQuantities.entrySet()) {
+                MysteryBox box = mysteryBoxRepository.findById(entry.getKey()).orElse(null);
+                if (box == null) {
+                    continue;
+                }
+                CartItem item = cartItemRepository.findByCartAndMysteryBox(cart, box).orElse(null);
+                if (item != null) {
+                    item.setQuantity(item.getQuantity() + entry.getValue());
+                } else {
+                    item = new CartItem();
+                    item.setCart(cart);
+                    item.setProduct(null);
+                    item.setMysteryBox(box);
+                    item.setBuildCombo(null);
+                    item.setQuantity(entry.getValue());
+                }
+                cartItemRepository.save(item);
+            }
+        }
+
+        if (order.getBuildCombos() != null && !order.getBuildCombos().isEmpty()) {
+            Map<Integer, Integer> comboQuantities = new HashMap<>();
+            for (BuildCombo combo : order.getBuildCombos()) {
+                if (combo == null || combo.getId() == null) {
+                    continue;
+                }
+                comboQuantities.merge(combo.getId(), 1, Integer::sum);
+            }
+
+            for (Map.Entry<Integer, Integer> entry : comboQuantities.entrySet()) {
+                BuildCombo combo = buildComboRepository.findById(entry.getKey()).orElse(null);
+                if (combo == null) {
+                    continue;
+                }
+                CartItem item = cartItemRepository.findByCartAndBuildCombo(cart, combo).orElse(null);
+                if (item != null) {
+                    item.setQuantity(item.getQuantity() + entry.getValue());
+                } else {
+                    item = new CartItem();
+                    item.setCart(cart);
+                    item.setProduct(null);
+                    item.setMysteryBox(null);
+                    item.setBuildCombo(combo);
+                    item.setQuantity(entry.getValue());
+                }
+                cartItemRepository.save(item);
+            }
+        }
     }
 
     private User getCurrentUser() {

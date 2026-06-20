@@ -2,6 +2,7 @@ package com.swd301.foodmarket.service;
 
 import com.swd301.foodmarket.dto.request.AddCartItemRequest;
 import com.swd301.foodmarket.dto.response.CartResponse;
+import com.swd301.foodmarket.entity.Order;
 
 public interface CartService {
 
@@ -24,4 +25,6 @@ public interface CartService {
     void removeBuildCombo(Integer comboId);
 
     CartResponse addBuildPlanToCart(Integer planId);
+
+    void restoreOrderItemsToCart(Order order);
 }
