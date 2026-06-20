@@ -14,6 +14,7 @@ import com.swd301.foodmarket.repository.OrderRepository;
 import com.swd301.foodmarket.repository.PaymentRepository;
 import com.swd301.foodmarket.repository.TransactionRepository;
 import com.swd301.foodmarket.repository.WalletRepository;
+import com.swd301.foodmarket.service.CartService;
 import com.swd301.foodmarket.service.PaymentService;
 import com.swd301.foodmarket.service.PayosService;
 import com.swd301.foodmarket.service.VoucherUserService;
@@ -38,6 +39,7 @@ public class PaymentServiceImpl implements PaymentService {
     private final TransactionRepository transactionRepository;
     private final WalletRepository walletRepository;
     private final VoucherUserService voucherUserService;
+    private final CartService cartService;
 
     @Override
     public PaymentResponse createPayment(CreatePaymentRequest request) {
@@ -368,6 +370,7 @@ public class PaymentServiceImpl implements PaymentService {
         payment.setUpdatedAt(LocalDateTime.now(ZoneId.of("Asia/Ho_Chi_Minh")));
 
         voucherUserService.restoreVoucherForOrder(order);
+        cartService.restoreOrderItemsToCart(order);
         order.setStatus(OrderStatus.FAILED);
         orderRepository.save(order);
 
