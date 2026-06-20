@@ -375,7 +375,7 @@ public class CartServiceImpl implements CartService {
                 }
                 CartItem item = cartItemRepository.findByCartAndProduct(cart, product).orElse(null);
                 if (item != null) {
-                    item.setQuantity(item.getQuantity() + entry.getValue());
+                    item.setQuantity(Math.max(item.getQuantity(), entry.getValue()));
                 } else {
                     item = new CartItem();
                     item.setCart(cart);
@@ -408,7 +408,7 @@ public class CartServiceImpl implements CartService {
                 }
                 CartItem item = cartItemRepository.findByCartAndMysteryBox(cart, box).orElse(null);
                 if (item != null) {
-                    item.setQuantity(item.getQuantity() + entry.getValue());
+                    item.setQuantity(Math.max(item.getQuantity(), entry.getValue()));
                 } else {
                     item = new CartItem();
                     item.setCart(cart);
@@ -437,7 +437,7 @@ public class CartServiceImpl implements CartService {
                 }
                 CartItem item = cartItemRepository.findByCartAndBuildCombo(cart, combo).orElse(null);
                 if (item != null) {
-                    item.setQuantity(item.getQuantity() + entry.getValue());
+                    item.setQuantity(Math.max(item.getQuantity(), entry.getValue()));
                 } else {
                     item = new CartItem();
                     item.setCart(cart);
