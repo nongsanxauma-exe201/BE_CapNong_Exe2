@@ -10,8 +10,10 @@ import com.swd301.foodmarket.enums.WalletType;
 import com.swd301.foodmarket.exception.AppException;
 import com.swd301.foodmarket.exception.ErrorCode;
 import com.swd301.foodmarket.mapper.PaymentMapper;
+import com.swd301.foodmarket.repository.MysteryBoxRepository;
 import com.swd301.foodmarket.repository.OrderRepository;
 import com.swd301.foodmarket.repository.PaymentRepository;
+import com.swd301.foodmarket.repository.ProductRepository;
 import com.swd301.foodmarket.repository.TransactionRepository;
 import com.swd301.foodmarket.repository.WalletRepository;
 import com.swd301.foodmarket.service.CartService;
@@ -26,6 +28,8 @@ import org.springframework.stereotype.Service;
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
 import java.time.ZoneId;
+import java.util.HashMap;
+import java.util.Map;
 
 @Service
 @RequiredArgsConstructor
@@ -40,6 +44,8 @@ public class PaymentServiceImpl implements PaymentService {
     private final WalletRepository walletRepository;
     private final VoucherUserService voucherUserService;
     private final CartService cartService;
+    private final ProductRepository productRepository;
+    private final MysteryBoxRepository mysteryBoxRepository;
 
     @Override
     public PaymentResponse createPayment(CreatePaymentRequest request) {
@@ -352,15 +358,17 @@ public class PaymentServiceImpl implements PaymentService {
             throw new AppException(ErrorCode.PAYMENT_ALREADY_SUCCESS);
         }
 
-        //  Tránh cancel nhiều lần
-        if (payment.getStatus() == PaymentStatus.FAILED) {
-            log.warn("Payment already FAILED → skip. OrderCode={}", orderCode);
-            return;
-        }
-
         Order order = payment.getOrder();
 
         log.info("Order found: id={}, status={}", order.getId(), order.getStatus());
+
+        // Nếu payment đã FAILED từ callback/lần cancel trước, vẫn đảm bảo cart được trả lại.
+        // restoreOrderItemsToCart idempotent nên gọi lại không nhân đôi quantity.
+        if (payment.getStatus() == PaymentStatus.FAILED) {
+            log.warn("Payment already FAILED → ensure cart restored. OrderCode={}", orderCode);
+            cartService.restoreOrderItemsToCart(order);
+            return;
+        }
 
         // ======================
         // UPDATE STATUS
@@ -369,6 +377,7 @@ public class PaymentServiceImpl implements PaymentService {
         payment.setStatus(PaymentStatus.FAILED);
         payment.setUpdatedAt(LocalDateTime.now(ZoneId.of("Asia/Ho_Chi_Minh")));
 
+        restoreOrderInventory(order);
         voucherUserService.restoreVoucherForOrder(order);
         cartService.restoreOrderItemsToCart(order);
         order.setStatus(OrderStatus.FAILED);
@@ -398,6 +407,54 @@ public class PaymentServiceImpl implements PaymentService {
         log.info("Payment updated to FAILED");
 
         log.info("===== CANCEL PAYMENT COMPLETED =====");
+    }
+
+    private void restoreOrderInventory(Order order) {
+        if (order == null) {
+            return;
+        }
+
+        Map<Integer, Product> productsToUpdate = new HashMap<>();
+
+        if (order.getOrderDetails() != null && !order.getOrderDetails().isEmpty()) {
+            for (OrderDetail detail : order.getOrderDetails()) {
+                if (detail == null
+                        || detail.getProduct() == null
+                        || detail.getQuantity() == null
+                        || detail.getQuantity() <= 0) {
+                    continue;
+                }
+
+                Product product = detail.getProduct();
+                Integer currentStock = product.getStockQuantity() == null ? 0 : product.getStockQuantity();
+                product.setStockQuantity(currentStock + detail.getQuantity());
+                productsToUpdate.put(product.getId(), product);
+            }
+        }
+
+        if (!productsToUpdate.isEmpty()) {
+            productRepository.saveAll(productsToUpdate.values());
+        }
+
+        if (order.getMysteryBoxes() != null && !order.getMysteryBoxes().isEmpty()) {
+            for (OrderMysteryBox orderBox : order.getMysteryBoxes()) {
+                if (orderBox == null
+                        || orderBox.getMysteryBox() == null
+                        || orderBox.getQuantity() == null
+                        || orderBox.getQuantity() <= 0) {
+                    continue;
+                }
+
+                MysteryBox box = orderBox.getMysteryBox();
+                int currentSold = box.getSoldQuantity() == null ? 0 : box.getSoldQuantity();
+                int totalQty = box.getTotalQuantity() == null ? 0 : box.getTotalQuantity();
+                box.setSoldQuantity(Math.max(0, currentSold - orderBox.getQuantity()));
+                if (!Boolean.TRUE.equals(box.getIsActive()) && box.getSoldQuantity() < totalQty) {
+                    box.setIsActive(true);
+                }
+                mysteryBoxRepository.save(box);
+            }
+        }
     }
 
 

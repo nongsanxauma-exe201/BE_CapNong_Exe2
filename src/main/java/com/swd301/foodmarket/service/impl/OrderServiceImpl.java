@@ -643,6 +643,9 @@ public class OrderServiceImpl implements OrderService {
                         throw new AppException(ErrorCode.PRODUCT_OUT_OF_STOCK);
                     }
 
+                    product.setStockQuantity(product.getStockQuantity() - requiredQty);
+                    productRepository.save(product);
+
                     OrderDetail detail = new OrderDetail();
                     detail.setOrder(order);
                     detail.setProduct(product);
@@ -755,6 +758,7 @@ public class OrderServiceImpl implements OrderService {
 
             productRepository.saveAll(productsToUpdate.values());
             voucherUserService.restoreVoucherForOrder(order);
+            cartService.restoreOrderItemsToCart(order);
 
         }
 
