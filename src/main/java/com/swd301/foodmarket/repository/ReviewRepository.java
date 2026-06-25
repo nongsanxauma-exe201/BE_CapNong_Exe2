@@ -21,6 +21,8 @@ public interface ReviewRepository extends JpaRepository<Review, Integer> {
 
     List<Review> findByMysteryBoxId(Integer mysteryBoxId);
 
+    List<Review> findByBuyerId(Integer buyerId);
+
     boolean existsByOrderDetailId(Integer orderDetailId);
 
     boolean existsByMysteryBoxId(Integer mysteryBoxId);

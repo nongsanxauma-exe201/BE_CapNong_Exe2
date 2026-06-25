@@ -252,6 +252,16 @@ public class ReviewServiceImpl implements ReviewService {
     }
 
     @Override
+    public List<ReviewResponse> getMyReviews() {
+        User buyer = getCurrentUserSafe();
+        if (buyer == null) return List.of();
+        return reviewRepository.findByBuyerId(buyer.getId())
+                .stream()
+                .map(r -> toResponseWithReactions(r, buyer))
+                .toList();
+    }
+
+    @Override
     @Transactional
     public ReviewResponse reactToReview(Integer reviewId, ReviewReactionRequest request) {
 

@@ -108,6 +108,13 @@ public class ReviewController {
                 .build();
     }
 
+    @GetMapping("/my")
+    public ApiResponse<List<ReviewResponse>> getMyReviews() {
+        return ApiResponse.<List<ReviewResponse>>builder()
+                .result(reviewService.getMyReviews())
+                .build();
+    }
+
     @GetMapping("/shop/{shopId}")
     public ApiResponse<List<ReviewResponse>> getByShopId(
             @PathVariable Integer shopId

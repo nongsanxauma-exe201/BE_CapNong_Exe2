@@ -31,4 +31,6 @@ public interface ReviewService {
     ReviewShopReport getShopReport();
 
     ReviewResponse reactToReview(Integer reviewId, ReviewReactionRequest request);
+
+    List<ReviewResponse> getMyReviews();
 }
