@@ -20,4 +20,8 @@ public interface PaymentService {
 
     void cancelPaymentByOrderCode(String orderCode);
 
+    void notifyPendingPayment(String orderCode);
+
+    PaymentResponse getLatestPendingByOrderId(Integer orderId);
+
 }
