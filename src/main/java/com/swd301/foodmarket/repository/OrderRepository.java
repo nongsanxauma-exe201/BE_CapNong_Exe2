@@ -26,6 +26,7 @@ public interface OrderRepository extends JpaRepository<Order, Integer> {
 
     Page<Order> findAll(Pageable pageable);
     Page<Order> findByBuyerId(Integer buyerId, Pageable pageable);
+    Page<Order> findByBuyerIdAndStatusIn(Integer buyerId, List<OrderStatus> statuses, Pageable pageable);
 
     List<Order> findByShipperAndStatus(User shipper, OrderStatus status);
 
@@ -55,6 +56,7 @@ public interface OrderRepository extends JpaRepository<Order, Integer> {
     Integer countDistinctShopOwnerIdByStatusIsIn(Collection<OrderStatus> statuses);
 
     Page<Order> findByShopOwner(User shopOwner, Pageable pageable);
+    Page<Order> findByShopOwnerAndStatusIn(User shopOwner, List<OrderStatus> statuses, Pageable pageable);
     @Query("""
     SELECT o
     FROM Order o

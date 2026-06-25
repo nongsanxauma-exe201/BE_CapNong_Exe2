@@ -495,8 +495,16 @@ public class OrderServiceImpl implements OrderService {
 
     @Override
     public PageResponse<OrderResponse> getAllOrdersPaged(int page, int size) {
+        return getAllOrdersPaged(page, size, null);
+    }
+
+    @Override
+    public PageResponse<OrderResponse> getAllOrdersPaged(int page, int size, List<OrderStatus> statuses) {
         Pageable pageable = PageRequest.of(page, size, Sort.by("createdAt").descending());
-        Page<Order> pageResult = orderRepository.findByShopOwner(getCurrentUser(), pageable);
+        User shopOwner = getCurrentUser();
+        Page<Order> pageResult = (statuses == null || statuses.isEmpty())
+                ? orderRepository.findByShopOwner(shopOwner, pageable)
+                : orderRepository.findByShopOwnerAndStatusIn(shopOwner, statuses, pageable);
         return PageResponse.<OrderResponse>builder()
                 .content(pageResult.getContent().stream().map(orderMapper::toResponse).toList())
                 .page(pageResult.getNumber())
@@ -518,8 +526,15 @@ public class OrderServiceImpl implements OrderService {
 
     @Override
     public PageResponse<OrderResponse> getOrdersByUserIdPaged(Integer userId, int page, int size) {
+        return getOrdersByUserIdPaged(userId, page, size, null);
+    }
+
+    @Override
+    public PageResponse<OrderResponse> getOrdersByUserIdPaged(Integer userId, int page, int size, List<OrderStatus> statuses) {
         Pageable pageable = PageRequest.of(page, size, Sort.by("createdAt").descending());
-        Page<Order> pageResult = orderRepository.findByBuyerId(userId, pageable);
+        Page<Order> pageResult = (statuses == null || statuses.isEmpty())
+                ? orderRepository.findByBuyerId(userId, pageable)
+                : orderRepository.findByBuyerIdAndStatusIn(userId, statuses, pageable);
         return PageResponse.<OrderResponse>builder()
                 .content(pageResult.getContent().stream().map(orderMapper::toResponse).toList())
                 .page(pageResult.getNumber())
