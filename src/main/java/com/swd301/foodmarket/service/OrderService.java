@@ -15,9 +15,11 @@ public interface OrderService {
     OrderResponse createOrder(OrderCreationRequest request);
     List<OrderResponse> getAllOrders();
     PageResponse<OrderResponse> getAllOrdersPaged(int page, int size);
+    PageResponse<OrderResponse> getAllOrdersPaged(int page, int size, List<OrderStatus> statuses);
     OrderResponse updateOrder(Integer id, OrderUpdateRequest request, List<MultipartFile> files);
     List<OrderResponse> getOrdersByUserId(Integer userId);
     PageResponse<OrderResponse> getOrdersByUserIdPaged(Integer userId, int page, int size);
+    PageResponse<OrderResponse> getOrdersByUserIdPaged(Integer userId, int page, int size, List<OrderStatus> statuses);
     OrderResponse getOrderById(Integer id);
     void deleteOrder(Integer id);
 
