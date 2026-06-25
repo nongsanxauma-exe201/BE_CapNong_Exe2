@@ -1,22 +1,19 @@
 package com.swd301.foodmarket.service.impl;
 
 import com.swd301.foodmarket.dto.request.ReviewCreateRequest;
+import com.swd301.foodmarket.dto.request.ReviewReactionRequest;
 import com.swd301.foodmarket.dto.request.ReviewReplyRequest;
 import com.swd301.foodmarket.dto.request.ReviewUpdateRequest;
 import com.swd301.foodmarket.dto.response.PageResponse;
 import com.swd301.foodmarket.dto.response.ReviewResponse;
 import com.swd301.foodmarket.dto.response.ReviewShopReport;
-import com.swd301.foodmarket.entity.MysteryBox;
-import com.swd301.foodmarket.entity.OrderDetail;
-import com.swd301.foodmarket.entity.Review;
-import com.swd301.foodmarket.entity.User;
+import com.swd301.foodmarket.entity.*;
+import com.swd301.foodmarket.enums.OrderStatus;
+import com.swd301.foodmarket.enums.ReactionType;
 import com.swd301.foodmarket.exception.AppException;
 import com.swd301.foodmarket.exception.ErrorCode;
 import com.swd301.foodmarket.mapper.ReviewMapper;
-import com.swd301.foodmarket.repository.MysteryBoxRepository;
-import com.swd301.foodmarket.repository.OrderDetailRepository;
-import com.swd301.foodmarket.repository.ReviewRepository;
-import com.swd301.foodmarket.repository.UserRepository;
+import com.swd301.foodmarket.repository.*;
 import com.swd301.foodmarket.service.CloudinaryService;
 import com.swd301.foodmarket.service.ReviewService;
 import lombok.AccessLevel;
@@ -28,6 +25,7 @@ import org.springframework.data.domain.Pageable;
 import org.springframework.data.domain.Sort;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.multipart.MultipartFile;
 
 import java.math.BigDecimal;
@@ -40,6 +38,7 @@ import java.util.List;
 @FieldDefaults(level = AccessLevel.PRIVATE, makeFinal = true)
 public class ReviewServiceImpl implements ReviewService {
     ReviewRepository reviewRepository;
+    ReviewReactionRepository reviewReactionRepository;
     OrderDetailRepository orderDetailRepository;
     UserRepository userRepository;
     ReviewMapper reviewMapper;
@@ -52,12 +51,23 @@ public class ReviewServiceImpl implements ReviewService {
         User buyer = getCurrentUser();
         Review review = reviewMapper.toReview(request);
 
-        // ================= REVIEW PRODUCT =================
         User shopOwner = null;
+
+        // ================= REVIEW PRODUCT =================
         if (request.getOrderDetailId() != null) {
 
             OrderDetail orderDetail = orderDetailRepository.findById(request.getOrderDetailId())
                     .orElseThrow(() -> new AppException(ErrorCode.ORDER_NOT_FOUND));
+
+            // Kiểm tra đơn hàng phải ở trạng thái DELIVERED
+            if (orderDetail.getOrder().getStatus() != OrderStatus.DELIVERED) {
+                throw new AppException(ErrorCode.INVALID_ORDER_STATUS);
+            }
+
+            // Kiểm tra đơn hàng thuộc về buyer hiện tại
+            if (!orderDetail.getOrder().getBuyer().getId().equals(buyer.getId())) {
+                throw new AppException(ErrorCode.UNAUTHORIZED);
+            }
 
             if (reviewRepository.existsByOrderDetailId(request.getOrderDetailId())) {
                 throw new AppException(ErrorCode.REVIEW_ALREADY_EXISTS);
@@ -69,7 +79,6 @@ public class ReviewServiceImpl implements ReviewService {
             review.setCreateAt(LocalDateTime.now(ZoneId.of("Asia/Ho_Chi_Minh")));
             review.setShopOwner(shopOwner);
             review.setOrderDetail(orderDetail);
-
         }
 
         // ================= REVIEW MYSTERY BOX =================
@@ -78,11 +87,14 @@ public class ReviewServiceImpl implements ReviewService {
             MysteryBox box = mysteryBoxRepository.findById(request.getMysteryBoxId())
                     .orElseThrow(() -> new AppException(ErrorCode.MYSTERY_BOX_NOT_FOUND));
 
-            if (reviewRepository.existsByMysteryBoxId(request.getMysteryBoxId())) {
+            // Kiểm tra buyer chưa review mystery box này (per-buyer)
+            if (reviewRepository.existsByMysteryBoxIdAndBuyerId(request.getMysteryBoxId(), buyer.getId())) {
                 throw new AppException(ErrorCode.REVIEW_ALREADY_EXISTS);
             }
+
             shopOwner = box.getShopOwner();
             review.setBuyer(buyer);
+            review.setCreateAt(LocalDateTime.now(ZoneId.of("Asia/Ho_Chi_Minh")));
             review.setShopOwner(shopOwner);
             review.setMysteryBox(box);
         } else {
@@ -94,21 +106,16 @@ public class ReviewServiceImpl implements ReviewService {
             String url = cloudinaryService.uploadImage(evidenceFile);
             review.setEvidence(url);
         }
-        Review reviewSave = reviewRepository.save(review);
 
+        Review reviewSave = reviewRepository.save(review);
         updateShopRating(shopOwner);
 
-
-        return reviewMapper.toResponse(reviewSave);
+        return toResponseWithReactions(reviewSave, buyer);
     }
 
     private void updateShopRating(User shopOwner) {
         Double averageRating = reviewRepository.getAverageRatingByShopOwner(shopOwner);
-
-        shopOwner.setRatingAverage(
-                averageRating != null ? averageRating : 0.0
-        );
-
+        shopOwner.setRatingAverage(averageRating != null ? averageRating : 0.0);
         userRepository.save(shopOwner);
     }
 
@@ -118,7 +125,8 @@ public class ReviewServiceImpl implements ReviewService {
         Review review = reviewRepository.findById(reviewId)
                 .orElseThrow(() -> new AppException(ErrorCode.REVIEW_NOT_FOUND));
 
-        if (!review.getBuyer().getId().equals(getCurrentUser().getId())) {
+        User buyer = getCurrentUser();
+        if (!review.getBuyer().getId().equals(buyer.getId())) {
             throw new AppException(ErrorCode.UNAUTHORIZED);
         }
 
@@ -129,9 +137,10 @@ public class ReviewServiceImpl implements ReviewService {
             String url = cloudinaryService.uploadImage(evidenceFile);
             review.setEvidence(url);
         }
-        Review review1 = reviewRepository.save(review);
-        updateShopRating(review1.getShopOwner());
-        return reviewMapper.toResponse(review1);
+
+        Review saved = reviewRepository.save(review);
+        updateShopRating(saved.getShopOwner());
+        return toResponseWithReactions(saved, buyer);
     }
 
     @Override
@@ -140,9 +149,11 @@ public class ReviewServiceImpl implements ReviewService {
         Review review = reviewRepository.findById(reviewId)
                 .orElseThrow(() -> new AppException(ErrorCode.REVIEW_NOT_FOUND));
 
-        if (!review.getBuyer().getId().equals(getCurrentUser().getId())) {
+        User currentUser = getCurrentUser();
+        if (!review.getBuyer().getId().equals(currentUser.getId())) {
             throw new AppException(ErrorCode.UNAUTHORIZED);
         }
+
         User shopOwner = review.getShopOwner();
         reviewRepository.delete(review);
         updateShopRating(shopOwner);
@@ -154,33 +165,42 @@ public class ReviewServiceImpl implements ReviewService {
         Review review = reviewRepository.findById(reviewId)
                 .orElseThrow(() -> new AppException(ErrorCode.REVIEW_NOT_FOUND));
 
-        return reviewMapper.toResponse(review);
+        return toResponseWithReactions(review, getCurrentUserSafe());
     }
 
     @Override
     public List<ReviewResponse> getAllReviews() {
-
+        User currentUser = getCurrentUserSafe();
         return reviewRepository.findAll()
                 .stream()
-                .map(reviewMapper::toResponse)
+                .map(r -> toResponseWithReactions(r, currentUser))
                 .toList();
     }
 
     @Override
     public List<ReviewResponse> getReviewsByShop(Integer shopId) {
-
+        User currentUser = getCurrentUserSafe();
         return reviewRepository.findByShopOwnerId(shopId)
                 .stream()
-                .map(reviewMapper::toResponse)
+                .map(r -> toResponseWithReactions(r, currentUser))
                 .toList();
     }
 
     @Override
     public List<ReviewResponse> getReviewsByProduct(Integer productId) {
-
+        User currentUser = getCurrentUserSafe();
         return reviewRepository.findByOrderDetailProductId(productId)
                 .stream()
-                .map(reviewMapper::toResponse)
+                .map(r -> toResponseWithReactions(r, currentUser))
+                .toList();
+    }
+
+    @Override
+    public List<ReviewResponse> getReviewsByMysteryBox(Integer mysteryBoxId) {
+        User currentUser = getCurrentUserSafe();
+        return reviewRepository.findByMysteryBoxId(mysteryBoxId)
+                .stream()
+                .map(r -> toResponseWithReactions(r, currentUser))
                 .toList();
     }
 
@@ -188,8 +208,11 @@ public class ReviewServiceImpl implements ReviewService {
     public PageResponse<ReviewResponse> getReviewsByShopPaged(Integer shopId, int page, int size) {
         Pageable pageable = PageRequest.of(page, size, Sort.by("id").descending());
         Page<Review> pageResult = reviewRepository.findByShopOwnerId(shopId, pageable);
+        User currentUser = getCurrentUserSafe();
         return PageResponse.<ReviewResponse>builder()
-                .content(pageResult.getContent().stream().map(reviewMapper::toResponse).toList())
+                .content(pageResult.getContent().stream()
+                        .map(r -> toResponseWithReactions(r, currentUser))
+                        .toList())
                 .page(pageResult.getNumber())
                 .size(pageResult.getSize())
                 .totalElements(pageResult.getTotalElements())
@@ -199,26 +222,25 @@ public class ReviewServiceImpl implements ReviewService {
                 .build();
     }
 
-
     @Override
     public ReviewResponse replyReview(Integer reviewId, ReviewReplyRequest request) {
 
         Review review = reviewRepository.findById(reviewId)
                 .orElseThrow(() -> new AppException(ErrorCode.REVIEW_NOT_FOUND));
 
-        if (!review.getShopOwner().getId().equals(getCurrentUser().getId())) {
+        User currentUser = getCurrentUser();
+        if (!review.getShopOwner().getId().equals(currentUser.getId())) {
             throw new AppException(ErrorCode.UNAUTHORIZED);
         }
 
         review.setReplyFromShop(request.getReplyFromShop());
-
-        return reviewMapper.toResponse(reviewRepository.save(review));
+        return toResponseWithReactions(reviewRepository.save(review), currentUser);
     }
 
     @Override
     public ReviewShopReport getShopReport() {
         User shopOwner = getCurrentUser();
-        ReviewShopReport report = ReviewShopReport.builder()
+        return ReviewShopReport.builder()
                 .averageRating(shopOwner.getRatingAverage())
                 .fiveStarNumber(reviewRepository.countByShopOwnerAndRatingStar(shopOwner, BigDecimal.valueOf(5)))
                 .fourStarNumber(reviewRepository.countByShopOwnerAndRatingStar(shopOwner, BigDecimal.valueOf(4)))
@@ -227,14 +249,72 @@ public class ReviewServiceImpl implements ReviewService {
                 .oneStarNumber(reviewRepository.countByShopOwnerAndRatingStar(shopOwner, BigDecimal.valueOf(1)))
                 .totalReviewers(reviewRepository.countByShopOwner(shopOwner))
                 .build();
-        return report;
+    }
+
+    @Override
+    @Transactional
+    public ReviewResponse reactToReview(Integer reviewId, ReviewReactionRequest request) {
+
+        Review review = reviewRepository.findById(reviewId)
+                .orElseThrow(() -> new AppException(ErrorCode.REVIEW_NOT_FOUND));
+
+        User currentUser = getCurrentUser();
+
+        reviewReactionRepository.findByReviewAndUser(review, currentUser)
+                .ifPresentOrElse(
+                        existing -> {
+                            if (existing.getReactionType() == request.getReactionType()) {
+                                // Bấm lại cùng loại → xóa reaction (toggle off)
+                                reviewReactionRepository.delete(existing);
+                            } else {
+                                // Đổi từ LIKE sang DISLIKE hoặc ngược lại
+                                existing.setReactionType(request.getReactionType());
+                                reviewReactionRepository.save(existing);
+                            }
+                        },
+                        () -> {
+                            // Chưa react → tạo mới
+                            ReviewReaction reaction = ReviewReaction.builder()
+                                    .review(review)
+                                    .user(currentUser)
+                                    .reactionType(request.getReactionType())
+                                    .createdAt(LocalDateTime.now(ZoneId.of("Asia/Ho_Chi_Minh")))
+                                    .build();
+                            reviewReactionRepository.save(reaction);
+                        }
+                );
+
+        return toResponseWithReactions(review, currentUser);
+    }
+
+    // ── Helper: map review + reaction counts ────────────────────────────────
+
+    private ReviewResponse toResponseWithReactions(Review review, User currentUser) {
+        ReviewResponse response = reviewMapper.toResponse(review);
+        response.setLikeCount(
+                reviewReactionRepository.countByReviewAndReactionType(review, ReactionType.LIKE));
+        response.setDislikeCount(
+                reviewReactionRepository.countByReviewAndReactionType(review, ReactionType.DISLIKE));
+        if (currentUser != null) {
+            reviewReactionRepository.findByReviewAndUser(review, currentUser)
+                    .ifPresent(r -> response.setCurrentUserReaction(r.getReactionType().name()));
+        }
+        return response;
     }
 
     private User getCurrentUser() {
-
         String email = SecurityContextHolder.getContext().getAuthentication().getName();
-
         return userRepository.findByEmail(email)
                 .orElseThrow(() -> new AppException(ErrorCode.USER_NOT_EXISTED));
+    }
+
+    private User getCurrentUserSafe() {
+        try {
+            String email = SecurityContextHolder.getContext().getAuthentication().getName();
+            if (email == null || email.equals("anonymousUser")) return null;
+            return userRepository.findByEmail(email).orElse(null);
+        } catch (Exception e) {
+            return null;
+        }
     }
 }

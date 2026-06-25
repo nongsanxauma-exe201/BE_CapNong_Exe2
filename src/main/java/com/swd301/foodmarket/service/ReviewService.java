@@ -1,6 +1,7 @@
 package com.swd301.foodmarket.service;
 
 import com.swd301.foodmarket.dto.request.ReviewCreateRequest;
+import com.swd301.foodmarket.dto.request.ReviewReactionRequest;
 import com.swd301.foodmarket.dto.request.ReviewReplyRequest;
 import com.swd301.foodmarket.dto.request.ReviewUpdateRequest;
 import com.swd301.foodmarket.dto.response.PageResponse;
@@ -23,8 +24,11 @@ public interface ReviewService {
 
     List<ReviewResponse> getReviewsByShop(Integer shopId);
     List<ReviewResponse> getReviewsByProduct(Integer productId);
+    List<ReviewResponse> getReviewsByMysteryBox(Integer mysteryBoxId);
     PageResponse<ReviewResponse> getReviewsByShopPaged(Integer shopId, int page, int size);
 
     ReviewResponse replyReview(Integer reviewId, ReviewReplyRequest request);
     ReviewShopReport getShopReport();
+
+    ReviewResponse reactToReview(Integer reviewId, ReviewReactionRequest request);
 }
