@@ -1,6 +1,7 @@
 package com.swd301.foodmarket.entity;
 
 import com.fasterxml.jackson.annotation.JsonIgnore;
+import com.swd301.foodmarket.enums.VoucherType;
 import jakarta.persistence.*;
 import lombok.*;
 import lombok.experimental.FieldDefaults;
@@ -29,12 +30,23 @@ public class Voucher {
     // N-1 → Shop Owner (User)
     // ===============================
     @ManyToOne(fetch = FetchType.LAZY)
-    @JoinColumn(name = "shop_id", nullable = false)
+    @JoinColumn(name = "shop_id")
     @JsonIgnore
     User shopOwner;
 
+    @Enumerated(EnumType.STRING)
+    @Column(name = "voucher_type", length = 20, nullable = false)
+    @Builder.Default
+    VoucherType voucherType = VoucherType.SHOP;
+
     @Column(name = "voucher_code", length = 20, nullable = false, unique = true)
     String voucherCode;
+
+    @Column(name = "auto_created_reason", length = 100)
+    String autoCreatedReason;
+
+    @Column(name = "auto_created_from_order_id")
+    Integer autoCreatedFromOrderId;
 
     @Column(name = "discount_value", precision = 18, scale = 2)
     BigDecimal discountValue;

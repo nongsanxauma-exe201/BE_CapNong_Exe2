@@ -24,6 +24,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.web.multipart.MultipartFile;
 
 import java.math.BigDecimal;
+import java.math.RoundingMode;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.stream.Collectors;
@@ -58,6 +59,7 @@ public class BuildComboServiceImpl implements BuildComboService {
             item.setCombo(combo);
             item.setProduct(product);
             item.setQuantity(itemReq.getQuantity());
+            item.setQuantityKg(resolveComboItemKg(itemReq));
 
             return item;
         }).toList();
@@ -67,7 +69,7 @@ public class BuildComboServiceImpl implements BuildComboService {
 
         BigDecimal total = items.stream()
                 .map(i -> i.getProduct().getSellingPrice()
-                        .multiply(BigDecimal.valueOf(i.getQuantity())))
+                        .multiply(resolveProductComboKg(i)))
                 .reduce(BigDecimal.ZERO, BigDecimal::add);
 
 
@@ -102,7 +104,7 @@ public class BuildComboServiceImpl implements BuildComboService {
 
             for (ProductComboRequest itemReq : request.getItems()) {
 
-                if (itemReq.getQuantity() <= 0) {
+                if (resolveComboItemKg(itemReq).signum() <= 0) {
                     throw new AppException(ErrorCode.INVALID_QUANTITY);
                 }
 
@@ -111,13 +113,14 @@ public class BuildComboServiceImpl implements BuildComboService {
 
                 BigDecimal price = product.getSellingPrice();
 
-                BigDecimal itemTotal = price.multiply(BigDecimal.valueOf(itemReq.getQuantity()));
+                BigDecimal itemTotal = price.multiply(resolveComboItemKg(itemReq));
                 totalPrice = totalPrice.add(itemTotal);
 
                 newItems.add(ProductCombo.builder()
                         .combo(combo)
                         .product(product)
                         .quantity(itemReq.getQuantity())
+                        .quantityKg(resolveComboItemKg(itemReq))
                         .build());
             }
 
@@ -211,5 +214,19 @@ public class BuildComboServiceImpl implements BuildComboService {
 
         return userRepository.findByEmail(email)
                 .orElseThrow(() -> new AppException(ErrorCode.USER_NOT_EXISTED));
+    }
+
+    private BigDecimal resolveComboItemKg(ProductComboRequest itemReq) {
+        BigDecimal quantityKg = itemReq.getQuantityKg() != null
+                ? itemReq.getQuantityKg()
+                : BigDecimal.valueOf(itemReq.getQuantity() == null ? 0 : itemReq.getQuantity());
+        return quantityKg.setScale(2, RoundingMode.HALF_UP);
+    }
+
+    private BigDecimal resolveProductComboKg(ProductCombo item) {
+        BigDecimal quantityKg = item.getQuantityKg() != null
+                ? item.getQuantityKg()
+                : BigDecimal.valueOf(item.getQuantity() == null ? 0 : item.getQuantity());
+        return quantityKg.setScale(2, RoundingMode.HALF_UP);
     }
 }

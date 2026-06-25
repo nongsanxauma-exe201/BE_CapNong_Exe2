@@ -10,19 +10,24 @@ import com.swd301.foodmarket.dto.response.ShipperOrderResponse;
 import com.swd301.foodmarket.entity.*;
 import com.swd301.foodmarket.enums.OrderStatus;
 import com.swd301.foodmarket.enums.RoleName;
+import com.swd301.foodmarket.enums.TransactionStatus;
+import com.swd301.foodmarket.enums.TransactionType;
 import com.swd301.foodmarket.enums.WalletType;
 import com.swd301.foodmarket.exception.AppException;
 import com.swd301.foodmarket.exception.ErrorCode;
 import com.swd301.foodmarket.mapper.OrderMapper;
 import com.swd301.foodmarket.repository.OrderRepository;
 import com.swd301.foodmarket.repository.ShipperLocationRepository;
+import com.swd301.foodmarket.repository.TransactionRepository;
 import com.swd301.foodmarket.repository.UserRepository;
 import com.swd301.foodmarket.repository.WalletRepository;
 import com.swd301.foodmarket.repository.WarehouseRepository;
 import com.swd301.foodmarket.service.GoongMapService;
 import com.swd301.foodmarket.service.NotificationService;
+import com.swd301.foodmarket.service.OrderRewardService;
 import com.swd301.foodmarket.service.ShipperService;
 import com.swd301.foodmarket.service.UserService;
+import com.swd301.foodmarket.service.VoucherService;
 import lombok.AccessLevel;
 import lombok.RequiredArgsConstructor;
 import lombok.experimental.FieldDefaults;
@@ -62,6 +67,9 @@ public class ShipperServiceImpl implements ShipperService {
     String warehouseAddress;
     private final RequestContextFilter requestContextFilter;
     private final OrderMapper orderMapper;
+    private final OrderRewardService orderRewardService;
+    private final TransactionRepository transactionRepository;
+    private final VoucherService voucherService;
     // ===================== HELPERS =====================
 
     private User getCurrentShipper() {
@@ -297,6 +305,9 @@ public class ShipperServiceImpl implements ShipperService {
             if ("COD".equalsIgnoreCase(order.getPaymentMethod())) {
                 processCodDelivered(order);
             }
+
+            orderRewardService.applyRewardIfEligible(order);
+            voucherService.grantDamageVoucherForDeliveredOrder(order);
         }
         // ====================================================
         // CLEAR CURRENT ORDER FROM SHIPPER LOCATION
@@ -538,6 +549,21 @@ public class ShipperServiceImpl implements ShipperService {
         walletRepository.save(shopWallet);
         walletRepository.save(shipperWallet);
 
+        saveTransaction(TransactionType.PLATFORM_COMMISSION, platformFeeTotal,
+                platformWallet.getCommissionWallet(), "ORDER_" + order.getId(),
+                "Ghi nhận phí nền tảng PayOS đơn #" + order.getId());
+        saveTransaction(TransactionType.SHOP_RELEASE, finalShopRevenue,
+                shopWallet.getTotalBalance(), "ORDER_" + order.getId(),
+                "Mở khóa tiền shop sau giao thành công đơn #" + order.getId());
+        saveTransaction(TransactionType.SHIPPER_PAYOUT, shipperNet,
+                shipperWallet.getTotalBalance(), "ORDER_" + order.getId(),
+                "Cộng phí giao hàng cho shipper đơn #" + order.getId());
+        if (refundAmount.compareTo(BigDecimal.ZERO) > 0) {
+            saveTransaction(TransactionType.REFUND, refundAmount.negate(),
+                    walletRepository.findByBuyer(order.getBuyer()).getTotalBalance(), "ORDER_" + order.getId(),
+                    "Hoàn tiền vào ví buyer cho đơn #" + order.getId());
+        }
+
         log.info("[PAYOS_PLATFORM_AFTER] totalBalance={} -> {}, frozenBalance={} -> {}, commissionWallet={} -> {}, totalRevenueAllTime={} -> {}",
                 platformTotalBefore,
                 platformWallet.getTotalBalance(),
@@ -630,6 +656,19 @@ public class ShipperServiceImpl implements ShipperService {
 
         log.info("========== [PAYOS DELIVERED PAYOUT END] Order #{} ==========", order.getId());
     }
+
+    private void saveTransaction(TransactionType type, BigDecimal amount, BigDecimal balanceAfter, String referenceId, String content) {
+        transactionRepository.save(Transaction.builder()
+                .paymentGateway("INTERNAL")
+                .transactionType(type)
+                .referenceId(referenceId)
+                .amount(amount)
+                .balanceAfter(balanceAfter)
+                .status(TransactionStatus.SUCCESS)
+                .content(content)
+                .build());
+    }
+
     private void processCodDelivered(Order order) {
         if (order.getCodAmount() == null || order.getCodAmount().compareTo(BigDecimal.ZERO) <= 0) {
             order.setCodAmount(order.getTotalAmount());

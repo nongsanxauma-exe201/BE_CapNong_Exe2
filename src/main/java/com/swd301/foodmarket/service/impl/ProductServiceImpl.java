@@ -36,6 +36,7 @@ import org.springframework.web.multipart.MultipartFile;
 
 import java.math.BigDecimal;
 import java.math.RoundingMode;
+import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.List;
@@ -60,6 +61,7 @@ public class ProductServiceImpl implements ProductService {
     @Transactional
     public ProductResponse createProduct(ProductCreationRequest request, List<MultipartFile> images) {
         Product product = productMapper.toProduct(request);
+        normalizeKgProduct(product, request.getStockKg(), request.getPricePerKg(), request.getMinOrderKg());
         product.setStatus(ProductStatus.PENDING);
         product.setShopOwner(getCurrentUser());
 
@@ -113,6 +115,7 @@ public class ProductServiceImpl implements ProductService {
                 .orElseThrow(() -> new RuntimeException("Category not found"));
 
         productMapper.update(product, request);
+        normalizeKgProduct(product, request.getStockKg(), request.getPricePerKg(), request.getMinOrderKg());
         product.setCategory(category);
 
         if (image != null && !image.isEmpty()) {
@@ -299,7 +302,7 @@ public class ProductServiceImpl implements ProductService {
 
     @Override
     public List<ProductResponse> getProductForBuyer() {
-        return productRepository.findAllByStatusAndShopOwner_ShopActive(ProductStatus.AVAILABLE, true)
+        return productRepository.findAllByStatusAndShopOwner_ShopActiveAndExpiryDateIsAfter(ProductStatus.AVAILABLE, true, LocalDate.now())
                 .stream()
                 .map(this::mapToResponse)
                 .toList();
@@ -441,6 +444,11 @@ public class ProductServiceImpl implements ProductService {
 
     private ProductResponse mapToResponse(Product product) {
         ProductResponse r = productMapper.toResponse(product);
+        r.setUnit("kg");
+        r.setPricePerKg(product.getSellingPrice());
+        if (r.getStockKg() == null && product.getStockQuantity() != null) {
+            r.setStockKg(BigDecimal.valueOf(product.getStockQuantity()));
+        }
         Integer pct = product.getDiscountPercent();
         BigDecimal price = product.getSellingPrice();
         if (pct != null && pct > 0 && pct < 100 && price != null) {
@@ -455,5 +463,21 @@ public class ProductServiceImpl implements ProductService {
             }
         }
         return r;
+    }
+
+    private void normalizeKgProduct(Product product, BigDecimal stockKg, BigDecimal pricePerKg, BigDecimal minOrderKg) {
+        product.setUnit("kg");
+        if (pricePerKg != null) {
+            product.setSellingPrice(pricePerKg);
+        }
+        if (stockKg != null) {
+            product.setStockKg(stockKg);
+            product.setStockQuantity(stockKg.setScale(0, RoundingMode.DOWN).intValue());
+        } else if (product.getStockKg() == null && product.getStockQuantity() != null) {
+            product.setStockKg(BigDecimal.valueOf(product.getStockQuantity()));
+        }
+        if (minOrderKg != null) {
+            product.setMinOrderKg(minOrderKg);
+        }
     }
 }

@@ -108,6 +108,22 @@ public class Order {
     @Column(precision = 18, scale = 2)
     BigDecimal totalAmount;
 
+    @Builder.Default
+    @Column(name = "total_kg", precision = 12, scale = 2)
+    BigDecimal totalKg = BigDecimal.ZERO;
+
+    @Builder.Default
+    @Column(name = "rescued_weight", precision = 10, scale = 2)
+    BigDecimal rescuedWeight = BigDecimal.ZERO;
+
+    @Builder.Default
+    @Column(name = "reward_points", precision = 10, scale = 2)
+    BigDecimal rewardPoints = BigDecimal.ZERO;
+
+    @Builder.Default
+    @Column(name = "reward_applied", nullable = false, columnDefinition = "BOOLEAN DEFAULT FALSE")
+    Boolean rewardApplied = false;
+
     @Column(length = 50)
     String paymentMethod;
 

@@ -3,11 +3,14 @@ package com.swd301.foodmarket.service.impl;
 import com.swd301.foodmarket.dto.response.OrderResponse;
 import com.swd301.foodmarket.entity.*;
 import com.swd301.foodmarket.enums.OrderStatus;
+import com.swd301.foodmarket.enums.TransactionStatus;
+import com.swd301.foodmarket.enums.TransactionType;
 import com.swd301.foodmarket.enums.WalletType;
 import com.swd301.foodmarket.exception.AppException;
 import com.swd301.foodmarket.exception.ErrorCode;
 import com.swd301.foodmarket.mapper.OrderMapper;
 import com.swd301.foodmarket.repository.OrderRepository;
+import com.swd301.foodmarket.repository.TransactionRepository;
 import com.swd301.foodmarket.repository.WalletRepository;
 import com.swd301.foodmarket.service.CodSettlementService;
 import com.swd301.foodmarket.service.NotificationService;
@@ -28,6 +31,7 @@ public class CodSettlementServiceImpl implements CodSettlementService {
 
     private final OrderRepository orderRepository;
     private final WalletRepository walletRepository;
+    private final TransactionRepository transactionRepository;
     private final OrderMapper orderMapper;
     private final NotificationService notificationService;
 
@@ -364,6 +368,22 @@ public class CodSettlementServiceImpl implements CodSettlementService {
         walletRepository.save(shipperWallet);
         orderRepository.save(order);
 
+        saveTransaction(TransactionType.COD_RECEIVED, codAmount,
+                platformWallet.getTotalBalance(), "ORDER_" + order.getId(),
+                "Đối soát nhận tiền COD đơn #" + order.getId());
+        saveTransaction(TransactionType.PLATFORM_FREEZE, totalHeld,
+                platformWallet.getFrozenBalance(), "ORDER_" + order.getId(),
+                "Khóa tiền platform đang giữ hộ shop/shipper cho COD đơn #" + order.getId());
+        saveTransaction(TransactionType.PLATFORM_COMMISSION, platformFeeTotal,
+                platformWallet.getCommissionWallet(), "ORDER_" + order.getId(),
+                "Ghi nhận phí nền tảng COD đơn #" + order.getId());
+        saveTransaction(TransactionType.SHOP_RELEASE, finalShopRevenue,
+                shopWallet.getTotalBalance(), "ORDER_" + order.getId(),
+                "Cộng doanh thu shop COD đơn #" + order.getId());
+        saveTransaction(TransactionType.SHIPPER_PAYOUT, shipperNet,
+                shipperWallet.getTotalBalance(), "ORDER_" + order.getId(),
+                "Cộng phí giao hàng shipper COD đơn #" + order.getId());
+
         log.info("[COD_SETTLEMENT_SAVED] orderId={}, codAmount={}, codSettled={}, codSettledAt={}",
                 order.getId(),
                 order.getCodAmount(),
@@ -405,5 +425,17 @@ public class CodSettlementServiceImpl implements CodSettlementService {
                 .stream()
                 .map(orderMapper::toResponse)
                 .toList();
+    }
+
+    private void saveTransaction(TransactionType type, BigDecimal amount, BigDecimal balanceAfter, String referenceId, String content) {
+        transactionRepository.save(Transaction.builder()
+                .paymentGateway("COD")
+                .transactionType(type)
+                .referenceId(referenceId)
+                .amount(amount)
+                .balanceAfter(balanceAfter)
+                .status(TransactionStatus.SUCCESS)
+                .content(content)
+                .build());
     }
 }

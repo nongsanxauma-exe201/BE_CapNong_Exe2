@@ -19,6 +19,9 @@ public class ProductResponse {
 
     String productName;
     String unit;
+    BigDecimal stockKg;
+    BigDecimal pricePerKg;
+    BigDecimal minOrderKg;
     BigDecimal sellingPrice;
     Integer stockQuantity;
     String description;

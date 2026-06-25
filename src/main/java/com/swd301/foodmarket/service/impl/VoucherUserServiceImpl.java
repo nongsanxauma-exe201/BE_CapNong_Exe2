@@ -4,6 +4,7 @@ import com.swd301.foodmarket.dto.request.GetVoucherForOrder;
 import com.swd301.foodmarket.dto.response.VoucherUsageResponse;
 import com.swd301.foodmarket.dto.response.VoucherUserResponse;
 import com.swd301.foodmarket.entity.*;
+import com.swd301.foodmarket.enums.VoucherType;
 import com.swd301.foodmarket.exception.AppException;
 import com.swd301.foodmarket.exception.ErrorCode;
 import com.swd301.foodmarket.mapper.VoucherUsageMapper;
@@ -44,13 +45,13 @@ public class VoucherUserServiceImpl  implements  com.swd301.foodmarket.service.V
         if (voucher == null) {
             throw  new AppException(ErrorCode.VOUCHER_NOT_FOUND);
         }
-       if(voucher.getClaimedCount() + 1 > voucher.getClaimLimit()) {
+       if(voucher.getClaimLimit() != null && voucher.getClaimedCount() + 1 > voucher.getClaimLimit()) {
            throw new AppException(ErrorCode.VOUCHER_RECEIVE_LIMIT_REACHED);
        }
        if(voucherUserRepository.existsByUserAndVoucher(getCurrentUser(), voucher)) {
            throw new AppException(ErrorCode.VOUCHER_ALREADY_CLAIMED);
        }
-       if(voucher.getExpiryDate().isBefore(LocalDateTime.now())) {
+       if(voucher.getExpiryDate() != null && voucher.getExpiryDate().isBefore(LocalDateTime.now())) {
            throw new AppException(ErrorCode.VOUCHER_EXPIRED);
        }
        if(!voucher.isActive()){
@@ -59,7 +60,7 @@ public class VoucherUserServiceImpl  implements  com.swd301.foodmarket.service.V
        VoucherUser voucherUser = VoucherUser.builder()
                .user(getCurrentUser())
                .voucher(voucher)
-               .quantity(voucher.getPerUserLimit())
+               .quantity(voucher.getPerUserLimit() == null ? 1 : voucher.getPerUserLimit())
                .build();
        voucher.setClaimedCount(voucher.getClaimedCount() + 1);
        voucherRespository.save(voucher);
@@ -88,13 +89,13 @@ public class VoucherUserServiceImpl  implements  com.swd301.foodmarket.service.V
         if (voucher == null) {
             throw new AppException(ErrorCode.VOUCHER_NOT_FOUND);
         }
-        if(voucher.getClaimedCount() + 1 > voucher.getClaimLimit()) {
+        if(voucher.getClaimLimit() != null && voucher.getClaimedCount() + 1 > voucher.getClaimLimit()) {
            return  false;
         }
         if(voucherUserRepository.existsByUserAndVoucher(getCurrentUser(), voucher)) {
             return  false;
         }
-        if(voucher.getExpiryDate().isBefore(LocalDateTime.now())) {
+        if(voucher.getExpiryDate() != null && voucher.getExpiryDate().isBefore(LocalDateTime.now())) {
             return  false;
         }
         if(!voucher.isActive()){
@@ -257,8 +258,12 @@ public class VoucherUserServiceImpl  implements  com.swd301.foodmarket.service.V
             throw new AppException(ErrorCode.VOUCHER_INACTIVE);
         }
 
-        if (voucher.getShopOwner() == null || order.getShopOwner() == null
-                || !voucher.getShopOwner().getId().equals(order.getShopOwner().getId())) {
+        boolean isPlatformVoucher = voucher.getVoucherType() == VoucherType.PLATFORM
+                || voucher.getVoucherType() == VoucherType.WELCOME;
+        boolean isShopVoucherForOrder = voucher.getShopOwner() != null
+                && order.getShopOwner() != null
+                && voucher.getShopOwner().getId().equals(order.getShopOwner().getId());
+        if (!isPlatformVoucher && !isShopVoucherForOrder) {
             throw new AppException(ErrorCode.INVALID_REQUEST);
         }
 

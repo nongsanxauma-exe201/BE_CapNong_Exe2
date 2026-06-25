@@ -27,6 +27,11 @@ public class OrderResponse {
 
     BigDecimal shippingFee;
     BigDecimal totalAmount;
+    BigDecimal totalKg;
+    BigDecimal rescuedKg;
+    BigDecimal rescuedWeight;
+    BigDecimal rewardPoints;
+    Boolean rewardApplied;
 
     String status;
 

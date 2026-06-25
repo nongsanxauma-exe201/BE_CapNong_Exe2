@@ -49,8 +49,20 @@ public class OrderDetail {
 
     Integer quantity;
 
+    @Column(name = "quantity_kg", precision = 12, scale = 2)
+    BigDecimal quantityKg;
+
     @Column(precision = 18, scale = 2)
     BigDecimal unitPrice;
+
+    @Column(name = "price_per_kg", precision = 18, scale = 2)
+    BigDecimal pricePerKg;
+
+    @Column(name = "unit_weight_kg", precision = 10, scale = 2)
+    BigDecimal unitWeightKg;
+
+    @Column(name = "rescued_weight_kg", precision = 10, scale = 2)
+    BigDecimal rescuedWeightKg;
 
     @Column(name = "is_requested_return", nullable = false)
     @Builder.Default

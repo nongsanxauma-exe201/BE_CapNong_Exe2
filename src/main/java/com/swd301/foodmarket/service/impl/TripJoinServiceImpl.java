@@ -93,48 +93,6 @@ public class TripJoinServiceImpl implements TripJoinService {
 //    public double calculaReqeustedKg(CreateTripJoinRequest request)
 //    {
 //        double totalKg  = 0.0;
-//        for(Integer id : request.getOrderIds())
-//        {
-//            Order order = orderRepository.findById(id).orElseThrow(() -> new AppException(ErrorCode.ORDER_NOT_FOUND));
-//            for(OrderDetail detail : order.getOrderDetails())
-//            {
-//                if(detail.getProduct().getUnit().equals("kg"))
-//                {
-//                    totalKg += detail.getQuantity() ;
-//                }
-//                 else if(detail.getProduct().getUnit().equals("g"))
-//                {
-//                    totalKg += detail.getQuantity() / 1000.0 ;
-//                }
-//                 else if(detail.getProduct().getUnit().equals("chai"))
-//                {
-//                    // giả sử 1 chai là 0.5kg
-//                    totalKg += detail.getQuantity() * 0.5 ;
-//                }
-//                    else if(detail.getProduct().getUnit().equals("hộp") || detail.getProduct().getUnit().equals("hũ"))
-//                {
-//                    // giả sử 1 hộp là 0.3kg
-//                    totalKg += detail.getQuantity() * 0.3 ;
-//
-//                }
-//                    else if(detail.getProduct().getUnit().equals("cây"))
-//                {
-//                    // giả sử 1 cây là 0.2kg
-//                    totalKg += detail.getQuantity() * 0.2 ;
-//                }
-//                    else if(detail.getProduct().getUnit().equals("bịch") || detail.getProduct().getUnit().equals("túi"))
-//                {                    // giả sử 1 bịch là 0.4kg
-//                    totalKg += detail.getQuantity() * 0.4 ;
-//                }
-//                    else if(detail.getProduct().getUnit().equals("bó"))
-//                {
-//                    // giả sử 1 bó là 0.6kg
-//                    totalKg += detail.getQuantity() * 0.6 ;
-//                }
-//
-//            }
-//        }
-//        return totalKg;
 //    }
 
     @Override

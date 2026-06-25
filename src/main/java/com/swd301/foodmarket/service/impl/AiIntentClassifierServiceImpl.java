@@ -71,7 +71,7 @@ public class AiIntentClassifierServiceImpl implements AiIntentClassifierService 
                    JSON: { "intent": "SEARCH_ITEM", "productName": "gừng", "items": [] }
 
                 3) BUY_ITEM — khách muốn mua/thêm vào giỏ
-                   Ví dụ: "mua 1kg gừng", "cho tôi 2 bó rau muống", "thêm 500g thịt bò vào giỏ"
+                   Ví dụ: "mua 1 kg gừng", "thêm 2.5 kg cam vào giỏ"
                    JSON: { "intent": "BUY_ITEM", "productName": null, "items": [{ "name": "gừng", "quantity": 1, "unit": "kg" }] }
 
                 4) CHECKOUT — thanh toán, chốt đơn
@@ -110,7 +110,7 @@ public class AiIntentClassifierServiceImpl implements AiIntentClassifierService 
                 - Phân biệt LIST_CATALOG (hỏi chung shop bán gì) vs SEARCH_ITEM (hỏi 1 món cụ thể)
                 - "có xoài không" => SEARCH_ITEM, productName: "xoài"
                 - "có sản phẩm không" => LIST_CATALOG
-                - Đơn vị: kg, g, gram, bó, nải, hộp, túi, quả, chai...
+                - Đơn vị duy nhất: kg. Nếu khách nói đơn vị khác, hãy hỏi lại khối lượng theo kg, không tự quy đổi.
                 - quantity mặc định 1 nếu khách không nói rõ
                 - Có thể nhiều món trong items khi BUY_ITEM
 

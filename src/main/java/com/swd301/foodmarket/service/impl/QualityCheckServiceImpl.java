@@ -13,6 +13,7 @@ import com.swd301.foodmarket.service.CloudinaryService;
 import com.swd301.foodmarket.service.NotificationService;
 import com.swd301.foodmarket.service.OrderService;
 import com.swd301.foodmarket.service.QualityCheckService;
+import com.swd301.foodmarket.service.VoucherService;
 import jakarta.transaction.Transactional;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -24,9 +25,8 @@ import org.springframework.util.MultiValueMap;
 import org.springframework.web.multipart.MultipartFile;
 
 import java.math.BigDecimal;
-import java.util.HashMap;
+import java.math.RoundingMode;
 import java.util.List;
-import java.util.Map;
 
 @Slf4j
 @Service
@@ -44,6 +44,7 @@ public class QualityCheckServiceImpl implements QualityCheckService {
     private final NotificationService notificationService;
     private final MysteryBoxRepository mysteryBoxRepository;
     private final OrderMyteryRepository orderMyteryRepository;
+    private final VoucherService voucherService;
 
     @Override
     @Transactional
@@ -68,10 +69,27 @@ public class QualityCheckServiceImpl implements QualityCheckService {
 
         }
 
+        BigDecimal rejectedKg = qualityCheckRequest.getRejectedKg() != null
+                ? qualityCheckRequest.getRejectedKg()
+                : BigDecimal.valueOf(qualityCheckRequest.getRejectedWeight());
+        BigDecimal requestedKg = orderDetail != null
+                ? resolveOrderDetailKg(orderDetail)
+                : BigDecimal.valueOf(mysteryBox.getQuantity() == null ? 0 : mysteryBox.getQuantity()).setScale(2, RoundingMode.HALF_UP);
+
+        String damageNote = normalizeText(qualityCheckRequest.getDamageNote());
+        com.swd301.foodmarket.enums.QualityResult finalQualityResult = resolveFinalQualityResult(qualityCheckRequest, rejectedKg, damageNote);
+
         QualityResult qualityResult = QualityResult.builder()
                 .note(qualityCheckRequest.getNote())
-                .qualityResult(qualityCheckRequest.getQualityResult())
-                .rejectedWeight(qualityCheckRequest.getRejectedWeight())
+                .damageNote(damageNote)
+                .qualityResult(finalQualityResult)
+                .rejectedWeight(rejectedKg.doubleValue())
+                .requestedKg(requestedKg)
+                .approvedKg(qualityCheckRequest.getApprovedKg() != null
+                        ? qualityCheckRequest.getApprovedKg()
+                        : requestedKg.subtract(rejectedKg).max(BigDecimal.ZERO))
+                .rejectedKg(rejectedKg)
+                .refundedKg(rejectedKg)
                 .build();
         Order order = null;
         if (mysteryBox != null) {
@@ -85,7 +103,7 @@ public class QualityCheckServiceImpl implements QualityCheckService {
         }
         qualityResutlRepository.saveAndFlush(qualityResult);
         int count = 1;
-        for (QualityCheckRequest.QualityCheckingRequest qualityCheckingRequest : qualityCheckRequest.getQualityChecks()) {
+        if (qualityCheckRequest.getQualityChecks() != null) for (QualityCheckRequest.QualityCheckingRequest qualityCheckingRequest : qualityCheckRequest.getQualityChecks()) {
             com.swd301.foodmarket.entity.QualityCheck qualityCheck = com.swd301.foodmarket.entity.QualityCheck.builder()
                     .qualityCriteria(qualityCrieriaRepository.findById(qualityCheckingRequest.getQualityCrieriaId()).orElseThrow(
                             () -> new AppException(ErrorCode.QUALITY_CRIERIA_NOT_FOUND)
@@ -125,30 +143,32 @@ public class QualityCheckServiceImpl implements QualityCheckService {
             }
             count++;
         }
+        if (damageNote != null) {
+            voucherService.createAutoVoucherForDamage(order, damageNote);
+            qualityResult.setAutoVoucherCreated(true);
+            qualityResutlRepository.save(qualityResult);
+        }
         // update status order
         updateOrderStatus(order);
         // update Reject quality
-        Integer qualityCheckCount = orderDetail != null
-                ? orderDetail.getQuantity()
-                : mysteryBox.getQuantity();
-
         String message = "";
         BigDecimal refundAmount = BigDecimal.ZERO;
 
-        if (qualityResult.getRejectedWeight() != null
-                && qualityResult.getRejectedWeight() > 0) {
+        if (qualityResult.getRejectedKg() != null
+                && qualityResult.getRejectedKg().signum() > 0) {
 
-            double percentage =
-                    (double) (qualityResult.getRejectedWeight() * 100) / qualityCheckCount;
+            BigDecimal percentage = requestedKg.signum() > 0
+                    ? qualityResult.getRejectedKg().multiply(BigDecimal.valueOf(100)).divide(requestedKg, 2, RoundingMode.HALF_UP)
+                    : BigDecimal.ZERO;
 
-            if (percentage > 5) {
+            if (percentage.compareTo(BigDecimal.valueOf(5)) > 0) {
 
                 BigDecimal unitPrice;
 
                 String itemName;
 
                 if (orderDetail != null) {
-                    unitPrice = orderDetail.getUnitPrice();
+                    unitPrice = orderDetail.getPricePerKg() != null ? orderDetail.getPricePerKg() : orderDetail.getUnitPrice();
                     itemName = orderDetail.getProduct().getProductName();
                 } else {
                     unitPrice = mysteryBox.getMysteryBox().getPrice();
@@ -156,13 +176,11 @@ public class QualityCheckServiceImpl implements QualityCheckService {
                 }
 
                 refundAmount = unitPrice.multiply(
-                        BigDecimal.valueOf(qualityResult.getRejectedWeight())
-                );
-
-                String rejectedUnit = orderDetail != null ? "kg/số lượng" : "túi";
+                        qualityResult.getRejectedKg()
+                ).setScale(0, RoundingMode.HALF_UP);
 
                 message = "Sản phẩm " + itemName
-                        + " bị hư hỏng " + qualityResult.getRejectedWeight() + " " + rejectedUnit
+                        + " bị hư hỏng " + qualityResult.getRejectedKg().stripTrailingZeros().toPlainString() + " kg"
                         + ", phải hoàn " + refundAmount + "đ";
             }
         }
@@ -190,6 +208,32 @@ public class QualityCheckServiceImpl implements QualityCheckService {
         order.setRefundReason(order.getRefundReason() == null ? message : order.getRefundReason() + "\n" + message);
         orderRepository.save(order);
         return qualityResultMapper.toQualityCheckResponse(qualityResult);
+    }
+
+    private BigDecimal resolveOrderDetailKg(OrderDetail detail) {
+        if (detail.getQuantityKg() != null) return detail.getQuantityKg();
+        return BigDecimal.valueOf(detail.getQuantity() == null ? 0 : detail.getQuantity()).setScale(2, RoundingMode.HALF_UP);
+    }
+
+    private com.swd301.foodmarket.enums.QualityResult resolveFinalQualityResult(
+            QualityCheckRequest request,
+            BigDecimal rejectedKg,
+            String damageNote
+    ) {
+        if (request.getQualityResult() != null) {
+            return request.getQualityResult();
+        }
+        boolean hasFailedCriteria = request.getQualityChecks() != null
+                && request.getQualityChecks().stream().anyMatch(item -> !item.isPassed());
+        boolean hasRejectedKg = rejectedKg != null && rejectedKg.signum() > 0;
+        return (damageNote != null || hasRejectedKg || hasFailedCriteria)
+                ? com.swd301.foodmarket.enums.QualityResult.REJECTED
+                : com.swd301.foodmarket.enums.QualityResult.APPROVED;
+    }
+
+    private String normalizeText(String value) {
+        if (value == null || value.trim().isEmpty()) return null;
+        return value.trim();
     }
 
     // update status order
