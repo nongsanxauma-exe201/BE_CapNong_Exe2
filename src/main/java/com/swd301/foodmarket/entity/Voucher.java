@@ -30,7 +30,7 @@ public class Voucher {
     // N-1 → Shop Owner (User)
     // ===============================
     @ManyToOne(fetch = FetchType.LAZY)
-    @JoinColumn(name = "shop_id")
+    @JoinColumn(name = "shop_id", nullable = true)
     @JsonIgnore
     User shopOwner;
 
