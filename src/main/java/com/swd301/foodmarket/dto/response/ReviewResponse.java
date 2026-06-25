@@ -1,5 +1,6 @@
 package com.swd301.foodmarket.dto.response;
 
+import com.fasterxml.jackson.annotation.JsonFormat;
 import lombok.*;
 import lombok.experimental.FieldDefaults;
 
@@ -42,5 +43,12 @@ public class ReviewResponse {
 
     Long quantity;
 
+    @JsonFormat(pattern = "yyyy-MM-dd'T'HH:mm:ss")
     LocalDateTime createAt;
+
+    Long likeCount;
+
+    Long dislikeCount;
+
+    String currentUserReaction;
 }

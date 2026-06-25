@@ -2,6 +2,7 @@ package com.swd301.foodmarket.enums;
 
 public enum OrderStatus {
     PENDING,
+    AWAITING_PAYMENT,
     CONFIRMED,
     READY_FOR_PICKUP,
     SHIPPING,

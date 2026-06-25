@@ -71,6 +71,21 @@ public class PaymentController {
                 .build();
     }
 
+    @PostMapping("/{orderCode}/notify-pending")
+    public ApiResponse<String> notifyPendingPayment(@PathVariable String orderCode) {
+        paymentService.notifyPendingPayment(orderCode);
+        return ApiResponse.<String>builder()
+                .result("NOTIFIED")
+                .build();
+    }
+
+    @GetMapping("/order/{orderId}/latest-pending")
+    public ApiResponse<PaymentResponse> getLatestPendingByOrderId(@PathVariable Integer orderId) {
+        return ApiResponse.<PaymentResponse>builder()
+                .result(paymentService.getLatestPendingByOrderId(orderId))
+                .build();
+    }
+
     @PostMapping("/payos/webhook")
     public ApiResponse<String> payosWebhook(@RequestBody PayOSWebhookRequest request) {
         log.info("Received PayOS webhook for orderCode: {}", request != null ? request.getData() : "null");

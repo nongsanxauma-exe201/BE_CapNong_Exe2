@@ -3,6 +3,7 @@ package com.swd301.foodmarket.service.impl;
 import com.swd301.foodmarket.dto.request.CreatePaymentRequest;
 import com.swd301.foodmarket.dto.response.PaymentResponse;
 import com.swd301.foodmarket.entity.*;
+import com.swd301.foodmarket.entity.Notification;
 import com.swd301.foodmarket.enums.OrderStatus;
 import com.swd301.foodmarket.enums.PaymentStatus;
 import com.swd301.foodmarket.enums.TransactionStatus;
@@ -18,6 +19,7 @@ import com.swd301.foodmarket.repository.ProductRepository;
 import com.swd301.foodmarket.repository.TransactionRepository;
 import com.swd301.foodmarket.repository.WalletRepository;
 import com.swd301.foodmarket.service.CartService;
+import com.swd301.foodmarket.service.NotificationService;
 import com.swd301.foodmarket.service.OrderRewardService;
 import com.swd301.foodmarket.service.PaymentService;
 import com.swd301.foodmarket.service.PayosService;
@@ -50,6 +52,7 @@ public class PaymentServiceImpl implements PaymentService {
     private final ProductRepository productRepository;
     private final MysteryBoxRepository mysteryBoxRepository;
     private final OrderRewardService orderRewardService;
+    private final NotificationService notificationService;
 
     @Override
     public PaymentResponse createPayment(CreatePaymentRequest request) {
@@ -104,7 +107,15 @@ public class PaymentServiceImpl implements PaymentService {
 
     @Override
     public PaymentResponse updateStatus(Integer id, String status) {
-        throw new AppException(ErrorCode.INVALID_PAYMENT_METHOD);
+        Payment payment = paymentRepository.findById(id)
+                .orElseThrow(() -> new AppException(ErrorCode.PAYMENT_NOT_FOUND));
+
+        payment.setStatus(PaymentStatus.valueOf(status));
+        payment.setUpdatedAt(LocalDateTime.now(ZoneId.of("Asia/Ho_Chi_Minh")));
+
+        paymentRepository.save(payment);
+
+        return paymentMapper.toResponse(payment);
     }
 
     @Transactional
@@ -113,7 +124,7 @@ public class PaymentServiceImpl implements PaymentService {
         Order order = orderRepository.findById(request.getOrderId())
                 .orElseThrow(() -> new AppException(ErrorCode.ORDER_NOT_FOUND));
 
-        if (!order.getStatus().name().equals("PENDING")) {
+        if (order.getStatus() != OrderStatus.PENDING && order.getStatus() != OrderStatus.AWAITING_PAYMENT) {
             throw new AppException(ErrorCode.ORDER_NOT_PAYABLE);
         }
 
@@ -160,6 +171,10 @@ public class PaymentServiceImpl implements PaymentService {
         payment.setCheckoutUrl(qr.getCheckoutUrl());
         payment.setQrCodeUrl(qr.getQrCodeUrl());
         payment.setUpdatedAt(LocalDateTime.now(ZoneId.of("Asia/Ho_Chi_Minh")));
+
+        // Đánh dấu order đang trong quá trình thanh toán
+        order.setStatus(OrderStatus.AWAITING_PAYMENT);
+        orderRepository.save(order);
 
         paymentRepository.save(payment);
 
@@ -411,10 +426,10 @@ public class PaymentServiceImpl implements PaymentService {
         restoreOrderInventory(order);
         voucherUserService.restoreVoucherForOrder(order);
         cartService.restoreOrderItemsToCart(order);
-        order.setStatus(OrderStatus.FAILED);
+        order.setStatus(OrderStatus.CANCELLED);
         orderRepository.save(order);
 
-        log.info("Order status updated to FAILED");
+        log.info("Order status updated to CANCELLED");
 
         // ======================
         // TRANSACTION LOG (optional)
@@ -440,6 +455,50 @@ public class PaymentServiceImpl implements PaymentService {
         log.info("Payment updated to FAILED");
 
         log.info("===== CANCEL PAYMENT COMPLETED =====");
+    }
+
+    @Override
+    @Transactional
+    public void notifyPendingPayment(String orderCode) {
+        log.info("===== NOTIFY PENDING PAYMENT =====");
+        log.info("OrderCode: {}", orderCode);
+
+        Payment payment = paymentRepository.findByOrderCodeForUpdate(orderCode)
+                .orElseThrow(() -> new AppException(ErrorCode.PAYMENT_NOT_FOUND));
+
+        if (payment.getStatus() == PaymentStatus.SUCCESS) {
+            log.info("Payment already SUCCESS, skip notification. OrderCode={}", orderCode);
+            return;
+        }
+
+        Order order = payment.getOrder();
+        User buyer = order.getBuyer();
+
+        if (order.getStatus() == OrderStatus.PENDING || order.getStatus() == OrderStatus.AWAITING_PAYMENT) {
+            order.setStatus(OrderStatus.AWAITING_PAYMENT);
+            orderRepository.save(order);
+            log.info("Order {} status updated to AWAITING_PAYMENT", order.getId());
+        }
+
+        Notification notification = Notification.builder()
+                .title("Bạn chưa thanh toán")
+                .message("Bạn vẫn chưa thanh toán, cần thanh toán nhanh kẻo hết hàng! " +
+                         "Đơn hàng #" + order.getId() + " đang chờ thanh toán của bạn.")
+                .evidence(String.valueOf(order.getId()))
+                .receiverType("USER_" + buyer.getId())
+                .build();
+
+        notificationService.sendNotificationWebsocket(buyer, notification);
+        log.info("Pending payment notification sent to buyer userId={}", buyer.getId());
+        log.info("===== NOTIFY PENDING PAYMENT COMPLETED =====");
+    }
+
+    @Override
+    public PaymentResponse getLatestPendingByOrderId(Integer orderId) {
+        Payment payment = paymentRepository
+                .findTopByOrderIdAndStatusOrderByCreatedAtDesc(orderId, PaymentStatus.PENDING)
+                .orElseThrow(() -> new AppException(ErrorCode.PAYMENT_NOT_FOUND));
+        return paymentMapper.toResponse(payment);
     }
 
     private void restoreOrderInventory(Order order) {

@@ -38,10 +38,11 @@ public class OrderController {
     public ApiResponse<PageResponse<OrderResponse>> getOrdersByUserIdPaged(
             @PathVariable Integer userId,
             @RequestParam(defaultValue = "0") int page,
-            @RequestParam(defaultValue = "10") int size
+            @RequestParam(defaultValue = "10") int size,
+            @RequestParam(required = false) List<OrderStatus> statuses
     ) {
         return ApiResponse.<PageResponse<OrderResponse>>builder()
-                .result(orderService.getOrdersByUserIdPaged(userId, page, size))
+                .result(orderService.getOrdersByUserIdPaged(userId, page, size, statuses))
                 .build();
     }
 
@@ -55,10 +56,11 @@ public class OrderController {
     @GetMapping("/paged")
     public ApiResponse<PageResponse<OrderResponse>> getAllOrdersPaged(
             @RequestParam(defaultValue = "0") int page,
-            @RequestParam(defaultValue = "10") int size
+            @RequestParam(defaultValue = "10") int size,
+            @RequestParam(required = false) List<OrderStatus> statuses
     ) {
         return ApiResponse.<PageResponse<OrderResponse>>builder()
-                .result(orderService.getAllOrdersPaged(page, size))
+                .result(orderService.getAllOrdersPaged(page, size, statuses))
                 .build();
     }
 

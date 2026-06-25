@@ -347,16 +347,15 @@ UPDATE products SET discount_percent=5,  discount_start_date='2026-06-16 00:00:0
 -- ============================================================
 -- 7. VOUCHERS
 -- ============================================================
-INSERT INTO vouchers (shop_id,voucher_code,discount_value,max_discount,min_order_value,usage_limit,expiry_date) VALUES
-                                                                                                                    (@shop1_id,'NONGSAN10',10000,20000,50000,100,DATE_ADD(NOW(),INTERVAL 30 DAY)),
-                                                                                                                    (@shop1_id,'ORGANIC20',20000,40000,100000,50,DATE_ADD(NOW(),INTERVAL 30 DAY)),
-                                                                                                                    (@shop1_id,'DALAT50K',50000,50000,200000,20,DATE_ADD(NOW(),INTERVAL 15 DAY)),
-                                                                                                                    (@shop1_id,'FREESHIP1',15000,15000,80000,200,DATE_ADD(NOW(),INTERVAL 60 DAY)),
-                                                                                                                    (@shop2_id,'VUONTRAI15',15000,30000,70000,100,DATE_ADD(NOW(),INTERVAL 30 DAY)),
-                                                                                                                    (@shop2_id,'MIENTAY25',25000,50000,120000,50,DATE_ADD(NOW(),INTERVAL 30 DAY)),
-                                                                                                                    (@shop2_id,'TRAICAY30',30000,30000,150000,30,DATE_ADD(NOW(),INTERVAL 20 DAY)),
-                                                                                                                    (@shop2_id,'SHIP0DONG',20000,20000,100000,150,DATE_ADD(NOW(),INTERVAL 45 DAY));
-
+INSERT INTO vouchers (shop_id,voucher_code,discount_value,max_discount,min_order_value,usage_limit,expiry_date,active) VALUES
+                                                                                                                           (@shop1_id,'NONGSAN10',10000,20000,50000,100,DATE_ADD(NOW(),INTERVAL 30 DAY),1),
+                                                                                                                           (@shop1_id,'ORGANIC20',20000,40000,100000,50,DATE_ADD(NOW(),INTERVAL 30 DAY),1),
+                                                                                                                           (@shop1_id,'DALAT50K',50000,50000,200000,20,DATE_ADD(NOW(),INTERVAL 15 DAY),1),
+                                                                                                                           (@shop1_id,'FREESHIP1',15000,15000,80000,200,DATE_ADD(NOW(),INTERVAL 60 DAY),1),
+                                                                                                                           (@shop2_id,'VUONTRAI15',15000,30000,70000,100,DATE_ADD(NOW(),INTERVAL 30 DAY),1),
+                                                                                                                           (@shop2_id,'MIENTAY25',25000,50000,120000,50,DATE_ADD(NOW(),INTERVAL 30 DAY),1),
+                                                                                                                           (@shop2_id,'TRAICAY30',30000,30000,150000,30,DATE_ADD(NOW(),INTERVAL 20 DAY),1),
+                                                                                                                           (@shop2_id,'SHIP0DONG',20000,20000,100000,150,DATE_ADD(NOW(),INTERVAL 45 DAY),1);
 -- ============================================================
 -- 8. ORDERS (25 đơn, xen kẽ status cách 30 phút, page 1 có đủ 6 status)
 -- Thứ tự DESC: PENDING, FAILED, DELIVERED, CANCELLED, SHIPPING,
@@ -368,7 +367,9 @@ INSERT INTO vouchers (shop_id,voucher_code,discount_value,max_discount,min_order
 ALTER TABLE orders
     MODIFY COLUMN status ENUM(
     'PENDING',
+    'AWAITING_PAYMENT',
     'CONFIRMED',
+    'READY_FOR_PICKUP',
     'SHIPPING',
     'SHIPPING_TO_WAREHOUSE',
     'ARRIVED_AT_WAREHOUSE',
