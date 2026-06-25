@@ -1,6 +1,7 @@
 package com.swd301.foodmarket.controller;
 
 import com.swd301.foodmarket.dto.request.UpdateOrderStatusRequest;
+import com.swd301.foodmarket.dto.request.AcceptOrderRequest;
 import com.swd301.foodmarket.dto.response.*;
 import com.swd301.foodmarket.service.ShipperService;
 import jakarta.validation.Valid;
@@ -59,10 +60,13 @@ public class ShipperController {
      */
     @PostMapping("/orders/{orderId}/accept")
     @PreAuthorize("hasRole('SHIPPER')")
-    public ApiResponse<ShipperOrderResponse> acceptOrder(@PathVariable Integer orderId) {
+    public ApiResponse<ShipperOrderResponse> acceptOrder(
+            @PathVariable Integer orderId,
+            @RequestBody(required = false) AcceptOrderRequest request
+    ) {
         log.info("[SHIPPER] Accept order: {}", orderId);
         return ApiResponse.<ShipperOrderResponse>builder()
-                .result(shipperService.acceptOrder(orderId))
+                .result(shipperService.acceptOrder(orderId, request))
                 .message("Order accepted successfully")
                 .build();
     }

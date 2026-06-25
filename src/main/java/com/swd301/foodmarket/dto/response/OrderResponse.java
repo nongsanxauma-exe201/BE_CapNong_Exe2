@@ -1,6 +1,8 @@
 package com.swd301.foodmarket.dto.response;
 
 import com.fasterxml.jackson.annotation.JsonInclude;
+import com.swd301.foodmarket.enums.CodPaymentOption;
+import com.swd301.foodmarket.enums.CodPaymentStatus;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Data;
@@ -50,6 +52,9 @@ public class OrderResponse {
     String refundReason;
 
     BigDecimal codAmount;
+    BigDecimal codPrepaidAmount;
+    CodPaymentOption codPaymentOption;
+    CodPaymentStatus codPaymentStatus;
 
     Boolean codSettled;
 

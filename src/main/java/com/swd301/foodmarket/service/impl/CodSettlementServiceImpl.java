@@ -2,6 +2,8 @@ package com.swd301.foodmarket.service.impl;
 
 import com.swd301.foodmarket.dto.response.OrderResponse;
 import com.swd301.foodmarket.entity.*;
+import com.swd301.foodmarket.enums.CodPaymentOption;
+import com.swd301.foodmarket.enums.CodPaymentStatus;
 import com.swd301.foodmarket.enums.OrderStatus;
 import com.swd301.foodmarket.enums.TransactionStatus;
 import com.swd301.foodmarket.enums.TransactionType;
@@ -22,6 +24,7 @@ import org.springframework.stereotype.Service;
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
 import java.time.ZoneId;
+import java.util.ArrayList;
 import java.util.List;
 
 @Service
@@ -415,14 +418,93 @@ public class CodSettlementServiceImpl implements CodSettlementService {
     }
 
     @Override
+    @Transactional
+    public void confirmShipperCashPayment(Integer orderId) {
+        Order order = orderRepository.findById(orderId)
+                .orElseThrow(() -> new AppException(ErrorCode.ORDER_NOT_FOUND));
+        if (!"COD".equalsIgnoreCase(order.getPaymentMethod())
+                || order.getCodPaymentOption() != CodPaymentOption.CASH
+                || order.getCodPaymentStatus() != CodPaymentStatus.PENDING_ADMIN_CONFIRM
+                || order.getShipper() == null) {
+            throw new AppException(ErrorCode.INVALID_ORDER_STATUS);
+        }
+
+        BigDecimal prepaidAmount = resolveCodPrepaidAmount(order);
+        Wallet platformWallet = walletRepository.findByTypeForUpdate(WalletType.PLATFORM)
+                .orElseThrow(() -> new AppException(ErrorCode.PLATFORM_WALLET_NOT_FOUND));
+
+        platformWallet.setTotalBalance(platformWallet.getTotalBalance().add(prepaidAmount));
+        platformWallet.setFrozenBalance(platformWallet.getFrozenBalance().add(prepaidAmount));
+        platformWallet.setUpdatedAt(LocalDateTime.now(ZoneId.of("Asia/Ho_Chi_Minh")));
+
+        order.setCodPrepaidAmount(prepaidAmount);
+        order.setCodPaymentStatus(CodPaymentStatus.PAID);
+        order.setShipperPaidAt(LocalDateTime.now(ZoneId.of("Asia/Ho_Chi_Minh")));
+        order.setCodCashConfirmedAt(LocalDateTime.now(ZoneId.of("Asia/Ho_Chi_Minh")));
+
+        walletRepository.save(platformWallet);
+        orderRepository.save(order);
+
+        saveTransaction(TransactionType.COD_SHIPPER_CASH_CONFIRMED, prepaidAmount,
+                platformWallet.getFrozenBalance(), "ORDER_" + order.getId(),
+                "Admin xác nhận đã nhận tiền mặt COD từ shipper cho đơn #" + order.getId());
+    }
+
+    @Override
+    @Transactional
+    public void refundCodPrepaymentToShipper(Integer orderId) {
+        Order order = orderRepository.findById(orderId)
+                .orElseThrow(() -> new AppException(ErrorCode.ORDER_NOT_FOUND));
+        if (!"COD".equalsIgnoreCase(order.getPaymentMethod())
+                || order.getStatus() != OrderStatus.FAILED
+                || order.getCodPaymentStatus() != CodPaymentStatus.REFUND_PENDING
+                || order.getShipper() == null) {
+            throw new AppException(ErrorCode.INVALID_ORDER_STATUS);
+        }
+
+        BigDecimal prepaidAmount = order.getCodPrepaidAmount() != null
+                ? order.getCodPrepaidAmount()
+                : resolveCodPrepaidAmount(order);
+        Wallet platformWallet = walletRepository.findByTypeForUpdate(WalletType.PLATFORM)
+                .orElseThrow(() -> new AppException(ErrorCode.PLATFORM_WALLET_NOT_FOUND));
+        Wallet shipperWallet = walletRepository.findByShipperIdForUpdate(order.getShipper().getId())
+                .orElseThrow(() -> new AppException(ErrorCode.WALLET_NOT_FOUND));
+
+        if (platformWallet.getFrozenBalance().compareTo(prepaidAmount) < 0
+                || platformWallet.getTotalBalance().compareTo(prepaidAmount) < 0) {
+            throw new AppException(ErrorCode.PLATFORM_BALANCE_NOT_ENOUGH);
+        }
+
+        platformWallet.setFrozenBalance(platformWallet.getFrozenBalance().subtract(prepaidAmount));
+        platformWallet.setTotalBalance(platformWallet.getTotalBalance().subtract(prepaidAmount));
+        platformWallet.setUpdatedAt(LocalDateTime.now(ZoneId.of("Asia/Ho_Chi_Minh")));
+        shipperWallet.setTotalBalance(shipperWallet.getTotalBalance().add(prepaidAmount));
+        shipperWallet.setUpdatedAt(LocalDateTime.now(ZoneId.of("Asia/Ho_Chi_Minh")));
+
+        order.setCodPaymentStatus(CodPaymentStatus.REFUNDED);
+        order.setCodRefundedAt(LocalDateTime.now(ZoneId.of("Asia/Ho_Chi_Minh")));
+
+        walletRepository.save(platformWallet);
+        walletRepository.save(shipperWallet);
+        orderRepository.save(order);
+
+        saveTransaction(TransactionType.COD_SHIPPER_REFUND, prepaidAmount,
+                shipperWallet.getTotalBalance(), "ORDER_" + order.getId(),
+                "Admin hoàn tiền hàng COD cho shipper vì giao thất bại đơn #" + order.getId());
+    }
+
+    @Override
     public List<OrderResponse> getPendingCodSettlementOrders() {
-        return orderRepository
-                .findByPaymentMethodIgnoreCaseAndStatusAndCodSettled(
-                        "COD",
-                        OrderStatus.DELIVERED,
-                        false
-                )
-                .stream()
+        List<Order> orders = new ArrayList<>();
+        orders.addAll(orderRepository.findByPaymentMethodIgnoreCaseAndCodPaymentStatus(
+                "COD", CodPaymentStatus.PENDING_ADMIN_CONFIRM));
+        orders.addAll(orderRepository.findByPaymentMethodIgnoreCaseAndCodPaymentStatus(
+                "COD", CodPaymentStatus.REFUND_PENDING));
+        orders.addAll(orderRepository.findByPaymentMethodIgnoreCaseAndStatusAndCodSettled(
+                "COD", OrderStatus.DELIVERED, false));
+
+        return orders.stream()
+                .distinct()
                 .map(orderMapper::toResponse)
                 .toList();
     }
@@ -437,5 +519,13 @@ public class CodSettlementServiceImpl implements CodSettlementService {
                 .status(TransactionStatus.SUCCESS)
                 .content(content)
                 .build());
+    }
+
+    private BigDecimal resolveCodPrepaidAmount(Order order) {
+        BigDecimal total = order.getTotalAmount() != null ? order.getTotalAmount() : BigDecimal.ZERO;
+        BigDecimal shipping = order.getShippingFee() != null ? order.getShippingFee() : BigDecimal.ZERO;
+        BigDecimal refund = order.getRefundAmount() != null ? order.getRefundAmount() : BigDecimal.ZERO;
+        BigDecimal amount = total.subtract(shipping).subtract(refund);
+        return amount.compareTo(BigDecimal.ZERO) < 0 ? BigDecimal.ZERO : amount;
     }
 }

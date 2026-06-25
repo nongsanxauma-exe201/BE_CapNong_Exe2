@@ -1,6 +1,8 @@
 package com.swd301.foodmarket.entity;
 
 import com.fasterxml.jackson.annotation.JsonIgnore;
+import com.swd301.foodmarket.enums.CodPaymentOption;
+import com.swd301.foodmarket.enums.CodPaymentStatus;
 import com.swd301.foodmarket.enums.OrderStatus;
 import jakarta.persistence.*;
 import lombok.*;
@@ -148,4 +150,19 @@ public class Order {
     private Boolean codSettled = false;
 
     private LocalDateTime codSettledAt;
+
+    @Enumerated(EnumType.STRING)
+    @Column(name = "cod_payment_option", length = 20)
+    private CodPaymentOption codPaymentOption;
+
+    @Enumerated(EnumType.STRING)
+    @Column(name = "cod_payment_status", length = 30)
+    private CodPaymentStatus codPaymentStatus;
+
+    @Column(name = "cod_prepaid_amount", precision = 18, scale = 2)
+    private BigDecimal codPrepaidAmount;
+
+    private LocalDateTime shipperPaidAt;
+    private LocalDateTime codCashConfirmedAt;
+    private LocalDateTime codRefundedAt;
 }
