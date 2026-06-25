@@ -4,12 +4,15 @@ import com.swd301.foodmarket.dto.request.GetVoucherForOrder;
 import com.swd301.foodmarket.dto.response.VoucherUsageResponse;
 import com.swd301.foodmarket.dto.response.VoucherUserResponse;
 import com.swd301.foodmarket.entity.*;
+import com.swd301.foodmarket.enums.TransactionStatus;
+import com.swd301.foodmarket.enums.TransactionType;
 import com.swd301.foodmarket.enums.VoucherType;
 import com.swd301.foodmarket.exception.AppException;
 import com.swd301.foodmarket.exception.ErrorCode;
 import com.swd301.foodmarket.mapper.VoucherUsageMapper;
 import com.swd301.foodmarket.mapper.VoucherUserMapper;
 import com.swd301.foodmarket.repository.UserRepository;
+import com.swd301.foodmarket.repository.TransactionRepository;
 import com.swd301.foodmarket.repository.VoucherRespository;
 import com.swd301.foodmarket.repository.VoucherUsageRepository;
 import com.swd301.foodmarket.repository.VoucherUserRepository;
@@ -38,6 +41,7 @@ public class VoucherUserServiceImpl  implements  com.swd301.foodmarket.service.V
     private final VoucherUsageRepository voucherUsageRepository;
     private final VoucherUsageMapper voucherUsageMapper;
     private final UserRepository userRepository;
+    private final TransactionRepository transactionRepository;
     @Transactional
     @Override
     public VoucherUserResponse createVoucherUser(String voucherCode) {
@@ -136,7 +140,7 @@ public class VoucherUserServiceImpl  implements  com.swd301.foodmarket.service.V
             orderSubtotal = BigDecimal.ZERO;
         }
 
-        BigDecimal discountAmount = calculateDiscountAmount(voucher, orderSubtotal);
+        BigDecimal discountAmount = calculateDiscountAmount(voucher, orderSubtotal, shippingFee);
         if (discountAmount.compareTo(BigDecimal.ZERO) <= 0) {
             return null;
         }
@@ -153,6 +157,15 @@ public class VoucherUserServiceImpl  implements  com.swd301.foodmarket.service.V
 
         BigDecimal newTotal = order.getTotalAmount().subtract(discountAmount);
         order.setTotalAmount(newTotal.max(BigDecimal.ZERO));
+        if (voucher.getVoucherType() == VoucherType.WELCOME) {
+            BigDecimal currentShippingDiscount = order.getShippingDiscountAmount() == null
+                    ? BigDecimal.ZERO
+                    : order.getShippingDiscountAmount();
+            order.setShippingDiscountAmount(currentShippingDiscount.add(discountAmount));
+            saveTransaction(TransactionType.SHIPPING_SUBSIDY, discountAmount.negate(), null,
+                    "ORDER_" + order.getId(),
+                    "Admin/platform bù phí vận chuyển bằng welcome voucher cho đơn #" + order.getId());
+        }
 
         VoucherUsage usage = VoucherUsage.builder()
                 .voucher(voucher)
@@ -206,6 +219,12 @@ public class VoucherUserServiceImpl  implements  com.swd301.foodmarket.service.V
         BigDecimal discountAmount = usage.getDiscountAmount() == null ? BigDecimal.ZERO : usage.getDiscountAmount();
         if (discountAmount.compareTo(BigDecimal.ZERO) > 0 && order.getTotalAmount() != null) {
             order.setTotalAmount(order.getTotalAmount().add(discountAmount));
+            if (usage.getVoucher() != null && usage.getVoucher().getVoucherType() == VoucherType.WELCOME) {
+                BigDecimal currentShippingDiscount = order.getShippingDiscountAmount() == null
+                        ? BigDecimal.ZERO
+                        : order.getShippingDiscountAmount();
+                order.setShippingDiscountAmount(currentShippingDiscount.subtract(discountAmount).max(BigDecimal.ZERO));
+            }
         }
 
         voucherUsageRepository.delete(usage);
@@ -277,7 +296,19 @@ public class VoucherUserServiceImpl  implements  com.swd301.foodmarket.service.V
         }
     }
 
-    private BigDecimal calculateDiscountAmount(Voucher voucher, BigDecimal baseAmount) {
+    private BigDecimal calculateDiscountAmount(Voucher voucher, BigDecimal baseAmount, BigDecimal shippingFee) {
+        if (voucher.getVoucherType() == VoucherType.WELCOME) {
+            BigDecimal shippingBase = shippingFee == null ? BigDecimal.ZERO : shippingFee;
+            if (shippingBase.compareTo(BigDecimal.ZERO) <= 0) {
+                return BigDecimal.ZERO;
+            }
+            BigDecimal discount = shippingBase;
+            if (voucher.getMaxDiscount() != null && voucher.getMaxDiscount().compareTo(BigDecimal.ZERO) > 0) {
+                discount = discount.min(voucher.getMaxDiscount());
+            }
+            return discount.min(shippingBase);
+        }
+
         if (voucher.getDiscountValue() == null || baseAmount.compareTo(BigDecimal.ZERO) <= 0) {
             return BigDecimal.ZERO;
         }
@@ -291,6 +322,18 @@ public class VoucherUserServiceImpl  implements  com.swd301.foodmarket.service.V
         }
 
         return discount.min(baseAmount);
+    }
+
+    private void saveTransaction(TransactionType type, BigDecimal amount, BigDecimal balanceAfter, String referenceId, String content) {
+        transactionRepository.save(Transaction.builder()
+                .paymentGateway("VOUCHER")
+                .transactionType(type)
+                .referenceId(referenceId)
+                .amount(amount)
+                .balanceAfter(balanceAfter)
+                .status(TransactionStatus.SUCCESS)
+                .content(content)
+                .build());
     }
 
     private User getCurrentUser() {

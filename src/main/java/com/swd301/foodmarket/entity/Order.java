@@ -111,6 +111,10 @@ public class Order {
     BigDecimal totalAmount;
 
     @Builder.Default
+    @Column(name = "shipping_discount_amount", precision = 18, scale = 2)
+    BigDecimal shippingDiscountAmount = BigDecimal.ZERO;
+
+    @Builder.Default
     @Column(name = "total_kg", precision = 12, scale = 2)
     BigDecimal totalKg = BigDecimal.ZERO;
 

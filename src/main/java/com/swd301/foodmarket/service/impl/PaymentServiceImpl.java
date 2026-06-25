@@ -233,12 +233,18 @@ public class PaymentServiceImpl implements PaymentService {
                 ? order.getShippingFee()
                 : BigDecimal.ZERO;
 
-        BigDecimal shopGross = totalAmount.subtract(shippingFee);
+        BigDecimal shippingDiscountAmount = order.getShippingDiscountAmount() != null
+                ? order.getShippingDiscountAmount()
+                : BigDecimal.ZERO;
+        BigDecimal settlementTotal = totalAmount.add(shippingDiscountAmount);
+        BigDecimal shopGross = settlementTotal.subtract(shippingFee);
 
-        log.info("[PAYOS_PAYMENT_SUCCESS] orderId={}, totalAmount={}, shippingFee={}, shopGross={}",
+        log.info("[PAYOS_PAYMENT_SUCCESS] orderId={}, buyerPaid={}, shippingFee={}, shippingDiscountAmount={}, settlementTotal={}, shopGross={}",
                 order.getId(),
                 totalAmount,
                 shippingFee,
+                shippingDiscountAmount,
+                settlementTotal,
                 shopGross
         );
 

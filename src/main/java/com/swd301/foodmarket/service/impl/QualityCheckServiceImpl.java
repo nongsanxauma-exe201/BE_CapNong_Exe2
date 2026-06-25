@@ -74,7 +74,7 @@ public class QualityCheckServiceImpl implements QualityCheckService {
                 : BigDecimal.valueOf(qualityCheckRequest.getRejectedWeight());
         BigDecimal requestedKg = orderDetail != null
                 ? resolveOrderDetailKg(orderDetail)
-                : BigDecimal.valueOf(mysteryBox.getQuantity() == null ? 0 : mysteryBox.getQuantity()).setScale(2, RoundingMode.HALF_UP);
+                : resolveMysteryBoxKg(mysteryBox);
 
         String damageNote = normalizeText(qualityCheckRequest.getDamageNote());
         com.swd301.foodmarket.enums.QualityResult finalQualityResult = resolveFinalQualityResult(qualityCheckRequest, rejectedKg, damageNote);
@@ -143,8 +143,8 @@ public class QualityCheckServiceImpl implements QualityCheckService {
             }
             count++;
         }
-        if (damageNote != null) {
-            voucherService.createAutoVoucherForDamage(order, damageNote);
+        if (isRejectedOverDamageVoucherThreshold(rejectedKg, requestedKg)) {
+            voucherService.createAutoVoucherForDamage(order, buildDamageVoucherReason(rejectedKg, requestedKg));
             qualityResult.setAutoVoucherCreated(true);
             qualityResutlRepository.save(qualityResult);
         }
@@ -215,6 +215,16 @@ public class QualityCheckServiceImpl implements QualityCheckService {
         return BigDecimal.valueOf(detail.getQuantity() == null ? 0 : detail.getQuantity()).setScale(2, RoundingMode.HALF_UP);
     }
 
+    private BigDecimal resolveMysteryBoxKg(OrderMysteryBox mysteryBox) {
+        if (mysteryBox.getRescuedWeightKg() != null) return mysteryBox.getRescuedWeightKg();
+        if (mysteryBox.getUnitWeightKg() != null && mysteryBox.getQuantity() != null) {
+            return mysteryBox.getUnitWeightKg()
+                    .multiply(BigDecimal.valueOf(mysteryBox.getQuantity()))
+                    .setScale(2, RoundingMode.HALF_UP);
+        }
+        return BigDecimal.valueOf(mysteryBox.getQuantity() == null ? 0 : mysteryBox.getQuantity()).setScale(2, RoundingMode.HALF_UP);
+    }
+
     private com.swd301.foodmarket.enums.QualityResult resolveFinalQualityResult(
             QualityCheckRequest request,
             BigDecimal rejectedKg,
@@ -234,6 +244,26 @@ public class QualityCheckServiceImpl implements QualityCheckService {
     private String normalizeText(String value) {
         if (value == null || value.trim().isEmpty()) return null;
         return value.trim();
+    }
+
+    private boolean isRejectedOverDamageVoucherThreshold(BigDecimal rejectedKg, BigDecimal requestedKg) {
+        if (rejectedKg == null || requestedKg == null || requestedKg.signum() <= 0) {
+            return false;
+        }
+        BigDecimal rejectedPercent = rejectedKg
+                .multiply(BigDecimal.valueOf(100))
+                .divide(requestedKg, 2, RoundingMode.HALF_UP);
+        return rejectedPercent.compareTo(BigDecimal.valueOf(20)) > 0;
+    }
+
+    private String buildDamageVoucherReason(BigDecimal rejectedKg, BigDecimal requestedKg) {
+        BigDecimal rejectedPercent = rejectedKg
+                .multiply(BigDecimal.valueOf(100))
+                .divide(requestedKg, 2, RoundingMode.HALF_UP);
+        return "QC ghi nhận khối lượng không đạt chuẩn "
+                + rejectedKg.stripTrailingZeros().toPlainString() + " kg / "
+                + requestedKg.stripTrailingZeros().toPlainString() + " kg ("
+                + rejectedPercent.stripTrailingZeros().toPlainString() + "%), vượt ngưỡng 20%";
     }
 
     // update status order

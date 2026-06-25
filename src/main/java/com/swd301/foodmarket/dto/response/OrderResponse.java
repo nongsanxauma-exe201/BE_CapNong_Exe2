@@ -20,6 +20,7 @@ import java.util.List;
 public class OrderResponse {
     Integer id;
     UserResponse shopOwner;
+    UserResponse shipper;
     String recipientName;
     String recipientPhone;
     String shippingAddress;
@@ -28,6 +29,7 @@ public class OrderResponse {
     String note;
 
     BigDecimal shippingFee;
+    BigDecimal shippingDiscountAmount;
     BigDecimal totalAmount;
     BigDecimal totalKg;
     BigDecimal rescuedKg;

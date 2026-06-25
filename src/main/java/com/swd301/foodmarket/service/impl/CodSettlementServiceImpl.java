@@ -79,6 +79,10 @@ public class CodSettlementServiceImpl implements CodSettlementService {
         BigDecimal orderTotalAmount = order.getTotalAmount() != null
                 ? order.getTotalAmount()
                 : BigDecimal.ZERO;
+        BigDecimal shippingDiscountAmount = order.getShippingDiscountAmount() != null
+                ? order.getShippingDiscountAmount()
+                : BigDecimal.ZERO;
+        BigDecimal settlementTotal = orderTotalAmount.add(shippingDiscountAmount);
 
         BigDecimal shippingFee = order.getShippingFee() != null
                 ? order.getShippingFee()
@@ -102,7 +106,7 @@ public class CodSettlementServiceImpl implements CodSettlementService {
             throw new AppException(ErrorCode.INVALID_AMOUNT);
         }
 
-        BigDecimal shopGross = orderTotalAmount.subtract(shippingFee);
+        BigDecimal shopGross = settlementTotal.subtract(shippingFee);
 
         if (refundAmount.compareTo(shopGross) > 0) {
             log.error("[COD_SETTLEMENT_INVALID_REFUND] orderId={}, refundAmount={}, shopGross={}",
@@ -134,15 +138,17 @@ public class CodSettlementServiceImpl implements CodSettlementService {
                 order.getBuyer() != null ? order.getBuyer().getId() : null
         );
 
-        log.info("[COD_AMOUNT_INPUT] orderTotalAmount={}, shippingFee={}, refundAmount={}, codAmount={}",
+        log.info("[COD_AMOUNT_INPUT] buyerPaid={}, shippingFee={}, shippingDiscountAmount={}, settlementTotal={}, refundAmount={}, codAmount={}",
                 orderTotalAmount,
                 shippingFee,
+                shippingDiscountAmount,
+                settlementTotal,
                 refundAmount,
                 codAmount
         );
 
-        log.info("[COD_FORMULA] shopGross=orderTotalAmount-shippingFee => {} - {} = {}",
-                orderTotalAmount,
+        log.info("[COD_FORMULA] shopGross=settlementTotal-shippingFee => {} - {} = {}",
+                settlementTotal,
                 shippingFee,
                 shopGross
         );
@@ -386,6 +392,11 @@ public class CodSettlementServiceImpl implements CodSettlementService {
         saveTransaction(TransactionType.SHIPPER_PAYOUT, shipperNet,
                 shipperWallet.getTotalBalance(), "ORDER_" + order.getId(),
                 "Cộng phí giao hàng shipper COD đơn #" + order.getId());
+        if (shippingDiscountAmount.compareTo(BigDecimal.ZERO) > 0) {
+            saveTransaction(TransactionType.SHIPPING_SUBSIDY, shippingDiscountAmount.negate(),
+                    platformWallet.getTotalBalance(), "ORDER_" + order.getId(),
+                    "Admin/platform bù phí vận chuyển COD cho shipper đơn #" + order.getId());
+        }
 
         log.info("[COD_SETTLEMENT_SAVED] orderId={}, codAmount={}, codSettled={}, codSettledAt={}",
                 order.getId(),
@@ -524,8 +535,9 @@ public class CodSettlementServiceImpl implements CodSettlementService {
     private BigDecimal resolveCodPrepaidAmount(Order order) {
         BigDecimal total = order.getTotalAmount() != null ? order.getTotalAmount() : BigDecimal.ZERO;
         BigDecimal shipping = order.getShippingFee() != null ? order.getShippingFee() : BigDecimal.ZERO;
+        BigDecimal shippingDiscount = order.getShippingDiscountAmount() != null ? order.getShippingDiscountAmount() : BigDecimal.ZERO;
         BigDecimal refund = order.getRefundAmount() != null ? order.getRefundAmount() : BigDecimal.ZERO;
-        BigDecimal amount = total.subtract(shipping).subtract(refund);
+        BigDecimal amount = total.add(shippingDiscount).subtract(shipping).subtract(refund);
         return amount.compareTo(BigDecimal.ZERO) < 0 ? BigDecimal.ZERO : amount;
     }
 }

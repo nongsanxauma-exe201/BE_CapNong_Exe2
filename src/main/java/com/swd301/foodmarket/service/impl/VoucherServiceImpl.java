@@ -85,8 +85,8 @@ public class VoucherServiceImpl implements VoucherService {
     }
 
     @Override
-    public VoucherResponse createAutoVoucherForDamage(Order order, String damageNote) {
-        if (order == null || order.getId() == null || order.getShopOwner() == null || isBlank(damageNote)) {
+    public VoucherResponse createAutoVoucherForDamage(Order order, String reason) {
+        if (order == null || order.getId() == null || order.getShopOwner() == null || isBlank(reason)) {
             throw new AppException(ErrorCode.INVALID_REQUEST);
         }
 
@@ -113,7 +113,7 @@ public class VoucherServiceImpl implements VoucherService {
                             Voucher saved = voucherRespository.save(voucher);
                             notifyUser(order.getShopOwner(),
                                     "Đã tạo voucher xin lỗi cho đơn #" + order.getId(),
-                                    "QC ghi nhận hàng hư: " + damageNote
+                                    reason
                                             + ". Hệ thống đã tạo voucher giảm 20% tối đa 50.000đ và sẽ gửi cho khách khi đơn giao thành công.");
                             return saved;
                         })
@@ -149,7 +149,7 @@ public class VoucherServiceImpl implements VoucherService {
                             : "shop";
                     notifyUser(order.getBuyer(),
                             "Bạn vừa nhận voucher xin lỗi từ " + shopName,
-                            "Do đơn #" + order.getId() + " có hàng hư khi kiểm tra, bạn được tặng voucher giảm 20% tối đa 50.000đ. Voucher có hiệu lực 15 ngày.");
+                            "Do đơn #" + order.getId() + " có khối lượng không đạt chuẩn trên 20%, bạn được tặng voucher giảm 20% tối đa 50.000đ. Voucher có hiệu lực 15 ngày.");
                 });
     }
 
@@ -165,7 +165,7 @@ public class VoucherServiceImpl implements VoucherService {
                 .voucherType(VoucherType.WELCOME)
                 .voucherCode(generateUniqueVoucherCode("WELCOME-"))
                 .discountValue(new BigDecimal("100"))
-                .maxDiscount(new BigDecimal("30000"))
+                .maxDiscount(null)
                 .minOrderValue(BigDecimal.ZERO)
                 .claimLimit(1)
                 .claimedCount(1)

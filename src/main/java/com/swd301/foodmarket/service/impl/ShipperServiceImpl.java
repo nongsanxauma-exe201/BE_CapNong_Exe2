@@ -425,11 +425,16 @@ public class ShipperServiceImpl implements ShipperService {
                 ? order.getShippingFee()
                 : BigDecimal.ZERO;
 
+        BigDecimal shippingDiscountAmount = order.getShippingDiscountAmount() != null
+                ? order.getShippingDiscountAmount()
+                : BigDecimal.ZERO;
+
         BigDecimal refundAmount = order.getRefundAmount() != null
                 ? order.getRefundAmount()
                 : BigDecimal.ZERO;
 
-        BigDecimal shopGross = totalAmount.subtract(shippingFee);
+        BigDecimal settlementTotal = totalAmount.add(shippingDiscountAmount);
+        BigDecimal shopGross = settlementTotal.subtract(shippingFee);
 
         if (refundAmount.compareTo(shopGross) > 0) {
             throw new AppException(ErrorCode.INVALID_REFUND_AMOUNT);
@@ -447,9 +452,11 @@ public class ShipperServiceImpl implements ShipperService {
 
         log.info("========== [PAYOS DELIVERED PAYOUT START] Order #{} ==========", order.getId());
 
-        log.info("[PAYOS_AMOUNT_INPUT] totalAmount={}, shippingFee={}, shopGross={}, refundAmount={}",
+        log.info("[PAYOS_AMOUNT_INPUT] buyerPaid={}, shippingFee={}, shippingDiscountAmount={}, settlementTotal={}, shopGross={}, refundAmount={}",
                 totalAmount,
                 shippingFee,
+                shippingDiscountAmount,
+                settlementTotal,
                 shopGross,
                 refundAmount
         );
@@ -636,6 +643,11 @@ public class ShipperServiceImpl implements ShipperService {
         saveTransaction(TransactionType.SHIPPER_PAYOUT, shipperNet,
                 shipperWallet.getTotalBalance(), "ORDER_" + order.getId(),
                 "Cộng phí giao hàng cho shipper đơn #" + order.getId());
+        if (shippingDiscountAmount.compareTo(BigDecimal.ZERO) > 0) {
+            saveTransaction(TransactionType.SHIPPING_SUBSIDY, shippingDiscountAmount.negate(),
+                    platformWallet.getTotalBalance(), "ORDER_" + order.getId(),
+                    "Admin/platform bù phí vận chuyển cho shipper đơn #" + order.getId());
+        }
         if (refundAmount.compareTo(BigDecimal.ZERO) > 0) {
             saveTransaction(TransactionType.REFUND, refundAmount.negate(),
                     walletRepository.findByBuyer(order.getBuyer()).getTotalBalance(), "ORDER_" + order.getId(),
@@ -750,8 +762,9 @@ public class ShipperServiceImpl implements ShipperService {
     private BigDecimal resolveCodPrepaidAmount(Order order) {
         BigDecimal total = order.getTotalAmount() != null ? order.getTotalAmount() : BigDecimal.ZERO;
         BigDecimal shipping = order.getShippingFee() != null ? order.getShippingFee() : BigDecimal.ZERO;
+        BigDecimal shippingDiscount = order.getShippingDiscountAmount() != null ? order.getShippingDiscountAmount() : BigDecimal.ZERO;
         BigDecimal refund = order.getRefundAmount() != null ? order.getRefundAmount() : BigDecimal.ZERO;
-        BigDecimal amount = total.subtract(shipping).subtract(refund);
+        BigDecimal amount = total.add(shippingDiscount).subtract(shipping).subtract(refund);
         if (amount.compareTo(BigDecimal.ZERO) < 0) {
             return BigDecimal.ZERO;
         }

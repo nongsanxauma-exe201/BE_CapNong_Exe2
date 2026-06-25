@@ -12,7 +12,7 @@ public interface VoucherService {
     VoucherResponse getVoucherByCode(String code);
     VoucherResponse createVoucher(VoucherCreateRequest voucherCreateRequest);
     VoucherResponse createPlatformVoucher(VoucherCreateRequest voucherCreateRequest);
-    VoucherResponse createAutoVoucherForDamage(Order order, String damageNote);
+    VoucherResponse createAutoVoucherForDamage(Order order, String reason);
     void grantDamageVoucherForDeliveredOrder(Order order);
     void createWelcomeVoucherForUser(User user);
      VoucherResponse updateVoucher(String code, VoucherUpdateRequest updateRequest);

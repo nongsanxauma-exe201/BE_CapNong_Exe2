@@ -11,6 +11,7 @@ import lombok.NoArgsConstructor;
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
 import java.util.UUID;
+import com.swd301.foodmarket.enums.VoucherType;
 @Data
 @Builder
 @AllArgsConstructor
@@ -33,5 +34,6 @@ public class VoucherUserResponse {
         private  BigDecimal maxDiscount;
         private  BigDecimal minOrderValue;
         private LocalDateTime expiryDate;
+        private VoucherType voucherType;
     }
 }
