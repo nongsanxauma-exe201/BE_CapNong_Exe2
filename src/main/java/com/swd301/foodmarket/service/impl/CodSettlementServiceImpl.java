@@ -458,7 +458,7 @@ public class CodSettlementServiceImpl implements CodSettlementService {
 
         saveTransaction(TransactionType.COD_SHIPPER_CASH_CONFIRMED, prepaidAmount,
                 platformWallet.getFrozenBalance(), "ORDER_" + order.getId(),
-                "Admin xác nhận đã nhận tiền mặt COD từ shipper cho đơn #" + order.getId());
+                "Admin xác nhận đã nhận tiền mặt COD gồm tiền hàng và phí nền tảng từ phí ship từ shipper cho đơn #" + order.getId());
     }
 
     @Override
@@ -501,7 +501,7 @@ public class CodSettlementServiceImpl implements CodSettlementService {
 
         saveTransaction(TransactionType.COD_SHIPPER_REFUND, prepaidAmount,
                 shipperWallet.getTotalBalance(), "ORDER_" + order.getId(),
-                "Admin hoàn tiền hàng COD cho shipper vì giao thất bại đơn #" + order.getId());
+                "Admin hoàn tiền COD đã ứng cho shipper vì giao thất bại đơn #" + order.getId());
     }
 
     @Override
@@ -537,7 +537,12 @@ public class CodSettlementServiceImpl implements CodSettlementService {
         BigDecimal shipping = order.getShippingFee() != null ? order.getShippingFee() : BigDecimal.ZERO;
         BigDecimal shippingDiscount = order.getShippingDiscountAmount() != null ? order.getShippingDiscountAmount() : BigDecimal.ZERO;
         BigDecimal refund = order.getRefundAmount() != null ? order.getRefundAmount() : BigDecimal.ZERO;
-        BigDecimal amount = total.add(shippingDiscount).subtract(shipping).subtract(refund);
+        BigDecimal shopChargeable = total.add(shippingDiscount).subtract(shipping).subtract(refund);
+        if (shopChargeable.compareTo(BigDecimal.ZERO) < 0) {
+            shopChargeable = BigDecimal.ZERO;
+        }
+        BigDecimal platformFeeFromShip = shipping.multiply(BigDecimal.valueOf(0.1));
+        BigDecimal amount = shopChargeable.add(platformFeeFromShip);
         return amount.compareTo(BigDecimal.ZERO) < 0 ? BigDecimal.ZERO : amount;
     }
 }

@@ -301,7 +301,7 @@ public class ShipperServiceImpl implements ShipperService {
             order.setCodPaymentStatus(CodPaymentStatus.PENDING_ADMIN_CONFIRM);
             saveTransaction(TransactionType.COD_SHIPPER_CASH_PENDING, prepaidAmount, null,
                     "ORDER_" + order.getId(),
-                    "Shipper chọn trả tiền mặt COD, chờ admin xác nhận đơn #" + order.getId());
+                    "Shipper chọn trả tiền mặt COD gồm tiền hàng và phí nền tảng từ phí ship, chờ admin xác nhận đơn #" + order.getId());
             return;
         }
 
@@ -328,10 +328,10 @@ public class ShipperServiceImpl implements ShipperService {
 
         saveTransaction(TransactionType.COD_SHIPPER_WALLET_DEBIT, prepaidAmount.negate(),
                 shipperWallet.getTotalBalance(), "ORDER_" + order.getId(),
-                "Trừ ví shipper để ứng tiền hàng COD đơn #" + order.getId());
+                "Trừ ví shipper để ứng COD gồm tiền hàng và phí nền tảng từ phí ship đơn #" + order.getId());
         saveTransaction(TransactionType.PLATFORM_FREEZE, prepaidAmount,
                 platformWallet.getFrozenBalance(), "ORDER_" + order.getId(),
-                "Platform giữ tiền hàng COD shipper ứng qua ví đơn #" + order.getId());
+                "Platform giữ tiền COD shipper ứng qua ví gồm tiền hàng và phí nền tảng từ phí ship đơn #" + order.getId());
     }
 
     @Override
@@ -766,7 +766,13 @@ public class ShipperServiceImpl implements ShipperService {
         BigDecimal shipping = order.getShippingFee() != null ? order.getShippingFee() : BigDecimal.ZERO;
         BigDecimal shippingDiscount = order.getShippingDiscountAmount() != null ? order.getShippingDiscountAmount() : BigDecimal.ZERO;
         BigDecimal refund = order.getRefundAmount() != null ? order.getRefundAmount() : BigDecimal.ZERO;
-        BigDecimal amount = total.add(shippingDiscount).subtract(shipping).subtract(refund);
+        BigDecimal settlementTotal = total.add(shippingDiscount);
+        BigDecimal shopChargeable = settlementTotal.subtract(shipping).subtract(refund);
+        if (shopChargeable.compareTo(BigDecimal.ZERO) < 0) {
+            shopChargeable = BigDecimal.ZERO;
+        }
+        BigDecimal platformFeeFromShip = shipping.multiply(BigDecimal.valueOf(0.1));
+        BigDecimal amount = shopChargeable.add(platformFeeFromShip);
         if (amount.compareTo(BigDecimal.ZERO) < 0) {
             return BigDecimal.ZERO;
         }
@@ -802,9 +808,21 @@ public class ShipperServiceImpl implements ShipperService {
         if (Boolean.TRUE.equals(order.getCodSettled())) {
             return;
         }
-        BigDecimal prepaidAmount = resolveCodPrepaidAmount(order);
-        BigDecimal platformFeeFromShop = prepaidAmount.multiply(BigDecimal.valueOf(0.1));
-        BigDecimal finalShopRevenue = prepaidAmount.subtract(platformFeeFromShop);
+        BigDecimal prepaidAmount = order.getCodPrepaidAmount() != null
+                ? order.getCodPrepaidAmount()
+                : resolveCodPrepaidAmount(order);
+        BigDecimal total = order.getTotalAmount() != null ? order.getTotalAmount() : BigDecimal.ZERO;
+        BigDecimal shipping = order.getShippingFee() != null ? order.getShippingFee() : BigDecimal.ZERO;
+        BigDecimal shippingDiscount = order.getShippingDiscountAmount() != null ? order.getShippingDiscountAmount() : BigDecimal.ZERO;
+        BigDecimal refund = order.getRefundAmount() != null ? order.getRefundAmount() : BigDecimal.ZERO;
+        BigDecimal shopChargeable = total.add(shippingDiscount).subtract(shipping).subtract(refund);
+        if (shopChargeable.compareTo(BigDecimal.ZERO) < 0) {
+            shopChargeable = BigDecimal.ZERO;
+        }
+        BigDecimal platformFeeFromShop = shopChargeable.multiply(BigDecimal.valueOf(0.1));
+        BigDecimal platformFeeFromShip = shipping.multiply(BigDecimal.valueOf(0.1));
+        BigDecimal platformFeeTotal = platformFeeFromShop.add(platformFeeFromShip);
+        BigDecimal finalShopRevenue = shopChargeable.subtract(platformFeeFromShop);
 
         Wallet platformWallet = walletRepository.findByTypeForUpdate(WalletType.PLATFORM)
                 .orElseThrow(() -> new AppException(ErrorCode.PLATFORM_WALLET_NOT_FOUND));
@@ -816,8 +834,8 @@ public class ShipperServiceImpl implements ShipperService {
         }
 
         platformWallet.setFrozenBalance(platformWallet.getFrozenBalance().subtract(prepaidAmount));
-        platformWallet.setCommissionWallet(platformWallet.getCommissionWallet().add(platformFeeFromShop));
-        platformWallet.setTotalRevenueAllTime(platformWallet.getTotalRevenueAllTime().add(platformFeeFromShop));
+        platformWallet.setCommissionWallet(platformWallet.getCommissionWallet().add(platformFeeTotal));
+        platformWallet.setTotalRevenueAllTime(platformWallet.getTotalRevenueAllTime().add(platformFeeTotal));
         platformWallet.setUpdatedAt(LocalDateTime.now(ZoneId.of("Asia/Ho_Chi_Minh")));
 
         shopWallet.setTotalBalance(shopWallet.getTotalBalance().add(finalShopRevenue));
@@ -826,14 +844,17 @@ public class ShipperServiceImpl implements ShipperService {
 
         order.setCodSettled(true);
         order.setCodSettledAt(LocalDateTime.now(ZoneId.of("Asia/Ho_Chi_Minh")));
-        order.setCodAmount(prepaidAmount);
+        if (order.getCodAmount() == null || order.getCodAmount().compareTo(BigDecimal.ZERO) <= 0) {
+            order.setCodAmount(total);
+        }
 
         walletRepository.save(platformWallet);
         walletRepository.save(shopWallet);
 
-        saveTransaction(TransactionType.PLATFORM_COMMISSION, platformFeeFromShop,
+        saveTransaction(TransactionType.PLATFORM_COMMISSION, platformFeeTotal,
                 platformWallet.getCommissionWallet(), "ORDER_" + order.getId(),
-                "Ghi nhận phí nền tảng COD ứng trước đơn #" + order.getId());
+                "Ghi nhận phí nền tảng COD ứng trước đơn #" + order.getId()
+                        + " (phí shop: " + platformFeeFromShop + ", phí ship: " + platformFeeFromShip + ")");
         saveTransaction(TransactionType.SHOP_RELEASE, finalShopRevenue,
                 shopWallet.getTotalBalance(), "ORDER_" + order.getId(),
                 "Cộng tiền hàng COD cho shop sau giao thành công đơn #" + order.getId());

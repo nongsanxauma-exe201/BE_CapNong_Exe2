@@ -28,9 +28,11 @@ import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Optional;
+import java.util.Set;
 import java.util.UUID;
 
 @RequiredArgsConstructor
@@ -131,9 +133,13 @@ public class VoucherUserServiceImpl  implements  com.swd301.foodmarket.service.V
 
         User currentUser = getCurrentUser();
         VoucherUsageResponse lastUsageResponse = null;
+        Set<UUID> appliedVoucherUserIds = new HashSet<>();
         for (String voucherIdentifier : normalizeVoucherIdentifiers(voucherIdentifiers)) {
             VoucherUser voucherUser = resolveVoucherUser(currentUser, List.of(voucherIdentifier))
                     .orElseThrow(() -> new AppException(ErrorCode.VOUCHER_USER_NOT_FOUND));
+            if (voucherUser.getId() != null && !appliedVoucherUserIds.add(voucherUser.getId())) {
+                continue;
+            }
 
             Voucher voucher = voucherUser.getVoucher();
             validateVoucherForOrder(voucherUser, order);
