@@ -6,6 +6,7 @@ import jakarta.persistence.*;
 import lombok.*;
 import lombok.experimental.FieldDefaults;
 
+import java.math.BigDecimal;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.List;
@@ -60,6 +61,14 @@ public class User {
 
     String logoUrl;
     String achievement;
+
+    @Builder.Default
+    @Column(name = "total_rescued_weight", precision = 10, scale = 2)
+    BigDecimal totalRescuedWeight = BigDecimal.ZERO;
+
+    @Builder.Default
+    @Column(name = "loyalty_points", precision = 10, scale = 2)
+    BigDecimal loyaltyPoints = BigDecimal.ZERO;
 
     // ===== SHIPPER =====
     String license;

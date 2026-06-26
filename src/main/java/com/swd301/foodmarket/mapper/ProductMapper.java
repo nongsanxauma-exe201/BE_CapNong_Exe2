@@ -14,6 +14,8 @@ import java.time.LocalDateTime;
 public interface ProductMapper {
 
     @Mapping(target = "images", ignore = true)
+    @Mapping(target = "unit", constant = "kg")
+    @Mapping(target = "sellingPrice", expression = "java(request.getPricePerKg() != null ? request.getPricePerKg() : request.getSellingPrice())")
     Product toProduct(ProductCreationRequest request);
 
     @Mapping(source = "shopOwner.shopName", target = "shopName")
@@ -25,10 +27,17 @@ public interface ProductMapper {
     @Mapping(target = "categoryName", source = "category.name")
     @Mapping(target = "images", ignore = true)
     @Mapping(target = "salePrice", ignore = true)
+    @Mapping(target = "unit", constant = "kg")
+    @Mapping(target = "pricePerKg", source = "sellingPrice")
     ProductResponse toResponse(Product product);
 
     @AfterMapping
     default void computeSalePrice(Product product, @MappingTarget ProductResponse response) {
+        response.setUnit("kg");
+        response.setPricePerKg(product.getSellingPrice());
+        if (response.getStockKg() == null && product.getStockQuantity() != null) {
+            response.setStockKg(BigDecimal.valueOf(product.getStockQuantity()));
+        }
         Integer pct = product.getDiscountPercent();
         BigDecimal price = product.getSellingPrice();
         if (pct != null && pct > 0 && pct < 100 && price != null) {
@@ -48,5 +57,7 @@ public interface ProductMapper {
     @Mapping(target = "category", ignore = true)
     @Mapping(target = "shopOwner", ignore = true)
     @Mapping(target = "images", ignore = true)
+    @Mapping(target = "unit", constant = "kg")
+    @Mapping(target = "sellingPrice", expression = "java(request.getPricePerKg() != null ? request.getPricePerKg() : request.getSellingPrice())")
     void update(@MappingTarget Product product, ProductUpdateRequest request);
 }

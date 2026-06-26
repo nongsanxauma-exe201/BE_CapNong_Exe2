@@ -25,6 +25,10 @@ public class ProductCreationRequest {
     @Column(length = 50)
     String unit;
 
+    BigDecimal stockKg;
+    BigDecimal pricePerKg;
+    BigDecimal minOrderKg;
+
     @Column(precision = 18, scale = 2)
     BigDecimal sellingPrice;
 

@@ -1,6 +1,7 @@
 package com.swd301.foodmarket.service;
 
 import com.swd301.foodmarket.dto.request.ShipperLocationRequest;
+import com.swd301.foodmarket.dto.request.AcceptOrderRequest;
 import com.swd301.foodmarket.dto.request.UpdateOrderStatusRequest;
 import com.swd301.foodmarket.dto.response.AvailableOrderResponse;
 import com.swd301.foodmarket.dto.response.PageResponse;
@@ -15,7 +16,7 @@ public interface ShipperService {
     List<AvailableOrderResponse> getAvailableOrdersNearby(Double shipperLat, Double shipperLng);
 
     // Nhận đơn
-    ShipperOrderResponse acceptOrder(Integer orderId);
+    ShipperOrderResponse acceptOrder(Integer orderId, AcceptOrderRequest request);
 
     // Cập nhật trạng thái đơn
     ShipperOrderResponse updateOrderStatus(Integer orderId, UpdateOrderStatusRequest request);

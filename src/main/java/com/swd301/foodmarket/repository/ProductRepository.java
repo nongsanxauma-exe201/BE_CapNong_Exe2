@@ -64,5 +64,7 @@ public interface ProductRepository extends JpaRepository<Product, Integer> {
     Page<Product> findAllByStatusAndShopOwner_ShopActive(ProductStatus status, boolean shopOwnerShopActive, Pageable pageable);
 
     List<Product> findAllByStatusAndShopOwner_ShopActive(ProductStatus status, boolean shopOwnerShopActive);
+
+    List<Product> findAllByStatusAndShopOwner_ShopActiveAndExpiryDateIsAfter(ProductStatus status, boolean shopOwnerShopActive, LocalDate expiryDateAfter);
 }
 

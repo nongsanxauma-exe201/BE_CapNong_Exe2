@@ -3,6 +3,7 @@ package com.swd301.foodmarket.entity;
 import jakarta.persistence.*;
 import lombok.*;
 
+import java.math.BigDecimal;
 import java.time.LocalDateTime;
 import java.time.ZoneId;
 import java.util.ArrayList;
@@ -22,6 +23,10 @@ public class QualityResult {
     private UUID qualityResultId;
     @Column(columnDefinition = "TEXT")
     private String note;
+    @Column(name = "damage_note", length = 500)
+    private String damageNote;
+    @Builder.Default
+    private boolean autoVoucherCreated = false;
     @Enumerated(EnumType.STRING)
     private com.swd301.foodmarket.enums.QualityResult qualityResult;
     @OneToOne
@@ -33,6 +38,14 @@ public class QualityResult {
     @OneToMany(mappedBy = "qualityResult")
     private List<QualityCheck> qualityChecks = new ArrayList<>();
     private Double  rejectedWeight = 0.0;
+    @Column(name = "requested_kg", precision = 12, scale = 2)
+    private BigDecimal requestedKg;
+    @Column(name = "approved_kg", precision = 12, scale = 2)
+    private BigDecimal approvedKg;
+    @Column(name = "rejected_kg", precision = 12, scale = 2)
+    private BigDecimal rejectedKg;
+    @Column(name = "refunded_kg", precision = 12, scale = 2)
+    private BigDecimal refundedKg;
     @Builder.Default
     private boolean refunded = false;
     @Builder.Default

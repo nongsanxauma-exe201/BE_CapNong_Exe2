@@ -4,6 +4,7 @@ import com.swd301.foodmarket.enums.UserStatus;
 import lombok.*;
 import lombok.experimental.FieldDefaults;
 
+import java.math.BigDecimal;
 import java.time.LocalDateTime;
 
 @Data
@@ -30,6 +31,10 @@ public class UserResponse {
     String logoUrl;
     String achievement;
     boolean shopActive;
+    BigDecimal totalRescuedWeight;
+    BigDecimal loyaltyPoints;
+    BigDecimal totalRescuedKg;
+    BigDecimal rewardPoints;
 
     // Shipper specific
     String license;

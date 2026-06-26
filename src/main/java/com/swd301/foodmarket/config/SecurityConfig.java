@@ -41,7 +41,8 @@ public class SecurityConfig {
             "/otp-verification/verify-otp",
             "/forgot-password/reset/**",
             "/mystery-boxes",
-            "/products"
+            "/products",
+            "/payments/payos/webhook"
     };
 
     private final String[] PUBLIC_ENDPOINTS_GET = {

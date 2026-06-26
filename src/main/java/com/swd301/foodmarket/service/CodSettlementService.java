@@ -6,6 +6,8 @@ import java.util.List;
 
 public interface CodSettlementService {
     void settleCodOrder(Integer orderId);
+    void confirmShipperCashPayment(Integer orderId);
+    void refundCodPrepaymentToShipper(Integer orderId);
 
     List<OrderResponse> getPendingCodSettlementOrders();
 }

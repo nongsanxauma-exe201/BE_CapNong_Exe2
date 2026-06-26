@@ -7,6 +7,7 @@ import com.swd301.foodmarket.enums.UserStatus;
 import com.swd301.foodmarket.repository.RoleRepository;
 import com.swd301.foodmarket.repository.UserRepository;
 import com.swd301.foodmarket.service.OAuthService;
+import com.swd301.foodmarket.service.VoucherService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 
@@ -16,6 +17,7 @@ public class OAuthServiceImpl implements OAuthService {
 
     private final UserRepository userRepository;
     private final RoleRepository roleRepository;
+    private final VoucherService voucherService;
 
     @Override
     public User processOAuthPostLogin(String email, String fullName, String avatar) {
@@ -34,7 +36,9 @@ public class OAuthServiceImpl implements OAuthService {
                     newUser.setRole(defaultRole);
                     newUser.setStatus(UserStatus.ACTIVE);
 
-                    return userRepository.save(newUser);
+                    User savedUser = userRepository.save(newUser);
+                    voucherService.createWelcomeVoucherForUser(savedUser);
+                    return savedUser;
                 });
     }
 

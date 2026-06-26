@@ -31,6 +31,7 @@ import com.swd301.foodmarket.mapper.UserMapper;
 import com.swd301.foodmarket.repository.RoleRepository;
 import com.swd301.foodmarket.repository.UserRepository;
 import com.swd301.foodmarket.service.UserService;
+import com.swd301.foodmarket.service.VoucherService;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
@@ -65,6 +66,7 @@ public class UserServiceImpl implements UserService {
     CloudinaryService cloudinaryService;
     WalletRepository walletRepository;
     JavaMailSender javaMailSender;
+    VoucherService voucherService;
 
     @Override
     public UserResponse createUser(
@@ -212,21 +214,23 @@ public class UserServiceImpl implements UserService {
             if (!walletRepository.existsByBuyer(savedUser)) {
 
                 Wallet wallet = Wallet.builder()
-                        .shipper(savedUser)
+                        .buyer(savedUser)
                         .status(WalletStatus.ACTIVE)
                         .totalBalance(BigDecimal.ZERO)
                         .frozenBalance(BigDecimal.ZERO)
                         .totalRevenueAllTime(BigDecimal.ZERO)
                         .totalWithdrawn(BigDecimal.ZERO)
                         .commissionWallet(BigDecimal.ZERO)
-                        .type(WalletType.SHIPPER)
+                        .type(WalletType.MEMBER)
                         .build();
 
                 walletRepository.save(wallet);
 
-                log.info("Wallet created for shipper ID: {}", savedUser.getId());
+                log.info("Wallet created for buyer ID: {}", savedUser.getId());
             }
         }
+
+        voucherService.createWelcomeVoucherForUser(savedUser);
 
         log.info("bankName in entity = {}", savedUser.getBankName());
         log.info("bankHolder in entity = {}", savedUser.getBankAccountHolder());
