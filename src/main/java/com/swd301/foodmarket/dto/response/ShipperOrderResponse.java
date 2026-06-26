@@ -22,6 +22,7 @@ public class ShipperOrderResponse {
     String recipientName;
     String recipientPhone;
     BigDecimal shippingFee;
+    BigDecimal shippingDiscountAmount;
     BigDecimal totalAmount;
     String paymentMethod;
     BigDecimal codAmount;

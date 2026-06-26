@@ -25,6 +25,7 @@ public class AvailableOrderResponse {
     String recipientPhone;
 
     BigDecimal shippingFee;
+    BigDecimal shippingDiscountAmount;
     BigDecimal totalAmount;
     String paymentMethod;
     BigDecimal codPrepaidAmount;

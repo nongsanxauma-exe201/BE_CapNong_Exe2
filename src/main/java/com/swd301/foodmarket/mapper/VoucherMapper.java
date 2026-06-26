@@ -5,7 +5,6 @@ import com.swd301.foodmarket.dto.request.VoucherUpdateRequest;
 import com.swd301.foodmarket.dto.response.VoucherResponse;
 import com.swd301.foodmarket.dto.response.VoucherUserResponse;
 import com.swd301.foodmarket.entity.Voucher;
-import com.swd301.foodmarket.entity.VoucherUser;
 import org.mapstruct.Mapper;
 import org.mapstruct.Mapping;
 import org.mapstruct.MappingTarget;

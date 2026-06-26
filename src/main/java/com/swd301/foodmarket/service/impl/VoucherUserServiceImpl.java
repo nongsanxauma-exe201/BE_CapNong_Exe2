@@ -27,6 +27,8 @@ import org.springframework.stereotype.Service;
 import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.time.LocalDateTime;
+import java.util.ArrayList;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
@@ -128,54 +130,55 @@ public class VoucherUserServiceImpl  implements  com.swd301.foodmarket.service.V
         }
 
         User currentUser = getCurrentUser();
-        VoucherUser voucherUser = resolveVoucherUser(currentUser, voucherIdentifiers)
-                .orElseThrow(() -> new AppException(ErrorCode.VOUCHER_USER_NOT_FOUND));
+        VoucherUsageResponse lastUsageResponse = null;
+        for (String voucherIdentifier : normalizeVoucherIdentifiers(voucherIdentifiers)) {
+            VoucherUser voucherUser = resolveVoucherUser(currentUser, List.of(voucherIdentifier))
+                    .orElseThrow(() -> new AppException(ErrorCode.VOUCHER_USER_NOT_FOUND));
 
-        Voucher voucher = voucherUser.getVoucher();
-        validateVoucherForOrder(voucherUser, order);
+            Voucher voucher = voucherUser.getVoucher();
+            validateVoucherForOrder(voucherUser, order);
 
-        BigDecimal shippingFee = order.getShippingFee() == null ? BigDecimal.ZERO : order.getShippingFee();
-        BigDecimal orderSubtotal = order.getTotalAmount().subtract(shippingFee);
-        if (orderSubtotal.compareTo(BigDecimal.ZERO) < 0) {
-            orderSubtotal = BigDecimal.ZERO;
+            BigDecimal orderSubtotal = calculateRemainingProductSubtotal(order);
+            BigDecimal remainingShippingFee = calculateRemainingShippingFee(order);
+
+            BigDecimal discountAmount = calculateDiscountAmount(voucher, orderSubtotal, remainingShippingFee);
+            if (discountAmount.compareTo(BigDecimal.ZERO) <= 0) {
+                continue;
+            }
+
+            voucherUser.setQuantityUsed((voucherUser.getQuantityUsed() == null ? 0 : voucherUser.getQuantityUsed()) + 1);
+            voucherUser.setQuantity(Math.max(0, (voucherUser.getQuantity() == null ? 0 : voucherUser.getQuantity()) - 1));
+            voucherUserRepository.save(voucherUser);
+
+            voucher.setUsedCount((voucher.getUsedCount() == null ? 0 : voucher.getUsedCount()) + 1);
+            if (voucher.getUsageLimit() != null && voucher.getUsedCount() >= voucher.getUsageLimit()) {
+                voucher.setActive(false);
+            }
+            voucherRespository.save(voucher);
+
+            BigDecimal newTotal = order.getTotalAmount().subtract(discountAmount);
+            order.setTotalAmount(newTotal.max(BigDecimal.ZERO));
+            if (voucher.getVoucherType() == VoucherType.WELCOME) {
+                BigDecimal currentShippingDiscount = order.getShippingDiscountAmount() == null
+                        ? BigDecimal.ZERO
+                        : order.getShippingDiscountAmount();
+                order.setShippingDiscountAmount(currentShippingDiscount.add(discountAmount));
+                saveTransaction(TransactionType.SHIPPING_SUBSIDY, discountAmount.negate(), null,
+                        "ORDER_" + order.getId(),
+                        "Admin/platform bù phí vận chuyển bằng welcome voucher cho đơn #" + order.getId());
+            }
+
+            VoucherUsage usage = VoucherUsage.builder()
+                    .voucher(voucher)
+                    .user(currentUser)
+                    .order(order)
+                    .discountAmount(discountAmount)
+                    .usedAt(LocalDateTime.now())
+                    .build();
+
+            lastUsageResponse = voucherUsageMapper.toResponse(voucherUsageRepository.save(usage));
         }
-
-        BigDecimal discountAmount = calculateDiscountAmount(voucher, orderSubtotal, shippingFee);
-        if (discountAmount.compareTo(BigDecimal.ZERO) <= 0) {
-            return null;
-        }
-
-        voucherUser.setQuantityUsed((voucherUser.getQuantityUsed() == null ? 0 : voucherUser.getQuantityUsed()) + 1);
-        voucherUser.setQuantity(Math.max(0, (voucherUser.getQuantity() == null ? 0 : voucherUser.getQuantity()) - 1));
-        voucherUserRepository.save(voucherUser);
-
-        voucher.setUsedCount((voucher.getUsedCount() == null ? 0 : voucher.getUsedCount()) + 1);
-        if (voucher.getUsageLimit() != null && voucher.getUsedCount() >= voucher.getUsageLimit()) {
-            voucher.setActive(false);
-        }
-        voucherRespository.save(voucher);
-
-        BigDecimal newTotal = order.getTotalAmount().subtract(discountAmount);
-        order.setTotalAmount(newTotal.max(BigDecimal.ZERO));
-        if (voucher.getVoucherType() == VoucherType.WELCOME) {
-            BigDecimal currentShippingDiscount = order.getShippingDiscountAmount() == null
-                    ? BigDecimal.ZERO
-                    : order.getShippingDiscountAmount();
-            order.setShippingDiscountAmount(currentShippingDiscount.add(discountAmount));
-            saveTransaction(TransactionType.SHIPPING_SUBSIDY, discountAmount.negate(), null,
-                    "ORDER_" + order.getId(),
-                    "Admin/platform bù phí vận chuyển bằng welcome voucher cho đơn #" + order.getId());
-        }
-
-        VoucherUsage usage = VoucherUsage.builder()
-                .voucher(voucher)
-                .user(currentUser)
-                .order(order)
-                .discountAmount(discountAmount)
-                .usedAt(LocalDateTime.now())
-                .build();
-
-        return voucherUsageMapper.toResponse(voucherUsageRepository.save(usage));
+        return lastUsageResponse;
     }
 
     @Transactional
@@ -185,16 +188,16 @@ public class VoucherUserServiceImpl  implements  com.swd301.foodmarket.service.V
             return;
         }
 
-        Optional<VoucherUsage> usageOptional = voucherUsageRepository.findByOrder_Id(order.getId());
-        if (usageOptional.isEmpty()) {
+        List<VoucherUsage> usages = voucherUsageRepository.findAllByOrder_Id(order.getId());
+        if (usages.isEmpty()) {
             return;
         }
 
-        VoucherUsage usage = usageOptional.get();
+        for (VoucherUsage usage : usages) {
         Voucher voucher = usage.getVoucher();
         if (voucher == null) {
             voucherUsageRepository.delete(usage);
-            return;
+            continue;
         }
 
         Optional<VoucherUser> voucherUserOptional = voucherUserRepository.findByUserAndVoucher(usage.getUser(), voucher);
@@ -228,6 +231,7 @@ public class VoucherUserServiceImpl  implements  com.swd301.foodmarket.service.V
         }
 
         voucherUsageRepository.delete(usage);
+        }
     }
 
     private Optional<VoucherUser> resolveVoucherUser(User currentUser, List<String> voucherIdentifiers) {
@@ -286,14 +290,34 @@ public class VoucherUserServiceImpl  implements  com.swd301.foodmarket.service.V
             throw new AppException(ErrorCode.INVALID_REQUEST);
         }
 
-        BigDecimal shippingFee = order.getShippingFee() == null ? BigDecimal.ZERO : order.getShippingFee();
-        BigDecimal subtotal = order.getTotalAmount().subtract(shippingFee);
-        if (subtotal.compareTo(BigDecimal.ZERO) < 0) {
-            subtotal = BigDecimal.ZERO;
-        }
+        BigDecimal subtotal = calculateRemainingProductSubtotal(order);
         if (voucher.getMinOrderValue() != null && subtotal.compareTo(voucher.getMinOrderValue()) < 0) {
             throw new AppException(ErrorCode.INVALID_REQUEST);
         }
+    }
+
+    private List<String> normalizeVoucherIdentifiers(List<String> voucherIdentifiers) {
+        LinkedHashSet<String> normalized = new LinkedHashSet<>();
+        for (String rawIdentifier : voucherIdentifiers) {
+            if (rawIdentifier != null && !rawIdentifier.isBlank()) {
+                normalized.add(rawIdentifier.trim());
+            }
+        }
+        return new ArrayList<>(normalized);
+    }
+
+    private BigDecimal calculateRemainingProductSubtotal(Order order) {
+        BigDecimal totalAmount = order.getTotalAmount() == null ? BigDecimal.ZERO : order.getTotalAmount();
+        BigDecimal remainingShippingFee = calculateRemainingShippingFee(order);
+        return totalAmount.subtract(remainingShippingFee).max(BigDecimal.ZERO);
+    }
+
+    private BigDecimal calculateRemainingShippingFee(Order order) {
+        BigDecimal shippingFee = order.getShippingFee() == null ? BigDecimal.ZERO : order.getShippingFee();
+        BigDecimal shippingDiscountAmount = order.getShippingDiscountAmount() == null
+                ? BigDecimal.ZERO
+                : order.getShippingDiscountAmount();
+        return shippingFee.subtract(shippingDiscountAmount).max(BigDecimal.ZERO);
     }
 
     private BigDecimal calculateDiscountAmount(Voucher voucher, BigDecimal baseAmount, BigDecimal shippingFee) {

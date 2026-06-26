@@ -205,7 +205,7 @@ public class PaymentServiceImpl implements PaymentService {
             throw new AppException(ErrorCode.INVALID_PAYMENT_METHOD);
         }
 
-        if (order.getStatus() != OrderStatus.PENDING) {
+        if (order.getStatus() != OrderStatus.PENDING && order.getStatus() != OrderStatus.AWAITING_PAYMENT) {
             log.warn("Order is no longer payable. orderId={}, status={}", order.getId(), order.getStatus());
             throw new AppException(ErrorCode.ORDER_NOT_PAYABLE);
         }

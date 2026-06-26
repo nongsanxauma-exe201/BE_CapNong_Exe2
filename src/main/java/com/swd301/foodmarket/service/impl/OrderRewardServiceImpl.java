@@ -68,11 +68,7 @@ public class OrderRewardServiceImpl implements OrderRewardService {
     }
 
     private boolean isRewardEligible(Order order) {
-        if (order.getStatus() == OrderStatus.PAID) {
-            return true;
-        }
-        return order.getStatus() == OrderStatus.DELIVERED
-                && "COD".equalsIgnoreCase(order.getPaymentMethod());
+        return order.getStatus() == OrderStatus.DELIVERED;
     }
 
     private BigDecimal calculateOrderWeight(Order order) {

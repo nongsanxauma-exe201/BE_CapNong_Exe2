@@ -26,11 +26,8 @@ select v from Voucher v
 where (v.expiryDate is null or v.expiryDate >= :now)
   and v.active = true
   and (v.claimLimit is null or v.claimedCount < v.claimLimit)
-  and (
-      v.shopOwner = :shopOwner
-      or v.voucherType = com.swd301.foodmarket.enums.VoucherType.PLATFORM
-      or v.voucherType = com.swd301.foodmarket.enums.VoucherType.WELCOME
-  )
+  and v.shopOwner = :shopOwner
+  and v.voucherType = com.swd301.foodmarket.enums.VoucherType.SHOP
 """
 )
     Page<Voucher>  getVoucherForBuyer(User shopOwner, LocalDateTime now,  Pageable pageable);

@@ -126,12 +126,12 @@ public enum ErrorCode {
     INVALID_TYPE(17001, "Invalid report type", HttpStatus.BAD_REQUEST),
     INVALID_DATE(17002, "from date must be before or equal to to date", HttpStatus.BAD_REQUEST),
     // VOUCHER
-    VOUCHER_NOT_FOUND(18001, "Voucher not found", HttpStatus.NOT_FOUND),
-    VOUCHER_RECEIVE_LIMIT_REACHED(18002, "Voucher receive limit reached", HttpStatus.BAD_REQUEST),
-    VOUCHER_ALREADY_CLAIMED(18003, "Voucher already claimed by this user", HttpStatus.BAD_REQUEST),
-    VOUCHER_USER_NOT_FOUND(18004, "User not found for this voucher", HttpStatus.NOT_FOUND),
-    VOUCHER_EXPIRED(18005, "Voucher has expired", HttpStatus.BAD_REQUEST),
-    VOUCHER_INACTIVE(18006, "Voucher not active ", HttpStatus.BAD_REQUEST)
+    VOUCHER_NOT_FOUND(18001, "Không tìm thấy voucher", HttpStatus.NOT_FOUND),
+    VOUCHER_RECEIVE_LIMIT_REACHED(18002, "Voucher đã hết lượt nhận", HttpStatus.BAD_REQUEST),
+    VOUCHER_ALREADY_CLAIMED(18003, "Bạn đã nhận voucher này rồi", HttpStatus.BAD_REQUEST),
+    VOUCHER_USER_NOT_FOUND(18004, "Không tìm thấy voucher trong kho của bạn", HttpStatus.NOT_FOUND),
+    VOUCHER_EXPIRED(18005, "Voucher đã hết hạn", HttpStatus.BAD_REQUEST),
+    VOUCHER_INACTIVE(18006, "Voucher chưa được kích hoạt", HttpStatus.BAD_REQUEST)
     ;
     private final int code;
     private final String message;
