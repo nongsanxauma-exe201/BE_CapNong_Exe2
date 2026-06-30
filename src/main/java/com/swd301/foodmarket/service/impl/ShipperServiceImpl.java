@@ -355,7 +355,7 @@ public class ShipperServiceImpl implements ShipperService {
         if ("COD".equalsIgnoreCase(order.getPaymentMethod())
                 && (request.getStatus() == OrderStatus.DELIVERED || request.getStatus() == OrderStatus.FAILED)
                 && order.getCodPaymentStatus() != CodPaymentStatus.PAID) {
-            throw new AppException(ErrorCode.INVALID_ORDER_STATUS);
+            throw new AppException(ErrorCode.PENDING_ADMIN_CONFIRM);
         }
 
         order.setStatus(request.getStatus());

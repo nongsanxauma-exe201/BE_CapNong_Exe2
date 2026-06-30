@@ -131,8 +131,14 @@ public enum ErrorCode {
     VOUCHER_ALREADY_CLAIMED(18003, "Bạn đã nhận voucher này rồi", HttpStatus.BAD_REQUEST),
     VOUCHER_USER_NOT_FOUND(18004, "Không tìm thấy voucher trong kho của bạn", HttpStatus.NOT_FOUND),
     VOUCHER_EXPIRED(18005, "Voucher đã hết hạn", HttpStatus.BAD_REQUEST),
-    VOUCHER_INACTIVE(18006, "Voucher chưa được kích hoạt", HttpStatus.BAD_REQUEST)
-    ;
+    VOUCHER_INACTIVE(18006, "Voucher chưa được kích hoạt", HttpStatus.BAD_REQUEST),
+
+    // Code confirm
+    PENDING_ADMIN_CONFIRM(
+            19001,
+            "Đơn hàng đang chờ Admin xác nhận đã nhận tiền ứng.",
+            HttpStatus.BAD_REQUEST
+    )    ;
     private final int code;
     private final String message;
     private final HttpStatus statusCode;
