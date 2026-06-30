@@ -88,7 +88,20 @@ public class PaymentController {
 
     @PostMapping("/payos/webhook")
     public ApiResponse<String> payosWebhook(@RequestBody PayOSWebhookRequest request) {
-        log.info("Received PayOS webhook for orderCode: {}", request != null ? request.getData() : "null");
+        log.info("Received PayOS webhook for orderCode: {}", request != null && request.getData() != null ? request.getData().getOrderCode() : "null");
+        if (request != null
+                && request.getData() != null
+                && request.getData().getOrderCode() != null
+                && ("00".equals(request.getCode()) || "PAID".equalsIgnoreCase(request.getData().getStatus()))) {
+            try {
+                paymentService.confirmPaymentByOrderCode(request.getData().getOrderCode());
+            } catch (Exception ex) {
+                log.error("Failed to confirm PayOS webhook orderCode={}: {}",
+                        request.getData().getOrderCode(),
+                        ex.getMessage(),
+                        ex);
+            }
+        }
         // Always return OK so PayOS can auto-redirect the checkout page
         return ApiResponse.<String>builder()
                 .result("OK")

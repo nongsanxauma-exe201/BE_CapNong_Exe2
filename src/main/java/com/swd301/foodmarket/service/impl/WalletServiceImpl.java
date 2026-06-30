@@ -8,6 +8,8 @@ import com.swd301.foodmarket.dto.response.WithdrawRequestResponse;
 import com.swd301.foodmarket.entity.*;
 import com.swd301.foodmarket.enums.PayoutStatus;
 import com.swd301.foodmarket.enums.RoleName;
+import com.swd301.foodmarket.enums.TransactionStatus;
+import com.swd301.foodmarket.enums.TransactionType;
 import com.swd301.foodmarket.enums.WalletType;
 import com.swd301.foodmarket.enums.WithdrawRequestStatus;
 import com.swd301.foodmarket.exception.AppException;
@@ -15,6 +17,7 @@ import com.swd301.foodmarket.exception.ErrorCode;
 import com.swd301.foodmarket.mapper.WalletMapper;
 import com.swd301.foodmarket.mapper.WithdrawRequestMapper;
 import com.swd301.foodmarket.repository.ImageRepository;
+import com.swd301.foodmarket.repository.TransactionRepository;
 import com.swd301.foodmarket.repository.UserRepository;
 import com.swd301.foodmarket.repository.WalletRepository;
 import com.swd301.foodmarket.repository.WithdrawRequestRepository;
@@ -47,6 +50,7 @@ public class WalletServiceImpl implements WalletService {
     private final WithdrawRequestMapper withdrawRequestMapper;
     private final UserRepository userRepository;
     private final PayosService payosService;
+    private final TransactionRepository transactionRepository;
     private final VieQRServiceImpl vieQRService;
     private final CloudinaryService cloudinaryService;
     private static final BigDecimal WITHDRAW_FEE_PERCENT = new BigDecimal("0.10");// 10%
@@ -127,6 +131,10 @@ public class WalletServiceImpl implements WalletService {
 
         wallet.setFrozenBalance(wallet.getFrozenBalance().add(request.getAmount()));
         walletRepository.save(wallet);
+
+        saveTransaction(TransactionType.WITHDRAW_REQUEST_FREEZE, request.getAmount(),
+                wallet.getFrozenBalance(), "WITHDRAW_" + wr.getId(),
+                "Khóa tiền shipper khi tạo yêu cầu rút #" + wr.getId());
 
         return withdrawRequestMapper.toResponse(wr);
     }
@@ -228,6 +236,10 @@ public class WalletServiceImpl implements WalletService {
         wallet.setTotalWithdrawn(wallet.getTotalWithdrawn().add(amount));
         walletRepository.save(wallet);
 
+        saveTransaction(TransactionType.WITHDRAW_SUCCESS, amount.negate(),
+                wallet.getTotalBalance(), "WITHDRAW_" + wr.getId(),
+                "Rút tiền thành công yêu cầu #" + wr.getId());
+
 
         // 2. Cập nhật ví hệ thống (Platform) - Luôn phải trừ đi phần tiền hệ thống đã bỏ ra trả
         log.error("Platform balance: {}", platformWallet.getTotalBalance());
@@ -262,6 +274,10 @@ public class WalletServiceImpl implements WalletService {
         );
 
         walletRepository.save(platformWallet);
+
+        saveTransaction(TransactionType.PLATFORM_PAYOUT, receiveAmount.negate(),
+                platformWallet.getTotalBalance(), "WITHDRAW_" + wr.getId(),
+                "Platform chi trả rút tiền yêu cầu #" + wr.getId());
 
         // 3. Update trạng thái yêu cầu
         wr.setAdmin(admin);
@@ -347,6 +363,10 @@ log.info("Wallet balance: {}, request amount {}", wallet.getTotalBalance(),reque
         wallet.setFrozenBalance(wallet.getFrozenBalance().add(request.getAmount()));
         walletRepository.save(wallet);
 
+        saveTransaction(TransactionType.WITHDRAW_REQUEST_FREEZE, request.getAmount(),
+                wallet.getFrozenBalance(), "WITHDRAW_" + wr.getId(),
+                "Khóa tiền shop khi tạo yêu cầu rút #" + wr.getId());
+
         return withdrawRequestMapper.toResponse(wr);
     }
 
@@ -377,6 +397,9 @@ log.info("Wallet balance: {}, request amount {}", wallet.getTotalBalance(),reque
         );
 
         walletRepository.save(wallet);
+        saveTransaction(TransactionType.WITHDRAW_REJECT_RELEASE, wr.getAmount(),
+                wallet.getFrozenBalance(), "WITHDRAW_" + wr.getId(),
+                "Mở khóa tiền do từ chối yêu cầu rút #" + wr.getId());
         // save image
         saveEvidnetFile(files,wr);
 
@@ -435,6 +458,18 @@ log.info("Wallet balance: {}, request amount {}", wallet.getTotalBalance(),reque
         BigDecimal total = wallet.getTotalBalance() != null ? wallet.getTotalBalance() : BigDecimal.ZERO;
         BigDecimal frozen = wallet.getFrozenBalance() != null ? wallet.getFrozenBalance() : BigDecimal.ZERO;
         return total.subtract(frozen);
+    }
+
+    private void saveTransaction(TransactionType type, BigDecimal amount, BigDecimal balanceAfter, String referenceId, String content) {
+        transactionRepository.save(Transaction.builder()
+                .paymentGateway("INTERNAL")
+                .transactionType(type)
+                .referenceId(referenceId)
+                .amount(amount)
+                .balanceAfter(balanceAfter)
+                .status(TransactionStatus.SUCCESS)
+                .content(content)
+                .build());
     }
 
 }

@@ -2,6 +2,7 @@ package com.swd301.foodmarket.entity;
 
 import com.fasterxml.jackson.annotation.JsonIgnore;
 import com.swd301.foodmarket.enums.TransactionStatus;
+import com.swd301.foodmarket.enums.TransactionType;
 import jakarta.persistence.*;
 import lombok.*;
 import lombok.experimental.FieldDefaults;
@@ -34,6 +35,13 @@ public class Transaction {
 
     @Column(length = 50)
     String paymentGateway;
+
+    @Enumerated(EnumType.STRING)
+    @Column(length = 50)
+    TransactionType transactionType;
+
+    @Column(length = 100)
+    String referenceId;
 
     @Column(precision = 18, scale = 2)
     BigDecimal amount;

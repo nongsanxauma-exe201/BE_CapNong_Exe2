@@ -7,6 +7,7 @@ import com.swd301.foodmarket.entity.Notification;
 import com.swd301.foodmarket.enums.OrderStatus;
 import com.swd301.foodmarket.enums.PaymentStatus;
 import com.swd301.foodmarket.enums.TransactionStatus;
+import com.swd301.foodmarket.enums.TransactionType;
 import com.swd301.foodmarket.enums.WalletType;
 import com.swd301.foodmarket.exception.AppException;
 import com.swd301.foodmarket.exception.ErrorCode;
@@ -19,6 +20,7 @@ import com.swd301.foodmarket.repository.TransactionRepository;
 import com.swd301.foodmarket.repository.WalletRepository;
 import com.swd301.foodmarket.service.CartService;
 import com.swd301.foodmarket.service.NotificationService;
+import com.swd301.foodmarket.service.OrderRewardService;
 import com.swd301.foodmarket.service.PaymentService;
 import com.swd301.foodmarket.service.PayosService;
 import com.swd301.foodmarket.service.VoucherUserService;
@@ -28,6 +30,7 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 
 import java.math.BigDecimal;
+import java.math.RoundingMode;
 import java.time.LocalDateTime;
 import java.time.ZoneId;
 import java.util.HashMap;
@@ -48,6 +51,7 @@ public class PaymentServiceImpl implements PaymentService {
     private final CartService cartService;
     private final ProductRepository productRepository;
     private final MysteryBoxRepository mysteryBoxRepository;
+    private final OrderRewardService orderRewardService;
     private final NotificationService notificationService;
 
     @Override
@@ -124,6 +128,11 @@ public class PaymentServiceImpl implements PaymentService {
             throw new AppException(ErrorCode.ORDER_NOT_PAYABLE);
         }
 
+        if (paymentRepository.existsByOrder_IdAndStatus(order.getId(), PaymentStatus.PENDING)
+                || paymentRepository.existsByOrder_IdAndStatus(order.getId(), PaymentStatus.SUCCESS)) {
+            throw new AppException(ErrorCode.ORDER_NOT_PAYABLE);
+        }
+
         BigDecimal amount = order.getTotalAmount();
 
         String gateway = request.getPaymentGateway();
@@ -196,6 +205,11 @@ public class PaymentServiceImpl implements PaymentService {
             throw new AppException(ErrorCode.INVALID_PAYMENT_METHOD);
         }
 
+        if (order.getStatus() != OrderStatus.PENDING && order.getStatus() != OrderStatus.AWAITING_PAYMENT) {
+            log.warn("Order is no longer payable. orderId={}, status={}", order.getId(), order.getStatus());
+            throw new AppException(ErrorCode.ORDER_NOT_PAYABLE);
+        }
+
 
         log.info("Order found: id={}, status={}", order.getId(), order.getStatus());
 
@@ -204,6 +218,7 @@ public class PaymentServiceImpl implements PaymentService {
         payment.setUpdatedAt(LocalDateTime.now(ZoneId.of("Asia/Ho_Chi_Minh")));
 
         order.setStatus(OrderStatus.PAID);
+        orderRewardService.applyRewardIfEligible(order);
         orderRepository.save(order);
 
         log.info("Order status updated to PAID");
@@ -218,12 +233,18 @@ public class PaymentServiceImpl implements PaymentService {
                 ? order.getShippingFee()
                 : BigDecimal.ZERO;
 
-        BigDecimal shopGross = totalAmount.subtract(shippingFee);
+        BigDecimal shippingDiscountAmount = order.getShippingDiscountAmount() != null
+                ? order.getShippingDiscountAmount()
+                : BigDecimal.ZERO;
+        BigDecimal settlementTotal = totalAmount.add(shippingDiscountAmount);
+        BigDecimal shopGross = settlementTotal.subtract(shippingFee);
 
-        log.info("[PAYOS_PAYMENT_SUCCESS] orderId={}, totalAmount={}, shippingFee={}, shopGross={}",
+        log.info("[PAYOS_PAYMENT_SUCCESS] orderId={}, buyerPaid={}, shippingFee={}, shippingDiscountAmount={}, settlementTotal={}, shopGross={}",
                 order.getId(),
                 totalAmount,
                 shippingFee,
+                shippingDiscountAmount,
+                settlementTotal,
                 shopGross
         );
 
@@ -333,6 +354,8 @@ public class PaymentServiceImpl implements PaymentService {
         Transaction transaction = Transaction.builder()
                 .payment(payment)
                 .paymentGateway(payment.getPaymentGateway())
+                .transactionType(TransactionType.PAYMENT_RECEIVED)
+                .referenceId("ORDER_" + order.getId())
                 .amount(totalAmount)
                 .balanceAfter(adminWallet.getTotalBalance())
                 .status(TransactionStatus.SUCCESS)
@@ -340,6 +363,28 @@ public class PaymentServiceImpl implements PaymentService {
                 .build();
 
         transactionRepository.save(transaction);
+
+        transactionRepository.save(Transaction.builder()
+                .payment(payment)
+                .paymentGateway(payment.getPaymentGateway())
+                .transactionType(TransactionType.PLATFORM_FREEZE)
+                .referenceId("ORDER_" + order.getId())
+                .amount(totalAmount)
+                .balanceAfter(adminWallet.getFrozenBalance())
+                .status(TransactionStatus.SUCCESS)
+                .content("Khóa tiền PayOS đơn hàng #" + order.getId() + " trong ví platform")
+                .build());
+
+        transactionRepository.save(Transaction.builder()
+                .payment(payment)
+                .paymentGateway(payment.getPaymentGateway())
+                .transactionType(TransactionType.SHOP_FREEZE)
+                .referenceId("ORDER_" + order.getId())
+                .amount(shopGross)
+                .balanceAfter(shopWallet.getFrozenBalance())
+                .status(TransactionStatus.SUCCESS)
+                .content("Ghi nhận và khóa tiền hàng shop cho đơn #" + order.getId())
+                .build());
 
         log.info("Transaction created: id={}, amount={}", transaction.getId(), totalAmount);
 
@@ -399,6 +444,8 @@ public class PaymentServiceImpl implements PaymentService {
         Transaction transaction = Transaction.builder()
                 .payment(payment)
                 .paymentGateway(payment.getPaymentGateway())
+                .transactionType(TransactionType.PAYMENT_FAILED)
+                .referenceId("ORDER_" + order.getId())
                 .amount(payment.getAmount())
                 .balanceAfter(null) // không thay đổi ví
                 .status(TransactionStatus.FAILED)
@@ -477,8 +524,14 @@ public class PaymentServiceImpl implements PaymentService {
                 }
 
                 Product product = detail.getProduct();
-                Integer currentStock = product.getStockQuantity() == null ? 0 : product.getStockQuantity();
-                product.setStockQuantity(currentStock + detail.getQuantity());
+                BigDecimal currentStockKg = product.getStockKg() != null
+                        ? product.getStockKg()
+                        : BigDecimal.valueOf(product.getStockQuantity() == null ? 0 : product.getStockQuantity());
+                BigDecimal quantityKg = detail.getQuantityKg() != null
+                        ? detail.getQuantityKg()
+                        : BigDecimal.valueOf(detail.getQuantity());
+                product.setStockKg(currentStockKg.add(quantityKg));
+                product.setStockQuantity(product.getStockKg().setScale(0, RoundingMode.DOWN).intValue());
                 productsToUpdate.put(product.getId(), product);
             }
         }

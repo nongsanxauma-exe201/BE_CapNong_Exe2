@@ -1,18 +1,15 @@
 package com.swd301.foodmarket.dto.response;
 
-import com.swd301.foodmarket.entity.User;
-import com.swd301.foodmarket.entity.Voucher;
-import jakarta.persistence.*;
+import com.swd301.foodmarket.enums.VoucherType;
 import lombok.AllArgsConstructor;
-import lombok.Builder;
 import lombok.Data;
 import lombok.NoArgsConstructor;
 
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
 import java.util.UUID;
+
 @Data
-@Builder
 @AllArgsConstructor
 @NoArgsConstructor
 public class VoucherUserResponse {
@@ -22,7 +19,6 @@ public class VoucherUserResponse {
     private Integer quantity  ;
     private LocalDateTime claimAt;
 
-    @Builder
     @AllArgsConstructor
     @NoArgsConstructor
     @Data
@@ -33,5 +29,6 @@ public class VoucherUserResponse {
         private  BigDecimal maxDiscount;
         private  BigDecimal minOrderValue;
         private LocalDateTime expiryDate;
+        private VoucherType voucherType;
     }
 }

@@ -1,6 +1,8 @@
 package com.swd301.foodmarket.entity;
 
 import com.fasterxml.jackson.annotation.JsonIgnore;
+import com.swd301.foodmarket.enums.CodPaymentOption;
+import com.swd301.foodmarket.enums.CodPaymentStatus;
 import com.swd301.foodmarket.enums.OrderStatus;
 import jakarta.persistence.*;
 import lombok.*;
@@ -108,6 +110,26 @@ public class Order {
     @Column(precision = 18, scale = 2)
     BigDecimal totalAmount;
 
+    @Builder.Default
+    @Column(name = "shipping_discount_amount", precision = 18, scale = 2)
+    BigDecimal shippingDiscountAmount = BigDecimal.ZERO;
+
+    @Builder.Default
+    @Column(name = "total_kg", precision = 12, scale = 2)
+    BigDecimal totalKg = BigDecimal.ZERO;
+
+    @Builder.Default
+    @Column(name = "rescued_weight", precision = 10, scale = 2)
+    BigDecimal rescuedWeight = BigDecimal.ZERO;
+
+    @Builder.Default
+    @Column(name = "reward_points", precision = 10, scale = 2)
+    BigDecimal rewardPoints = BigDecimal.ZERO;
+
+    @Builder.Default
+    @Column(name = "reward_applied", nullable = false, columnDefinition = "BOOLEAN DEFAULT FALSE")
+    Boolean rewardApplied = false;
+
     @Column(length = 50)
     String paymentMethod;
 
@@ -132,4 +154,19 @@ public class Order {
     private Boolean codSettled = false;
 
     private LocalDateTime codSettledAt;
+
+    @Enumerated(EnumType.STRING)
+    @Column(name = "cod_payment_option", length = 20)
+    private CodPaymentOption codPaymentOption;
+
+    @Enumerated(EnumType.STRING)
+    @Column(name = "cod_payment_status", length = 30)
+    private CodPaymentStatus codPaymentStatus;
+
+    @Column(name = "cod_prepaid_amount", precision = 18, scale = 2)
+    private BigDecimal codPrepaidAmount;
+
+    private LocalDateTime shipperPaidAt;
+    private LocalDateTime codCashConfirmedAt;
+    private LocalDateTime codRefundedAt;
 }

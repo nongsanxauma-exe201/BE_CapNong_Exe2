@@ -2,11 +2,11 @@ package com.swd301.foodmarket.service.impl;
 
 import com.swd301.foodmarket.dto.request.ReturnActionRequest;
 import com.swd301.foodmarket.dto.request.ReturnCreateRequest;
-import com.swd301.foodmarket.dto.response.PayOSPaymentInfoResponse;
 import com.swd301.foodmarket.dto.response.ReturnActionResponse;
 import com.swd301.foodmarket.entity.*;
 import com.swd301.foodmarket.enums.ReturnStatus;
 import com.swd301.foodmarket.enums.TransactionStatus;
+import com.swd301.foodmarket.enums.TransactionType;
 import com.swd301.foodmarket.enums.WalletType;
 import com.swd301.foodmarket.exception.AppException;
 import com.swd301.foodmarket.exception.ErrorCode;
@@ -203,12 +203,24 @@ public class ReturnRequestServiceImpl implements ReturnRequestService {
         // 3. Log Transaction
         Transaction trans = Transaction.builder()
                 .paymentGateway("PAYOS")
+                .transactionType(TransactionType.REFUND)
+                .referenceId("RETURN_" + rr.getId())
                 .amount(amount.negate()) // Hoàn tiền là số âm đối với hệ thống balance
                 .balanceAfter(platformWallet.getTotalBalance())
                 .status(TransactionStatus.SUCCESS)
                 .content("Hoàn tiền đơn hàng #" + rr.getOrderDetail().getOrder().getId() + " - Khiếu nại #" + rr.getId())
                 .build();
         transactionRepository.save(trans);
+
+        transactionRepository.save(Transaction.builder()
+                .paymentGateway("INTERNAL")
+                .transactionType(TransactionType.SHOP_REFUND_DEBIT)
+                .referenceId("RETURN_" + rr.getId())
+                .amount(shopPortion.negate())
+                .balanceAfter(shopWallet.getFrozenBalance())
+                .status(TransactionStatus.SUCCESS)
+                .content("Trừ phần hoàn tiền của shop cho khiếu nại #" + rr.getId())
+                .build());
 
         log.info("Refund wallets and transaction updated successfully");
     }

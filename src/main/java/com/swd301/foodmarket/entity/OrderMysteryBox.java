@@ -3,6 +3,8 @@ package com.swd301.foodmarket.entity;
 import jakarta.persistence.*;
 import lombok.*;
 
+import java.math.BigDecimal;
+
 @Entity
 @Table(name = "order_mystery_boxes")
 @Getter
@@ -26,6 +28,13 @@ public class OrderMysteryBox {
 
     @Column(nullable = false)
     private Integer quantity;
+
+    @Column(name = "unit_weight_kg", precision = 10, scale = 2)
+    private BigDecimal unitWeightKg;
+
+    @Column(name = "rescued_weight_kg", precision = 10, scale = 2)
+    private BigDecimal rescuedWeightKg;
+
     @OneToOne(mappedBy = "orderMysteryBox")
     private QualityResult qualityResult;
 }

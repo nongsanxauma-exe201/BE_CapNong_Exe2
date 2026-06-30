@@ -6,6 +6,8 @@ import lombok.Builder;
 import lombok.Data;
 import lombok.NoArgsConstructor;
 
+import java.math.BigDecimal;
+
 @Entity
 @Data
 @Builder
@@ -32,4 +34,7 @@ public class CartItem {
 
 
     private Integer quantity;
+
+    @Column(name = "quantity_kg", precision = 12, scale = 2)
+    private BigDecimal quantityKg;
 }

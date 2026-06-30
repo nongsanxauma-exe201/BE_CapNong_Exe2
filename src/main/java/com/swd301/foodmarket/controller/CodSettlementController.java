@@ -32,4 +32,20 @@ public class CodSettlementController {
                 .message("COD_SETTLED_SUCCESS")
                 .build();
     }
+
+    @PutMapping("/orders/{orderId}/confirm-cash")
+    public ApiResponse<Void> confirmShipperCashPayment(@PathVariable Integer orderId) {
+        codSettlementService.confirmShipperCashPayment(orderId);
+        return ApiResponse.<Void>builder()
+                .message("COD_CASH_CONFIRMED")
+                .build();
+    }
+
+    @PutMapping("/orders/{orderId}/refund-shipper")
+    public ApiResponse<Void> refundCodPrepaymentToShipper(@PathVariable Integer orderId) {
+        codSettlementService.refundCodPrepaymentToShipper(orderId);
+        return ApiResponse.<Void>builder()
+                .message("COD_SHIPPER_REFUNDED")
+                .build();
+    }
 }

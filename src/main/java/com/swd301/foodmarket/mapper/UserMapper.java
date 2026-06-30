@@ -15,6 +15,8 @@ public interface UserMapper {
     @Mapping(target = "bankAccountHolder", source = "bankAccountHolder")
     @Mapping(target = "licenseImageUrl", source = "licenseImageUrl")
     @Mapping(target = "vehicleDocImageUrl", source = "vehicleDocImageUrl")
+    @Mapping(target = "totalRescuedKg", source = "totalRescuedWeight")
+    @Mapping(target = "rewardPoints", source = "loyaltyPoints")
     UserResponse toUserResponse(User user);
 
     @BeanMapping(nullValuePropertyMappingStrategy = NullValuePropertyMappingStrategy.IGNORE)

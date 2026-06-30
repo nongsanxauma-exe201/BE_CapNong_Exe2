@@ -5,6 +5,8 @@ import lombok.Builder;
 import lombok.Data;
 import lombok.NoArgsConstructor;
 
+import java.math.BigDecimal;
+
 @Data
 @Builder
 @AllArgsConstructor
@@ -14,4 +16,5 @@ public class AddCartItemRequest {
     private Integer mysteryBoxId;
     private Integer buildComboId;
     private Integer quantity;
+    private BigDecimal quantityKg;
 }

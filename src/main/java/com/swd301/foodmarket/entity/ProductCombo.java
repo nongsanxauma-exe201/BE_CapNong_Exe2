@@ -28,5 +28,8 @@ public class ProductCombo {
 
     private Integer quantity;
 
+    @Column(name = "quantity_kg", precision = 12, scale = 2)
+    private BigDecimal quantityKg;
+
     private BigDecimal price;
 }

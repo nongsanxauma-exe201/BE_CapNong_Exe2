@@ -23,6 +23,9 @@ import java.time.LocalDateTime;
 public class ProductUpdateRequest {
     String productName;
     String unit;
+    BigDecimal stockKg;
+    BigDecimal pricePerKg;
+    BigDecimal minOrderKg;
     BigDecimal sellingPrice;
     Integer stockQuantity;
     String description;

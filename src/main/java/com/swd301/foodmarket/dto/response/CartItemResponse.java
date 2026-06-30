@@ -16,7 +16,10 @@ public class CartItemResponse {
     private Integer mysteryBoxId;
     private String  productName;
     private Integer quantity;
+    private BigDecimal quantityKg;
     private BigDecimal price;
+    private BigDecimal pricePerKg;
+    private BigDecimal itemTotal;
     private String  imageUrl;
     private String  shopName;
     private String  itemType;
@@ -24,6 +27,7 @@ public class CartItemResponse {
     private Integer buildComboId;
     private Integer shopOwnerId;
     private Integer stockQuantity;
+    private BigDecimal stockKg;
     private Integer discountPercent;
     private BigDecimal salePrice;
 }

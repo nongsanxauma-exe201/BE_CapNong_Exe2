@@ -2,6 +2,7 @@ package com.swd301.foodmarket.repository;
 
 import com.swd301.foodmarket.entity.Order;
 import com.swd301.foodmarket.entity.User;
+import com.swd301.foodmarket.enums.CodPaymentStatus;
 import com.swd301.foodmarket.enums.OrderStatus;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
@@ -147,6 +148,7 @@ public interface OrderRepository extends JpaRepository<Order, Integer> {
 
 
     List<Order>  findByPaymentMethodIgnoreCaseAndStatusAndCodSettled(String paymentMethod, OrderStatus status, Boolean codSettled);
+    List<Order> findByPaymentMethodIgnoreCaseAndCodPaymentStatus(String paymentMethod, CodPaymentStatus codPaymentStatus);
 
     @Query("""
         SELECT DISTINCT o FROM Order o

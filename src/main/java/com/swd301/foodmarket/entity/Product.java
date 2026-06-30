@@ -62,7 +62,14 @@
         String productName;
 
         @Column(length = 50)
-        String unit;
+        @Builder.Default
+        String unit = "kg";
+
+        @Column(name = "stock_kg", precision = 12, scale = 2)
+        BigDecimal stockKg;
+
+        @Column(name = "min_order_kg", precision = 12, scale = 2)
+        BigDecimal minOrderKg;
 
         @Column(precision = 18, scale = 2)
         BigDecimal sellingPrice;

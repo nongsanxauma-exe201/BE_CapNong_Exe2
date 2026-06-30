@@ -4,11 +4,15 @@ import com.swd301.foodmarket.dto.request.GetVoucherForOrder;
 import com.swd301.foodmarket.dto.response.VoucherUsageResponse;
 import com.swd301.foodmarket.dto.response.VoucherUserResponse;
 import com.swd301.foodmarket.entity.*;
+import com.swd301.foodmarket.enums.TransactionStatus;
+import com.swd301.foodmarket.enums.TransactionType;
+import com.swd301.foodmarket.enums.VoucherType;
 import com.swd301.foodmarket.exception.AppException;
 import com.swd301.foodmarket.exception.ErrorCode;
 import com.swd301.foodmarket.mapper.VoucherUsageMapper;
 import com.swd301.foodmarket.mapper.VoucherUserMapper;
 import com.swd301.foodmarket.repository.UserRepository;
+import com.swd301.foodmarket.repository.TransactionRepository;
 import com.swd301.foodmarket.repository.VoucherRespository;
 import com.swd301.foodmarket.repository.VoucherUsageRepository;
 import com.swd301.foodmarket.repository.VoucherUserRepository;
@@ -23,8 +27,12 @@ import org.springframework.stereotype.Service;
 import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.time.LocalDateTime;
+import java.util.ArrayList;
+import java.util.HashSet;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Optional;
+import java.util.Set;
 import java.util.UUID;
 
 @RequiredArgsConstructor
@@ -37,6 +45,7 @@ public class VoucherUserServiceImpl  implements  com.swd301.foodmarket.service.V
     private final VoucherUsageRepository voucherUsageRepository;
     private final VoucherUsageMapper voucherUsageMapper;
     private final UserRepository userRepository;
+    private final TransactionRepository transactionRepository;
     @Transactional
     @Override
     public VoucherUserResponse createVoucherUser(String voucherCode) {
@@ -44,13 +53,13 @@ public class VoucherUserServiceImpl  implements  com.swd301.foodmarket.service.V
         if (voucher == null) {
             throw  new AppException(ErrorCode.VOUCHER_NOT_FOUND);
         }
-       if(voucher.getClaimedCount() + 1 > voucher.getClaimLimit()) {
+       if(voucher.getClaimLimit() != null && voucher.getClaimedCount() + 1 > voucher.getClaimLimit()) {
            throw new AppException(ErrorCode.VOUCHER_RECEIVE_LIMIT_REACHED);
        }
        if(voucherUserRepository.existsByUserAndVoucher(getCurrentUser(), voucher)) {
            throw new AppException(ErrorCode.VOUCHER_ALREADY_CLAIMED);
        }
-       if(voucher.getExpiryDate().isBefore(LocalDateTime.now())) {
+       if(voucher.getExpiryDate() != null && voucher.getExpiryDate().isBefore(LocalDateTime.now())) {
            throw new AppException(ErrorCode.VOUCHER_EXPIRED);
        }
        if(!voucher.isActive()){
@@ -59,7 +68,7 @@ public class VoucherUserServiceImpl  implements  com.swd301.foodmarket.service.V
        VoucherUser voucherUser = VoucherUser.builder()
                .user(getCurrentUser())
                .voucher(voucher)
-               .quantity(voucher.getPerUserLimit())
+               .quantity(voucher.getPerUserLimit() == null ? 1 : voucher.getPerUserLimit())
                .build();
        voucher.setClaimedCount(voucher.getClaimedCount() + 1);
        voucherRespository.save(voucher);
@@ -88,13 +97,13 @@ public class VoucherUserServiceImpl  implements  com.swd301.foodmarket.service.V
         if (voucher == null) {
             throw new AppException(ErrorCode.VOUCHER_NOT_FOUND);
         }
-        if(voucher.getClaimedCount() + 1 > voucher.getClaimLimit()) {
+        if(voucher.getClaimLimit() != null && voucher.getClaimedCount() + 1 > voucher.getClaimLimit()) {
            return  false;
         }
         if(voucherUserRepository.existsByUserAndVoucher(getCurrentUser(), voucher)) {
             return  false;
         }
-        if(voucher.getExpiryDate().isBefore(LocalDateTime.now())) {
+        if(voucher.getExpiryDate() != null && voucher.getExpiryDate().isBefore(LocalDateTime.now())) {
             return  false;
         }
         if(!voucher.isActive()){
@@ -123,45 +132,59 @@ public class VoucherUserServiceImpl  implements  com.swd301.foodmarket.service.V
         }
 
         User currentUser = getCurrentUser();
-        VoucherUser voucherUser = resolveVoucherUser(currentUser, voucherIdentifiers)
-                .orElseThrow(() -> new AppException(ErrorCode.VOUCHER_USER_NOT_FOUND));
+        VoucherUsageResponse lastUsageResponse = null;
+        Set<UUID> appliedVoucherUserIds = new HashSet<>();
+        for (String voucherIdentifier : normalizeVoucherIdentifiers(voucherIdentifiers)) {
+            VoucherUser voucherUser = resolveVoucherUser(currentUser, List.of(voucherIdentifier))
+                    .orElseThrow(() -> new AppException(ErrorCode.VOUCHER_USER_NOT_FOUND));
+            if (voucherUser.getId() != null && !appliedVoucherUserIds.add(voucherUser.getId())) {
+                continue;
+            }
 
-        Voucher voucher = voucherUser.getVoucher();
-        validateVoucherForOrder(voucherUser, order);
+            Voucher voucher = voucherUser.getVoucher();
+            validateVoucherForOrder(voucherUser, order);
 
-        BigDecimal shippingFee = order.getShippingFee() == null ? BigDecimal.ZERO : order.getShippingFee();
-        BigDecimal orderSubtotal = order.getTotalAmount().subtract(shippingFee);
-        if (orderSubtotal.compareTo(BigDecimal.ZERO) < 0) {
-            orderSubtotal = BigDecimal.ZERO;
+            BigDecimal orderSubtotal = calculateRemainingProductSubtotal(order);
+            BigDecimal remainingShippingFee = calculateRemainingShippingFee(order);
+
+            BigDecimal discountAmount = calculateDiscountAmount(voucher, orderSubtotal, remainingShippingFee);
+            if (discountAmount.compareTo(BigDecimal.ZERO) <= 0) {
+                continue;
+            }
+
+            voucherUser.setQuantityUsed((voucherUser.getQuantityUsed() == null ? 0 : voucherUser.getQuantityUsed()) + 1);
+            voucherUser.setQuantity(Math.max(0, (voucherUser.getQuantity() == null ? 0 : voucherUser.getQuantity()) - 1));
+            voucherUserRepository.save(voucherUser);
+
+            voucher.setUsedCount((voucher.getUsedCount() == null ? 0 : voucher.getUsedCount()) + 1);
+            if (voucher.getUsageLimit() != null && voucher.getUsedCount() >= voucher.getUsageLimit()) {
+                voucher.setActive(false);
+            }
+            voucherRespository.save(voucher);
+
+            BigDecimal newTotal = order.getTotalAmount().subtract(discountAmount);
+            order.setTotalAmount(newTotal.max(BigDecimal.ZERO));
+            if (voucher.getVoucherType() == VoucherType.WELCOME) {
+                BigDecimal currentShippingDiscount = order.getShippingDiscountAmount() == null
+                        ? BigDecimal.ZERO
+                        : order.getShippingDiscountAmount();
+                order.setShippingDiscountAmount(currentShippingDiscount.add(discountAmount));
+                saveTransaction(TransactionType.SHIPPING_SUBSIDY, discountAmount.negate(), null,
+                        "ORDER_" + order.getId(),
+                        "Admin/platform bù phí vận chuyển bằng welcome voucher cho đơn #" + order.getId());
+            }
+
+            VoucherUsage usage = VoucherUsage.builder()
+                    .voucher(voucher)
+                    .user(currentUser)
+                    .order(order)
+                    .discountAmount(discountAmount)
+                    .usedAt(LocalDateTime.now())
+                    .build();
+
+            lastUsageResponse = voucherUsageMapper.toResponse(voucherUsageRepository.save(usage));
         }
-
-        BigDecimal discountAmount = calculateDiscountAmount(voucher, orderSubtotal);
-        if (discountAmount.compareTo(BigDecimal.ZERO) <= 0) {
-            return null;
-        }
-
-        voucherUser.setQuantityUsed((voucherUser.getQuantityUsed() == null ? 0 : voucherUser.getQuantityUsed()) + 1);
-        voucherUser.setQuantity(Math.max(0, (voucherUser.getQuantity() == null ? 0 : voucherUser.getQuantity()) - 1));
-        voucherUserRepository.save(voucherUser);
-
-        voucher.setUsedCount((voucher.getUsedCount() == null ? 0 : voucher.getUsedCount()) + 1);
-        if (voucher.getUsageLimit() != null && voucher.getUsedCount() >= voucher.getUsageLimit()) {
-            voucher.setActive(false);
-        }
-        voucherRespository.save(voucher);
-
-        BigDecimal newTotal = order.getTotalAmount().subtract(discountAmount);
-        order.setTotalAmount(newTotal.max(BigDecimal.ZERO));
-
-        VoucherUsage usage = VoucherUsage.builder()
-                .voucher(voucher)
-                .user(currentUser)
-                .order(order)
-                .discountAmount(discountAmount)
-                .usedAt(LocalDateTime.now())
-                .build();
-
-        return voucherUsageMapper.toResponse(voucherUsageRepository.save(usage));
+        return lastUsageResponse;
     }
 
     @Transactional
@@ -171,16 +194,16 @@ public class VoucherUserServiceImpl  implements  com.swd301.foodmarket.service.V
             return;
         }
 
-        Optional<VoucherUsage> usageOptional = voucherUsageRepository.findByOrder_Id(order.getId());
-        if (usageOptional.isEmpty()) {
+        List<VoucherUsage> usages = voucherUsageRepository.findAllByOrder_Id(order.getId());
+        if (usages.isEmpty()) {
             return;
         }
 
-        VoucherUsage usage = usageOptional.get();
+        for (VoucherUsage usage : usages) {
         Voucher voucher = usage.getVoucher();
         if (voucher == null) {
             voucherUsageRepository.delete(usage);
-            return;
+            continue;
         }
 
         Optional<VoucherUser> voucherUserOptional = voucherUserRepository.findByUserAndVoucher(usage.getUser(), voucher);
@@ -205,9 +228,16 @@ public class VoucherUserServiceImpl  implements  com.swd301.foodmarket.service.V
         BigDecimal discountAmount = usage.getDiscountAmount() == null ? BigDecimal.ZERO : usage.getDiscountAmount();
         if (discountAmount.compareTo(BigDecimal.ZERO) > 0 && order.getTotalAmount() != null) {
             order.setTotalAmount(order.getTotalAmount().add(discountAmount));
+            if (usage.getVoucher() != null && usage.getVoucher().getVoucherType() == VoucherType.WELCOME) {
+                BigDecimal currentShippingDiscount = order.getShippingDiscountAmount() == null
+                        ? BigDecimal.ZERO
+                        : order.getShippingDiscountAmount();
+                order.setShippingDiscountAmount(currentShippingDiscount.subtract(discountAmount).max(BigDecimal.ZERO));
+            }
         }
 
         voucherUsageRepository.delete(usage);
+        }
     }
 
     private Optional<VoucherUser> resolveVoucherUser(User currentUser, List<String> voucherIdentifiers) {
@@ -257,22 +287,58 @@ public class VoucherUserServiceImpl  implements  com.swd301.foodmarket.service.V
             throw new AppException(ErrorCode.VOUCHER_INACTIVE);
         }
 
-        if (voucher.getShopOwner() == null || order.getShopOwner() == null
-                || !voucher.getShopOwner().getId().equals(order.getShopOwner().getId())) {
+        boolean isPlatformVoucher = voucher.getVoucherType() == VoucherType.PLATFORM
+                || voucher.getVoucherType() == VoucherType.WELCOME;
+        boolean isShopVoucherForOrder = voucher.getShopOwner() != null
+                && order.getShopOwner() != null
+                && voucher.getShopOwner().getId().equals(order.getShopOwner().getId());
+        if (!isPlatformVoucher && !isShopVoucherForOrder) {
             throw new AppException(ErrorCode.INVALID_REQUEST);
         }
 
-        BigDecimal shippingFee = order.getShippingFee() == null ? BigDecimal.ZERO : order.getShippingFee();
-        BigDecimal subtotal = order.getTotalAmount().subtract(shippingFee);
-        if (subtotal.compareTo(BigDecimal.ZERO) < 0) {
-            subtotal = BigDecimal.ZERO;
-        }
+        BigDecimal subtotal = calculateRemainingProductSubtotal(order);
         if (voucher.getMinOrderValue() != null && subtotal.compareTo(voucher.getMinOrderValue()) < 0) {
             throw new AppException(ErrorCode.INVALID_REQUEST);
         }
     }
 
-    private BigDecimal calculateDiscountAmount(Voucher voucher, BigDecimal baseAmount) {
+    private List<String> normalizeVoucherIdentifiers(List<String> voucherIdentifiers) {
+        LinkedHashSet<String> normalized = new LinkedHashSet<>();
+        for (String rawIdentifier : voucherIdentifiers) {
+            if (rawIdentifier != null && !rawIdentifier.isBlank()) {
+                normalized.add(rawIdentifier.trim());
+            }
+        }
+        return new ArrayList<>(normalized);
+    }
+
+    private BigDecimal calculateRemainingProductSubtotal(Order order) {
+        BigDecimal totalAmount = order.getTotalAmount() == null ? BigDecimal.ZERO : order.getTotalAmount();
+        BigDecimal remainingShippingFee = calculateRemainingShippingFee(order);
+        return totalAmount.subtract(remainingShippingFee).max(BigDecimal.ZERO);
+    }
+
+    private BigDecimal calculateRemainingShippingFee(Order order) {
+        BigDecimal shippingFee = order.getShippingFee() == null ? BigDecimal.ZERO : order.getShippingFee();
+        BigDecimal shippingDiscountAmount = order.getShippingDiscountAmount() == null
+                ? BigDecimal.ZERO
+                : order.getShippingDiscountAmount();
+        return shippingFee.subtract(shippingDiscountAmount).max(BigDecimal.ZERO);
+    }
+
+    private BigDecimal calculateDiscountAmount(Voucher voucher, BigDecimal baseAmount, BigDecimal shippingFee) {
+        if (voucher.getVoucherType() == VoucherType.WELCOME) {
+            BigDecimal shippingBase = shippingFee == null ? BigDecimal.ZERO : shippingFee;
+            if (shippingBase.compareTo(BigDecimal.ZERO) <= 0) {
+                return BigDecimal.ZERO;
+            }
+            BigDecimal discount = shippingBase;
+            if (voucher.getMaxDiscount() != null && voucher.getMaxDiscount().compareTo(BigDecimal.ZERO) > 0) {
+                discount = discount.min(voucher.getMaxDiscount());
+            }
+            return discount.min(shippingBase);
+        }
+
         if (voucher.getDiscountValue() == null || baseAmount.compareTo(BigDecimal.ZERO) <= 0) {
             return BigDecimal.ZERO;
         }
@@ -286,6 +352,18 @@ public class VoucherUserServiceImpl  implements  com.swd301.foodmarket.service.V
         }
 
         return discount.min(baseAmount);
+    }
+
+    private void saveTransaction(TransactionType type, BigDecimal amount, BigDecimal balanceAfter, String referenceId, String content) {
+        transactionRepository.save(Transaction.builder()
+                .paymentGateway("VOUCHER")
+                .transactionType(type)
+                .referenceId(referenceId)
+                .amount(amount)
+                .balanceAfter(balanceAfter)
+                .status(TransactionStatus.SUCCESS)
+                .content(content)
+                .build());
     }
 
     private User getCurrentUser() {

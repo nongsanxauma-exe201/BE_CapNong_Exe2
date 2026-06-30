@@ -17,5 +17,6 @@ public class ProductComboRequest {
     Integer productId;
 
     Integer quantity;
+    BigDecimal quantityKg;
 
 }

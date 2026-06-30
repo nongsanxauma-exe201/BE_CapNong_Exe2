@@ -26,6 +26,8 @@ import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.stereotype.Service;
 import org.springframework.web.multipart.MultipartFile;
 
+import java.math.BigDecimal;
+import java.math.RoundingMode;
 import java.util.List;
 
 @Service
@@ -74,17 +76,19 @@ public class MysteryBoxServiceImpl implements MysteryBoxService {
             }
 
             // Lock toàn bộ nguyên liệu cần cho tất cả các túi ngay lúc tạo
-            int totalNeeded = box.getTotalQuantity() * item.getQuantity();
-            if (product.getStockQuantity() < totalNeeded) {
+            BigDecimal totalNeededKg = resolveMysteryItemKg(item).multiply(BigDecimal.valueOf(box.getTotalQuantity()));
+            if (resolveProductStockKg(product).compareTo(totalNeededKg) < 0) {
                 throw new AppException(ErrorCode.OUT_OF_STOCK);
             }
-            product.setStockQuantity(product.getStockQuantity() - totalNeeded);
+            product.setStockKg(resolveProductStockKg(product).subtract(totalNeededKg));
+            product.setStockQuantity(product.getStockKg().setScale(0, RoundingMode.DOWN).intValue());
             productRepository.save(product);
 
             ProductMystery pm = ProductMystery.builder()
                     .product(product)
                     .mysteryBox(box)
                     .quantity(item.getQuantity())
+                    .quantityKg(resolveMysteryItemKg(item))
                     .build();
 
             productMysteryRepository.save(pm);
@@ -114,7 +118,9 @@ public class MysteryBoxServiceImpl implements MysteryBoxService {
             List<ProductMystery> oldItems = productMysteryRepository.findByMysteryBox_Id(id);
             for (ProductMystery oldItem : oldItems) {
                 Product product = oldItem.getProduct();
-                product.setStockQuantity(product.getStockQuantity() + oldRemaining * oldItem.getQuantity());
+                BigDecimal restoreKg = resolveProductMysteryKg(oldItem).multiply(BigDecimal.valueOf(oldRemaining));
+                product.setStockKg(resolveProductStockKg(product).add(restoreKg));
+                product.setStockQuantity(product.getStockKg().setScale(0, RoundingMode.DOWN).intValue());
                 productRepository.save(product);
             }
         }
@@ -153,11 +159,12 @@ public class MysteryBoxServiceImpl implements MysteryBoxService {
 
                 // Lock nguyên liệu cho số túi chưa bán với công thức mới
                 if (newRemaining > 0) {
-                    int totalNeeded = newRemaining * item.getQuantity();
-                    if (product.getStockQuantity() < totalNeeded) {
+                    BigDecimal totalNeededKg = resolveMysteryItemKg(item).multiply(BigDecimal.valueOf(newRemaining));
+                    if (resolveProductStockKg(product).compareTo(totalNeededKg) < 0) {
                         throw new AppException(ErrorCode.OUT_OF_STOCK);
                     }
-                    product.setStockQuantity(product.getStockQuantity() - totalNeeded);
+                    product.setStockKg(resolveProductStockKg(product).subtract(totalNeededKg));
+                    product.setStockQuantity(product.getStockKg().setScale(0, RoundingMode.DOWN).intValue());
                     productRepository.save(product);
                 }
 
@@ -165,6 +172,7 @@ public class MysteryBoxServiceImpl implements MysteryBoxService {
                         .product(product)
                         .mysteryBox(box)
                         .quantity(item.getQuantity())
+                        .quantityKg(resolveMysteryItemKg(item))
                         .build();
 
                 box.getProductMysteries().add(pm);
@@ -195,7 +203,9 @@ public class MysteryBoxServiceImpl implements MysteryBoxService {
             List<ProductMystery> productMysteries = productMysteryRepository.findByMysteryBox_Id(id);
             for (ProductMystery pm : productMysteries) {
                 Product product = pm.getProduct();
-                product.setStockQuantity(product.getStockQuantity() + remaining * pm.getQuantity());
+                BigDecimal restoreKg = resolveProductMysteryKg(pm).multiply(BigDecimal.valueOf(remaining));
+                product.setStockKg(resolveProductStockKg(product).add(restoreKg));
+                product.setStockQuantity(product.getStockKg().setScale(0, RoundingMode.DOWN).intValue());
                 productRepository.save(product);
             }
         }
@@ -255,5 +265,24 @@ public class MysteryBoxServiceImpl implements MysteryBoxService {
 
         return userRepository.findByEmail(email)
                 .orElseThrow(() -> new AppException(ErrorCode.USER_NOT_EXISTED));
+    }
+
+    private BigDecimal resolveMysteryItemKg(ProductMysteryRequest item) {
+        BigDecimal quantityKg = item.getQuantityKg() != null
+                ? item.getQuantityKg()
+                : BigDecimal.valueOf(item.getQuantity() == null ? 0 : item.getQuantity());
+        return quantityKg.setScale(2, RoundingMode.HALF_UP);
+    }
+
+    private BigDecimal resolveProductMysteryKg(ProductMystery item) {
+        BigDecimal quantityKg = item.getQuantityKg() != null
+                ? item.getQuantityKg()
+                : BigDecimal.valueOf(item.getQuantity() == null ? 0 : item.getQuantity());
+        return quantityKg.setScale(2, RoundingMode.HALF_UP);
+    }
+
+    private BigDecimal resolveProductStockKg(Product product) {
+        if (product.getStockKg() != null) return product.getStockKg();
+        return BigDecimal.valueOf(product.getStockQuantity() == null ? 0 : product.getStockQuantity()).setScale(2, RoundingMode.HALF_UP);
     }
 }

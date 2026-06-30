@@ -28,6 +28,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.web.multipart.MultipartFile;
 
 import java.math.BigDecimal;
+import java.math.RoundingMode;
 import java.time.DayOfWeek;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
@@ -59,6 +60,7 @@ public class OrderServiceImpl implements OrderService {
     ReviewRepository reviewRepository;
     WarehouseRepository warehouseRepository;
     VoucherUserService voucherUserService;
+    OrderRewardService orderRewardService;
 
     @NonFinal
     @Value("${ADDRESS_WAREHOUSE}")
@@ -577,16 +579,19 @@ public class OrderServiceImpl implements OrderService {
 
             // ================= PRODUCT =================
             if (item.getProductId() != null) {
+                BigDecimal quantityKg = resolveRequestKg(item.getQuantityKg(), item.getQuantity());
                 Product product = productRepository.findById(item.getProductId())
                         .orElseThrow(() -> new AppException(ErrorCode.PRODUCT_NOT_FOUND));
 
-                if (product.getStockQuantity() < item.getQuantity()) {
+                if (resolveProductStockKg(product).compareTo(quantityKg) < 0) {
                     throw new RuntimeException(
-                            "Product " + product.getProductName() + " is out of stock"
+                            "Sản phẩm chỉ còn " + resolveProductStockKg(product).stripTrailingZeros().toPlainString()
+                                    + " kg trong kho, không đủ để mua " + quantityKg.stripTrailingZeros().toPlainString() + " kg."
                     );
                 }
 
-                product.setStockQuantity(product.getStockQuantity() - item.getQuantity());
+                product.setStockKg(resolveProductStockKg(product).subtract(quantityKg));
+                product.setStockQuantity(product.getStockKg().setScale(0, RoundingMode.DOWN).intValue());
                 productRepository.save(product);
 
                 if (shopOwner == null) {
@@ -596,13 +601,17 @@ public class OrderServiceImpl implements OrderService {
                 OrderDetail detail = new OrderDetail();
                 detail.setOrder(order);
                 detail.setProduct(product);
-                detail.setQuantity(item.getQuantity());
+                detail.setQuantity(resolveLegacyQuantity(quantityKg, item.getQuantity()));
+                detail.setQuantityKg(quantityKg);
                 detail.setUnitPrice(product.getSellingPrice());
+                detail.setPricePerKg(product.getSellingPrice());
+                detail.setUnitWeightKg(BigDecimal.ONE);
+                detail.setRescuedWeightKg(quantityKg);
 
                 orderDetails.add(detail);
 
                 totalAmount = totalAmount.add(
-                        product.getSellingPrice().multiply(BigDecimal.valueOf(item.getQuantity()))
+                        product.getSellingPrice().multiply(quantityKg)
                 );
             }
 
@@ -632,7 +641,9 @@ public class OrderServiceImpl implements OrderService {
                         .order(order)
                         .mysteryBox(box)
                         .quantity(item.getQuantity())
+                        .unitWeightKg(calculateMysteryBoxUnitWeight(box))
                         .build();
+                orderBox.setRescuedWeightKg(orderBox.getUnitWeightKg().multiply(BigDecimal.valueOf(item.getQuantity())));
 
                 mysteryBoxes.add(orderBox);
 
@@ -642,6 +653,7 @@ public class OrderServiceImpl implements OrderService {
                     );
                 }
             } else if (item.getBuildComboId() != null) {
+                BigDecimal comboCount = resolveRequestKg(item.getQuantityKg(), item.getQuantity());
                 BuildCombo combo = buildComboRepository.findById(item.getBuildComboId())
                         .orElseThrow(() -> new AppException(ErrorCode.BUILD_COMBO_NOT_FOUND));
 
@@ -652,20 +664,25 @@ public class OrderServiceImpl implements OrderService {
                 // Tạo OrderDetail cho từng product trong combo
                 for (ProductCombo comboItem : combo.getItems()) {
                     Product product = comboItem.getProduct();
-                    int requiredQty = comboItem.getQuantity() * item.getQuantity();
+                    BigDecimal requiredKg = resolveProductComboKg(comboItem).multiply(comboCount).setScale(2, RoundingMode.HALF_UP);
 
-                    if (product.getStockQuantity() < requiredQty) {
+                    if (resolveProductStockKg(product).compareTo(requiredKg) < 0) {
                         throw new AppException(ErrorCode.PRODUCT_OUT_OF_STOCK);
                     }
 
-                    product.setStockQuantity(product.getStockQuantity() - requiredQty);
+                    product.setStockKg(resolveProductStockKg(product).subtract(requiredKg));
+                    product.setStockQuantity(product.getStockKg().setScale(0, RoundingMode.DOWN).intValue());
                     productRepository.save(product);
 
                     OrderDetail detail = new OrderDetail();
                     detail.setOrder(order);
                     detail.setProduct(product);
-                    detail.setQuantity(requiredQty);
+                    detail.setQuantity(resolveLegacyQuantity(requiredKg, null));
+                    detail.setQuantityKg(requiredKg);
                     detail.setUnitPrice(product.getSellingPrice());
+                    detail.setPricePerKg(product.getSellingPrice());
+                    detail.setUnitWeightKg(BigDecimal.ONE);
+                    detail.setRescuedWeightKg(requiredKg);
                     orderDetails.add(detail);
                 }
 
@@ -674,9 +691,9 @@ public class OrderServiceImpl implements OrderService {
                         ? combo.getDiscountPrice()
                         : combo.getItems().stream()
                         .map(i -> i.getProduct().getSellingPrice()
-                                .multiply(BigDecimal.valueOf(i.getQuantity())))
+                                .multiply(resolveProductComboKg(i)))
                         .reduce(BigDecimal.ZERO, BigDecimal::add);
-                totalAmount = totalAmount.add(comboPrice.multiply(BigDecimal.valueOf(item.getQuantity())));
+                totalAmount = totalAmount.add(comboPrice.multiply(comboCount));
             } else {
                 throw new AppException(ErrorCode.INVALID_REQUEST);
             }
@@ -696,6 +713,11 @@ public class OrderServiceImpl implements OrderService {
         order.setTotalAmount(totalAmount.add(shippingFee));
         order.setOrderDetails(orderDetails);
         order.setMysteryBoxes(mysteryBoxes);
+        BigDecimal rescuedWeight = calculateSnapshotRescuedWeight(orderDetails, mysteryBoxes);
+        order.setTotalKg(rescuedWeight);
+        order.setRescuedWeight(rescuedWeight);
+        order.setRewardPoints(rescuedWeight);
+        order.setRewardApplied(false);
         if ("COD".equalsIgnoreCase(order.getPaymentMethod())) {
             order.setStatus(OrderStatus.PENDING);
             order.setCodAmount(order.getTotalAmount());
@@ -754,7 +776,8 @@ public class OrderServiceImpl implements OrderService {
             // Hoàn trả stockQuantity cho product thường (đã giảm tại PENDING)
             for (OrderDetail detail : order.getOrderDetails()) {
                 Product product = detail.getProduct();
-                product.setStockQuantity(product.getStockQuantity() + detail.getQuantity());
+                product.setStockKg(resolveProductStockKg(product).add(resolveOrderDetailKg(detail)));
+                product.setStockQuantity(product.getStockKg().setScale(0, RoundingMode.DOWN).intValue());
                 productsToUpdate.put(product.getId(), product);
             }
 
@@ -774,10 +797,12 @@ public class OrderServiceImpl implements OrderService {
             productRepository.saveAll(productsToUpdate.values());
             voucherUserService.restoreVoucherForOrder(order);
             cartService.restoreOrderItemsToCart(order);
+            orderRewardService.revokeRewardIfApplied(order);
 
         }
 
         order.setStatus(request.getStatus());
+        orderRewardService.applyRewardIfEligible(order);
 
 
         Order savedOrder = orderRepository.save(order);
@@ -836,6 +861,75 @@ public class OrderServiceImpl implements OrderService {
 
     private String getOrDefault(String input, String defaultValue) {
         return (input == null || input.isBlank()) ? defaultValue : input;
+    }
+
+    private BigDecimal resolveProductWeightKg(Product product) {
+        return BigDecimal.ONE;
+    }
+
+    private BigDecimal resolveProductStockKg(Product product) {
+        if (product.getStockKg() != null) return product.getStockKg();
+        return BigDecimal.valueOf(product.getStockQuantity() == null ? 0 : product.getStockQuantity()).setScale(2, RoundingMode.HALF_UP);
+    }
+
+    private BigDecimal resolveRequestKg(BigDecimal quantityKg, Integer quantity) {
+        BigDecimal resolved = quantityKg != null ? quantityKg : BigDecimal.valueOf(quantity == null ? 1 : quantity);
+        return resolved.setScale(2, RoundingMode.HALF_UP);
+    }
+
+    private Integer resolveLegacyQuantity(BigDecimal quantityKg, Integer quantity) {
+        if (quantity != null && quantity > 0) return quantity;
+        return quantityKg == null ? 1 : Math.max(1, quantityKg.setScale(0, RoundingMode.CEILING).intValue());
+    }
+
+    private BigDecimal resolveOrderDetailKg(OrderDetail detail) {
+        if (detail.getQuantityKg() != null) return detail.getQuantityKg();
+        return BigDecimal.valueOf(detail.getQuantity() == null ? 0 : detail.getQuantity()).setScale(2, RoundingMode.HALF_UP);
+    }
+
+    private BigDecimal resolveProductComboKg(ProductCombo item) {
+        if (item.getQuantityKg() != null) return item.getQuantityKg();
+        return BigDecimal.valueOf(item.getQuantity() == null ? 0 : item.getQuantity()).setScale(2, RoundingMode.HALF_UP);
+    }
+
+    private BigDecimal calculateMysteryBoxUnitWeight(MysteryBox box) {
+        if (box == null) {
+            return BigDecimal.ONE;
+        }
+
+        List<ProductMystery> items = box.getProductMysteries();
+        if (items == null || items.isEmpty()) {
+            items = productMysteryRepository.findByMysteryBox_Id(box.getId());
+        }
+
+        BigDecimal total = BigDecimal.ZERO;
+        for (ProductMystery item : items) {
+            if (item == null || item.getProduct() == null || item.getQuantity() == null || item.getQuantity() <= 0) {
+                continue;
+            }
+            total = total.add(resolveProductWeightKg(item.getProduct()).multiply(BigDecimal.valueOf(item.getQuantity())));
+        }
+
+        return total.signum() > 0 ? total : BigDecimal.ONE;
+    }
+
+    private BigDecimal calculateSnapshotRescuedWeight(List<OrderDetail> orderDetails, List<OrderMysteryBox> mysteryBoxes) {
+        BigDecimal total = BigDecimal.ZERO;
+        if (orderDetails != null) {
+            for (OrderDetail detail : orderDetails) {
+                if (detail.getRescuedWeightKg() != null) {
+                    total = total.add(detail.getRescuedWeightKg());
+                }
+            }
+        }
+        if (mysteryBoxes != null) {
+            for (OrderMysteryBox orderBox : mysteryBoxes) {
+                if (orderBox.getRescuedWeightKg() != null) {
+                    total = total.add(orderBox.getRescuedWeightKg());
+                }
+            }
+        }
+        return total.setScale(2, RoundingMode.HALF_UP);
     }
 
 
