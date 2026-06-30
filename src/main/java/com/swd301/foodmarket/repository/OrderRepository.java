@@ -147,4 +147,60 @@ public interface OrderRepository extends JpaRepository<Order, Integer> {
 
 
     List<Order>  findByPaymentMethodIgnoreCaseAndStatusAndCodSettled(String paymentMethod, OrderStatus status, Boolean codSettled);
+
+    @Query("""
+        SELECT DISTINCT o FROM Order o
+        LEFT JOIN FETCH o.buyer
+        LEFT JOIN FETCH o.shopOwner
+        LEFT JOIN FETCH o.orderDetails od
+        LEFT JOIN FETCH od.product
+        WHERE (:statuses IS NULL OR o.status IN :statuses)
+          AND (:from IS NULL OR o.createdAt >= :from)
+          AND (:to IS NULL OR o.createdAt < :to)
+        ORDER BY o.createdAt DESC
+    """)
+    List<Order> findForAdminExport(
+            @Param("statuses") List<OrderStatus> statuses,
+            @Param("from") LocalDateTime from,
+            @Param("to") LocalDateTime to
+    );
+
+    @Query("""
+        SELECT DISTINCT o FROM Order o
+        LEFT JOIN FETCH o.buyer
+        LEFT JOIN FETCH o.shopOwner
+        LEFT JOIN FETCH o.orderDetails od
+        LEFT JOIN FETCH od.product
+        WHERE o.id IN :orderIds
+    """)
+    List<Order> findByIdInWithDetails(@Param("orderIds") List<Integer> orderIds);
+
+    @Query("""
+        SELECT DISTINCT o FROM Order o
+        LEFT JOIN FETCH o.buyer
+        LEFT JOIN FETCH o.shopOwner
+        LEFT JOIN FETCH o.orderDetails od
+        LEFT JOIN FETCH od.product
+        WHERE o.shopOwner = :shopOwner
+          AND (:statuses IS NULL OR o.status IN :statuses)
+          AND (:from IS NULL OR o.createdAt >= :from)
+          AND (:to IS NULL OR o.createdAt < :to)
+        ORDER BY o.createdAt DESC
+    """)
+    List<Order> findForShopExport(
+            @Param("shopOwner") User shopOwner,
+            @Param("from") LocalDateTime from,
+            @Param("to") LocalDateTime to,
+            @Param("statuses") List<OrderStatus> statuses
+    );
+
+    @Query("""
+        SELECT DISTINCT o FROM Order o
+        LEFT JOIN FETCH o.buyer
+        LEFT JOIN FETCH o.shopOwner
+        LEFT JOIN FETCH o.orderDetails od
+        LEFT JOIN FETCH od.product
+        WHERE o.id = :orderId
+    """)
+    Optional<Order> findByIdWithDetails(@Param("orderId") Integer orderId);
 }
