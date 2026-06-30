@@ -259,6 +259,9 @@ INSERT INTO products (shop_owner_id,category_id,product_name,unit,selling_price,
 (@shop2_id,@cat_trai_cay_quanh_nam,'Nước ép cam đóng chai','chai',25000,0,'Sản phẩm bị từ chối do không thuộc danh mục nông sản tươi.','INACTIVE','https://res.cloudinary.com/dfp44sbsj/image/upload/v1773916481/brands/s5ld5232nl4s4fwczawr.jpg'),
 (@shop2_id,@cat_trai_cay_nhiet_doi,'Trái cây sấy khô','gói',65000,0,'Sản phẩm bị từ chối do thiếu giấy tờ kiểm định an toàn thực phẩm.','INACTIVE','https://images.unsplash.com/photo-1512621776951-a57141f2eefd?w=400&h=300&fit=crop');
 
+-- Set expiry_date xa cho tất cả AVAILABLE products (tránh bị lọc bởi /products/buyer endpoint)
+UPDATE products SET expiry_date = '2030-12-31' WHERE status = 'AVAILABLE';
+
 -- ============================================================
 -- 6. MYSTERY BOXES
 -- ============================================================
