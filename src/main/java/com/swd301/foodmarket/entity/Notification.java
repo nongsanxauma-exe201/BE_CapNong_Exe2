@@ -38,7 +38,7 @@ public class Notification {
 
     // ================= DATA =================
 
-    @Column(length = 50, nullable = false)
+    @Column( nullable = false,columnDefinition = "TEXT")
     String title;
 
     @Column(columnDefinition = "TEXT")
