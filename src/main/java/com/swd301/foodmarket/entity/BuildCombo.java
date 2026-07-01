@@ -67,4 +67,10 @@ public class BuildCombo {
 
     @Column(name = "image_url", length = 500)
     String imageUrl;
+
+    @Column(name = "total_quantity")
+    Integer totalQuantity;
+
+    @Column(name = "sold_quantity")
+    Integer soldQuantity;
 }

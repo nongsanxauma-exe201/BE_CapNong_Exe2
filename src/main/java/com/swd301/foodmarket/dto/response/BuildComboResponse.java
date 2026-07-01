@@ -33,4 +33,8 @@ public class BuildComboResponse {
     List<ProductComboResponse> items;
 
     String imageUrl;
+
+    Integer totalQuantity;
+
+    Integer soldQuantity;
 }

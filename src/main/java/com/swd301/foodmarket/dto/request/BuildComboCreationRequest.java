@@ -33,4 +33,6 @@ public class BuildComboCreationRequest {
     List<ProductComboRequest> items;
 
     String imageUrl;
+
+    Integer totalQuantity;
 }
