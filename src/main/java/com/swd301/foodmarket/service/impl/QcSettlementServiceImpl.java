@@ -149,8 +149,6 @@ public class QcSettlementServiceImpl implements QcSettlementService {
                 BigDecimal actualRefunded = paymentService.refundQcDamage(order, additionalRefund,
                         "Hoàn phần còn lại do buyer từ chối nhận đơn #" + order.getId());
                 if (actualRefunded.signum() > 0) {
-                    BigDecimal currentRefund = order.getRefundAmount() != null ? order.getRefundAmount() : BigDecimal.ZERO;
-                    order.setRefundAmount(currentRefund.add(actualRefunded));
                     order.setRefundReason((order.getRefundReason() == null ? "" : order.getRefundReason() + "\n")
                             + "Buyer từ chối nhận phần còn lại, hoàn thêm " + actualRefunded + "đ");
                 }
@@ -158,6 +156,7 @@ public class QcSettlementServiceImpl implements QcSettlementService {
             }
         }
 
+        syncRefundAmountFromQcRefunded(order);
         updateCodAmount(order);
         applyPostQcStatus(order);
         orderRepository.save(order);
@@ -257,7 +256,7 @@ public class QcSettlementServiceImpl implements QcSettlementService {
 
         Notification notification = Notification.builder()
                 .title("Đơn hàng #" + order.getId() + " đã bị hủy")
-                .message("Toàn bộ hàng không đạt chất lượng. Tiền đã được hoàn vào ví của bạn.")
+                .message(buildQcCancelRefundMessage(order))
                 .evidence(String.valueOf(order.getId()))
                 .receiverType("USER_" + order.getBuyer().getId())
                 .build();
@@ -396,11 +395,26 @@ public class QcSettlementServiceImpl implements QcSettlementService {
         }
         BigDecimal totalAmount = order.getTotalAmount() != null ? order.getTotalAmount() : BigDecimal.ZERO;
         BigDecimal refund = order.getRefundAmount() != null ? order.getRefundAmount() : BigDecimal.ZERO;
+        if (refund.compareTo(totalAmount) > 0) {
+            log.warn("[COD_REFUND_CAP] orderId={} refundAmount {} exceeds total {}, capping",
+                    order.getId(), refund, totalAmount);
+            refund = totalAmount;
+            order.setRefundAmount(refund);
+        }
         BigDecimal codAmount = totalAmount.subtract(refund);
         if (codAmount.compareTo(BigDecimal.ZERO) < 0) {
-            throw new AppException(ErrorCode.INVALID_AMOUNT);
+            codAmount = BigDecimal.ZERO;
         }
         order.setCodAmount(codAmount);
+    }
+
+    /** Đồng bộ refundAmount theo qcRefundedAmount thực tế, tránh vượt tổng đơn. */
+    private void syncRefundAmountFromQcRefunded(Order order) {
+        BigDecimal totalAmount = order.getTotalAmount() != null ? order.getTotalAmount() : BigDecimal.ZERO;
+        BigDecimal qcRefunded = order.getQcRefundedAmount() != null ? order.getQcRefundedAmount() : BigDecimal.ZERO;
+        if (qcRefunded.signum() > 0) {
+            order.setRefundAmount(qcRefunded.min(totalAmount));
+        }
     }
 
     private boolean isAllItemsChecked(Order order) {
@@ -527,8 +541,7 @@ public class QcSettlementServiceImpl implements QcSettlementService {
         String msg = acceptRemaining
                 ? "Bạn đã chọn nhận phần hàng còn lại. Đơn sẽ được đóng gói và giao."
                 : additionalRefund.signum() > 0
-                ? "Bạn đã từ chối nhận phần còn lại. Hoàn thêm "
-                + String.format("%,.0f", additionalRefund) + "đ vào ví."
+                ? buildBuyerRejectRefundMessage(order, additionalRefund)
                 : "Bạn đã từ chối nhận phần còn lại. Đơn sẽ được cập nhật theo kết quả QC.";
         Notification notification = Notification.builder()
                 .title("Xác nhận QC đơn #" + order.getId())
@@ -537,6 +550,22 @@ public class QcSettlementServiceImpl implements QcSettlementService {
                 .receiverType("USER_" + order.getBuyer().getId())
                 .build();
         notificationService.sendNotificationWebsocket(order.getBuyer(), notification);
+    }
+
+    private String buildBuyerRejectRefundMessage(Order order, BigDecimal additionalRefund) {
+        String amount = String.format("%,.0f", additionalRefund) + "đ";
+        if ("COD".equalsIgnoreCase(order.getPaymentMethod())) {
+            return "Bạn đã từ chối nhận phần còn lại. " + amount
+                    + " sẽ được trừ khỏi số tiền COD khi nhận hàng.";
+        }
+        return "Bạn đã từ chối nhận phần còn lại. Hoàn thêm " + amount + " vào ví.";
+    }
+
+    private String buildQcCancelRefundMessage(Order order) {
+        if ("COD".equalsIgnoreCase(order.getPaymentMethod())) {
+            return "Toàn bộ hàng không đạt chất lượng. Số tiền COD khi nhận hàng đã được cập nhật (không thu thêm phần hàng hủy).";
+        }
+        return "Toàn bộ hàng không đạt chất lượng. Tiền đã được hoàn vào ví của bạn.";
     }
 
     private User getCurrentUser() {
