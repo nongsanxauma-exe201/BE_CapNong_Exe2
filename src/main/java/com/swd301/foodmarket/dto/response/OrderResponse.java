@@ -62,4 +62,10 @@ public class OrderResponse {
 
     LocalDateTime codSettledAt;
 
+    Integer checkoutBatchId;
+    Integer batchUnpaidCount;
+
+    BigDecimal qcRefundedAmount;
+    LocalDateTime qcBuyerDecisionDeadline;
+    Boolean qcBuyerAcceptedRemaining;
 }

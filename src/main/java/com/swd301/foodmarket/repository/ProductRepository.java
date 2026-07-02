@@ -21,6 +21,10 @@ import java.util.List;
 public interface ProductRepository extends JpaRepository<Product, Integer> {
     List<Product> findByShopOwnerId(Integer ownerId);
 
+    List<Product> findByShopOwnerIdAndStatus(Integer ownerId, ProductStatus status);
+
+    Page<Product> findByShopOwnerIdAndStatus(Integer ownerId, ProductStatus status, Pageable pageable);
+
     Page<Product> findAll(Pageable pageable);
 
     Page<Product> findByShopOwnerId(Integer ownerId, Pageable pageable);

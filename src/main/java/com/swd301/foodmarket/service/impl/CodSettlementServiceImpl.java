@@ -16,6 +16,7 @@ import com.swd301.foodmarket.repository.TransactionRepository;
 import com.swd301.foodmarket.repository.WalletRepository;
 import com.swd301.foodmarket.service.CodSettlementService;
 import com.swd301.foodmarket.service.NotificationService;
+import com.swd301.foodmarket.service.support.OrderSettlementCalculator;
 import jakarta.transaction.Transactional;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -37,6 +38,7 @@ public class CodSettlementServiceImpl implements CodSettlementService {
     private final TransactionRepository transactionRepository;
     private final OrderMapper orderMapper;
     private final NotificationService notificationService;
+    private final OrderSettlementCalculator orderSettlementCalculator;
 
     @Override
     @Transactional
@@ -76,17 +78,13 @@ public class CodSettlementServiceImpl implements CodSettlementService {
             throw new AppException(ErrorCode.SHIPPER_NOT_FOUND);
         }
 
-        BigDecimal orderTotalAmount = order.getTotalAmount() != null
-                ? order.getTotalAmount()
-                : BigDecimal.ZERO;
-        BigDecimal shippingDiscountAmount = order.getShippingDiscountAmount() != null
-                ? order.getShippingDiscountAmount()
-                : BigDecimal.ZERO;
-        BigDecimal settlementTotal = orderTotalAmount.add(shippingDiscountAmount);
-
-        BigDecimal shippingFee = order.getShippingFee() != null
-                ? order.getShippingFee()
-                : BigDecimal.ZERO;
+        OrderSettlementCalculator.SettlementAmounts amounts = orderSettlementCalculator.calculate(order);
+        BigDecimal orderTotalAmount = amounts.buyerPaid();
+        BigDecimal shippingDiscountAmount = amounts.shippingDiscountAmount();
+        BigDecimal platformBatchSubsidy = amounts.platformBatchSubsidy();
+        BigDecimal settlementTotal = amounts.settlementTotal();
+        BigDecimal shippingFee = amounts.shippingFee();
+        BigDecimal shopGross = amounts.shopGross();
 
         BigDecimal refundAmount = order.getRefundAmount() != null
                 ? order.getRefundAmount()
@@ -105,8 +103,6 @@ public class CodSettlementServiceImpl implements CodSettlementService {
             );
             throw new AppException(ErrorCode.INVALID_AMOUNT);
         }
-
-        BigDecimal shopGross = settlementTotal.subtract(shippingFee);
 
         if (refundAmount.compareTo(shopGross) > 0) {
             log.error("[COD_SETTLEMENT_INVALID_REFUND] orderId={}, refundAmount={}, shopGross={}",
@@ -138,10 +134,11 @@ public class CodSettlementServiceImpl implements CodSettlementService {
                 order.getBuyer() != null ? order.getBuyer().getId() : null
         );
 
-        log.info("[COD_AMOUNT_INPUT] buyerPaid={}, shippingFee={}, shippingDiscountAmount={}, settlementTotal={}, refundAmount={}, codAmount={}",
+        log.info("[COD_AMOUNT_INPUT] buyerPaid={}, shippingFee={}, shippingDiscountAmount={}, platformBatchSubsidy={}, settlementTotal={}, refundAmount={}, codAmount={}",
                 orderTotalAmount,
                 shippingFee,
                 shippingDiscountAmount,
+                platformBatchSubsidy,
                 settlementTotal,
                 refundAmount,
                 codAmount
@@ -229,7 +226,7 @@ public class CodSettlementServiceImpl implements CodSettlementService {
 
         // Tiền thật admin/platform nhận từ shipper sau đối soát COD.
         platformWallet.setTotalBalance(
-                platformWallet.getTotalBalance().add(codAmount)
+                platformWallet.getTotalBalance().add(codAmount).subtract(platformBatchSubsidy)
         );
 
         // Platform đang giữ hộ shop + shipper.
@@ -397,6 +394,11 @@ public class CodSettlementServiceImpl implements CodSettlementService {
                     platformWallet.getTotalBalance(), "ORDER_" + order.getId(),
                     "Admin/platform bù phí vận chuyển COD cho shipper đơn #" + order.getId());
         }
+        if (platformBatchSubsidy.compareTo(BigDecimal.ZERO) > 0) {
+            saveTransaction(TransactionType.PLATFORM_VOUCHER_SUBSIDY, platformBatchSubsidy.negate(),
+                    platformWallet.getTotalBalance(), "ORDER_" + order.getId(),
+                    "Admin/platform bù voucher sàn COD đơn #" + order.getId());
+        }
 
         log.info("[COD_SETTLEMENT_SAVED] orderId={}, codAmount={}, codSettled={}, codSettledAt={}",
                 order.getId(),
@@ -533,11 +535,10 @@ public class CodSettlementServiceImpl implements CodSettlementService {
     }
 
     private BigDecimal resolveCodPrepaidAmount(Order order) {
-        BigDecimal total = order.getTotalAmount() != null ? order.getTotalAmount() : BigDecimal.ZERO;
-        BigDecimal shipping = order.getShippingFee() != null ? order.getShippingFee() : BigDecimal.ZERO;
-        BigDecimal shippingDiscount = order.getShippingDiscountAmount() != null ? order.getShippingDiscountAmount() : BigDecimal.ZERO;
+        OrderSettlementCalculator.SettlementAmounts amounts = orderSettlementCalculator.calculate(order);
         BigDecimal refund = order.getRefundAmount() != null ? order.getRefundAmount() : BigDecimal.ZERO;
-        BigDecimal shopChargeable = total.add(shippingDiscount).subtract(shipping).subtract(refund);
+        BigDecimal shipping = amounts.shippingFee();
+        BigDecimal shopChargeable = amounts.shopGross().subtract(refund);
         if (shopChargeable.compareTo(BigDecimal.ZERO) < 0) {
             shopChargeable = BigDecimal.ZERO;
         }

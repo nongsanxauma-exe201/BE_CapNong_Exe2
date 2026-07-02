@@ -24,6 +24,9 @@ public class QualityCheckResponse {
     private BigDecimal approvedKg;
     private BigDecimal rejectedKg;
     private BigDecimal refundedKg;
+    private String damageTier;
+    private boolean lineCancelled;
+    private BigDecimal lineRefundAmount;
 
 
     @Data

@@ -171,7 +171,7 @@ public class ProductServiceImpl implements ProductService {
 
     @Override
     public List<ProductResponse> getAll() {
-        return productRepository.findAll()
+        return productRepository.findByStatus(ProductStatus.AVAILABLE)
                 .stream()
                 .map(this::mapToResponse)
                 .toList();
@@ -196,6 +196,7 @@ public class ProductServiceImpl implements ProductService {
     public ProductResponse getById(Integer id) {
         Product product = productRepository.findById(id)
                 .orElseThrow(() -> new AppException(ErrorCode.PRODUCT_NOT_FOUND));
+        assertBuyerVisibleProduct(product);
 
         ProductResponse response = mapToResponse(product);
 
@@ -218,7 +219,7 @@ public class ProductServiceImpl implements ProductService {
 
     @Override
     public List<ProductResponse> getByShopId(Integer shopId) {
-        return productRepository.findByShopOwnerId(shopId)
+        return productRepository.findByShopOwnerIdAndStatus(shopId, ProductStatus.AVAILABLE)
                 .stream()
                 .map(this::mapToResponse)
                 .toList();
@@ -227,7 +228,7 @@ public class ProductServiceImpl implements ProductService {
     @Override
     public PageResponse<ProductResponse> getByShopIdPaged(Integer shopId, int page, int size) {
         Pageable pageable = PageRequest.of(page, size, Sort.by("id").descending());
-        Page<Product> pageResult = productRepository.findByShopOwnerId(shopId, pageable);
+        Page<Product> pageResult = productRepository.findByShopOwnerIdAndStatus(shopId, ProductStatus.AVAILABLE, pageable);
         List<ProductResponse> productResponses = new ArrayList<>();
         for (Product p : pageResult.getContent()) {
             ProductResponse pr = mapToResponse(p);
@@ -312,8 +313,9 @@ public class ProductServiceImpl implements ProductService {
 
     @Override
     public List<ProductImageResponse> getImages(Integer productId) {
-        productRepository.findById(productId)
+        Product product = productRepository.findById(productId)
                 .orElseThrow(() -> new AppException(ErrorCode.PRODUCT_NOT_FOUND));
+        assertBuyerVisibleProduct(product);
         return toImageResponseList(productImageRepository.findByProductIdOrderByDisplayOrderAsc(productId));
     }
 
@@ -426,6 +428,18 @@ public class ProductServiceImpl implements ProductService {
     private void verifyOwner(Product product) {
         if (!product.getShopOwner().getId().equals(getCurrentUser().getId())) {
             throw new AppException(ErrorCode.UNAUTHORIZED);
+        }
+    }
+
+    private void assertBuyerVisibleProduct(Product product) {
+        if (product.getStatus() != ProductStatus.AVAILABLE) {
+            throw new AppException(ErrorCode.PRODUCT_NOT_FOUND);
+        }
+        if (product.getShopOwner() != null && !product.getShopOwner().isShopActive()) {
+            throw new AppException(ErrorCode.PRODUCT_NOT_FOUND);
+        }
+        if (product.getExpiryDate() != null && !product.getExpiryDate().isAfter(LocalDate.now())) {
+            throw new AppException(ErrorCode.PRODUCT_NOT_FOUND);
         }
     }
 

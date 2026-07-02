@@ -250,7 +250,7 @@ public class VoucherServiceImpl implements VoucherService {
 
     @Override
     public Page<VoucherResponse> getVoucherForBuyer(int page, int size, Integer shopId) {
-
+User currentUser = getCurrentUser();
         Pageable pageable = PageRequest.of(page, size, Sort.by("createAt").descending());
         User user = userRepository.findById(shopId).orElseThrow(
                 () -> new AppException(ErrorCode.USER_NOT_EXISTED)
@@ -259,10 +259,9 @@ public class VoucherServiceImpl implements VoucherService {
         {
             throw new AppException(ErrorCode.USER_NOT_EXISTED);
         }
-        Page<Voucher> voucherPage = voucherRespository.getVoucherForBuyer(user, LocalDateTime.now(), pageable);
+        Page<Voucher> voucherPage = voucherRespository.getVoucherForBuyer(user, LocalDateTime.now(), pageable,currentUser);
         return voucherPage.map(voucherMapper::toVoucherResponse);
     }
-
     private User getCurrentUser() {
         String name = SecurityContextHolder.getContext().getAuthentication().getName();
         User user = userRepository.findByEmail(name).orElseThrow(

@@ -84,6 +84,14 @@ public class WalletServiceImpl implements WalletService {
     }
 
     @Override
+    public WalletResponse getPlatformWallet() {
+        // Authorization is handled at controller level (@PreAuthorize ADMIN)
+        Wallet platformWallet = walletRepository.findByType(WalletType.PLATFORM)
+                .orElseThrow(() -> new AppException(ErrorCode.PLATFORM_WALLET_NOT_FOUND));
+        return walletMapper.toResponse(platformWallet);
+    }
+
+    @Override
     public WithdrawRequestResponse createShipperWithdrawRequest(WithdrawRequestCreationRequest request) {
         User shipper = getCurrentUser();
 

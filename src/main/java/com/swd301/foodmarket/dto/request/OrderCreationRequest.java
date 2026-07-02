@@ -22,5 +22,7 @@ public class OrderCreationRequest {
     List<UUID> voucherUserIds;
     List<String> voucherCodes;
 
+    Boolean restrictToShopVouchers;
+
     List<OrderItemRequest> items;
 }
