@@ -103,7 +103,7 @@ public class OtpVerificationServiceImpl implements OtpVerificationService {
         try {
             MimeMessageHelper helper = new MimeMessageHelper(mimeMessage, true, "UTF-8");
             helper.setTo(mailBody.to());
-            helper.setFrom("vinhhien8882004@gmail.com");
+            helper.setFrom("nongsanxauma@gmail.com");
             helper.setSubject(mailBody.subject());
             helper.setText(mailBody.text(), true);
             javaMailSender.send(mimeMessage);
