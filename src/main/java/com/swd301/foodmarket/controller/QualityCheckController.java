@@ -6,6 +6,7 @@ import com.swd301.foodmarket.dto.response.QualityCheckResponse;
 import com.swd301.foodmarket.service.QualityCheckService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.MediaType;
+import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.util.MultiValueMap;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.multipart.MultipartFile;
@@ -18,6 +19,7 @@ public class QualityCheckController {
 
 
     @PostMapping(consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
+    @PreAuthorize("hasAnyRole('STAFF', 'ADMIN')")
     public ApiResponse<QualityCheckResponse> createQualityCheck(
             @RequestPart QualityCheckRequest qualityCheckRequest,
             @RequestParam MultiValueMap<String, MultipartFile> fileMap

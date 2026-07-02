@@ -175,7 +175,7 @@ public class PayosServiceImpl implements PayosService {
                 .amount(amount.longValue())
                 .description(truncateDescription("Thanh toan " + customerName))
                 .returnUrl(frontUrl+"/payment/success")
-                .cancelUrl(frontUrl+"/payment/cancel?source=payos-cancel")
+                .cancelUrl(frontUrl+"/payment/cancel")
                 .build();
 
         PayOSCreateResponse response = createPaymentLink(request);

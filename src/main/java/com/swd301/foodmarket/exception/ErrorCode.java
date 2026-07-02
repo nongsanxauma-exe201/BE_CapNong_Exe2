@@ -78,6 +78,8 @@ public enum ErrorCode {
     ORDER_NOT_PAYABLE(5004, "Order is not in a payable status", HttpStatus.BAD_REQUEST),
     INVALID_REQUEST(5005, "Invalid request data", HttpStatus.BAD_REQUEST),
     ORDER_ALREADY_TAKEN(4009, "Đơn hàng này đã được shipper khác nhận", HttpStatus.BAD_REQUEST),
+    ORDER_MULTI_SHOP_NOT_ALLOWED(4010, "Giỏ hàng có sản phẩm từ nhiều cửa hàng. Vui lòng đặt từng cửa hàng riêng hoặc dùng checkout batch.", HttpStatus.BAD_REQUEST),
+    CHECKOUT_BATCH_NOT_FOUND(4011, "Không tìm thấy phiên thanh toán gộp", HttpStatus.NOT_FOUND),
     LOCATION_NOT_FOUND(4004, "Không tìm thấy vị trí shipper cho đơn hàng này", HttpStatus.NOT_FOUND),
     PAYMENT_ALREADY_SUCCESS(5006, "Payment has already been marked as successful", HttpStatus.BAD_REQUEST),
 
@@ -99,6 +101,7 @@ public enum ErrorCode {
     QUALITY_CRIERIA_NOT_FOUND(10001, "Quality criteria not found", HttpStatus.NOT_FOUND),
     QUALITY_CHECK_NOT_FOUND(10002, "Quality check not found", HttpStatus.NOT_FOUND),
     INVALID_QUALITY_CHECK_REQUEST(10003, "Invalid quality check request", HttpStatus.BAD_REQUEST),
+    QC_BUYER_DECISION_INVALID(10004, "Order is not awaiting buyer QC decision", HttpStatus.BAD_REQUEST),
     // Vie QR
     BANK_NOT_FOUND(11001, "bankBin is required", HttpStatus.BAD_REQUEST),
     ACCOUNT_NOT_FOUND(11002, "accountNo is required", HttpStatus.BAD_REQUEST),

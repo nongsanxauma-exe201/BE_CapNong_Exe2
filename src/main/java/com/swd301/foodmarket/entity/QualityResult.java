@@ -3,6 +3,8 @@ package com.swd301.foodmarket.entity;
 import jakarta.persistence.*;
 import lombok.*;
 
+import com.swd301.foodmarket.enums.QcDamageTier;
+
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
 import java.time.ZoneId;
@@ -46,6 +48,14 @@ public class QualityResult {
     private BigDecimal rejectedKg;
     @Column(name = "refunded_kg", precision = 12, scale = 2)
     private BigDecimal refundedKg;
+    @Enumerated(EnumType.STRING)
+    @Column(name = "damage_tier", length = 20)
+    private QcDamageTier damageTier;
+    @Builder.Default
+    @Column(name = "line_cancelled")
+    private boolean lineCancelled = false;
+    @Column(name = "line_refund_amount", precision = 18, scale = 2)
+    private BigDecimal lineRefundAmount;
     @Builder.Default
     private boolean refunded = false;
     @Builder.Default

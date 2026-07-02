@@ -3,6 +3,7 @@ package com.swd301.foodmarket.controller;
 import com.swd301.foodmarket.dto.request.CreatePaymentRequest;
 import com.swd301.foodmarket.dto.request.PayOSWebhookRequest;
 import com.swd301.foodmarket.dto.response.PaymentResponse;
+import com.swd301.foodmarket.dto.response.ResumePaymentOptionsResponse;
 import com.swd301.foodmarket.service.PaymentService;
 import com.swd301.foodmarket.dto.response.ApiResponse;
 import jakarta.validation.Valid;
@@ -83,6 +84,20 @@ public class PaymentController {
     public ApiResponse<PaymentResponse> getLatestPendingByOrderId(@PathVariable Integer orderId) {
         return ApiResponse.<PaymentResponse>builder()
                 .result(paymentService.getLatestPendingByOrderId(orderId))
+                .build();
+    }
+
+    @GetMapping("/order/{orderId}/resume-options")
+    public ApiResponse<ResumePaymentOptionsResponse> getResumePaymentOptions(@PathVariable Integer orderId) {
+        return ApiResponse.<ResumePaymentOptionsResponse>builder()
+                .result(paymentService.getResumePaymentOptions(orderId))
+                .build();
+    }
+
+    @PostMapping("/batch/{batchId}/payos")
+    public ApiResponse<PaymentResponse> createBatchPayOS(@PathVariable Integer batchId) {
+        return ApiResponse.<PaymentResponse>builder()
+                .result(paymentService.createBatchPayOS(batchId))
                 .build();
     }
 

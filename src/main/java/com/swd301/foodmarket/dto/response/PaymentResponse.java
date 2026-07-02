@@ -6,6 +6,7 @@ import lombok.experimental.FieldDefaults;
 
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
+import java.util.List;
 
 @Getter
 @Setter
@@ -27,8 +28,11 @@ public class PaymentResponse {
     LocalDateTime createdAt;
     LocalDateTime updatedAt;
 
-    // thêm 3 field này
     String payosOrderCode;
     String checkoutUrl;
     String qrCodeUrl;
+
+    Integer batchId;
+    List<Integer> orderIds;
+    String paymentScope;
 }

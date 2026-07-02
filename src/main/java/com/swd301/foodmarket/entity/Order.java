@@ -42,6 +42,11 @@ public class Order {
     User shopOwner;
 
     @ManyToOne
+    @JoinColumn(name = "checkout_batch_id")
+    @JsonIgnore
+    CheckoutBatch checkoutBatch;
+
+    @ManyToOne
     @JoinColumn(name = "shipper_id")
     @JsonIgnore
     User shipper;
@@ -115,6 +120,10 @@ public class Order {
     BigDecimal shippingDiscountAmount = BigDecimal.ZERO;
 
     @Builder.Default
+    @Column(name = "batch_discount_amount", precision = 18, scale = 2)
+    BigDecimal batchDiscountAmount = BigDecimal.ZERO;
+
+    @Builder.Default
     @Column(name = "total_kg", precision = 12, scale = 2)
     BigDecimal totalKg = BigDecimal.ZERO;
 
@@ -169,4 +178,14 @@ public class Order {
     private LocalDateTime shipperPaidAt;
     private LocalDateTime codCashConfirmedAt;
     private LocalDateTime codRefundedAt;
+
+    @Builder.Default
+    @Column(name = "qc_refunded_amount", precision = 18, scale = 2)
+    private BigDecimal qcRefundedAmount = BigDecimal.ZERO;
+
+    @Column(name = "qc_buyer_decision_deadline")
+    private LocalDateTime qcBuyerDecisionDeadline;
+
+    @Column(name = "qc_buyer_accepted_remaining")
+    private Boolean qcBuyerAcceptedRemaining;
 }

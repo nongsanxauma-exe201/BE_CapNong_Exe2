@@ -14,6 +14,7 @@ public interface WalletService {
     WalletResponse getMyWallet();
 
     WalletResponse getMyShipperWallet();
+    WalletResponse getPlatformWallet();
 
     WithdrawRequestResponse createWithdrawRequest(WithdrawRequestCreationRequest request);
 

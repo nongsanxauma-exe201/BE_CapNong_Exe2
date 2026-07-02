@@ -1,7 +1,9 @@
 package com.swd301.foodmarket.controller;
 
+import com.swd301.foodmarket.dto.request.CheckoutBatchRequest;
 import com.swd301.foodmarket.dto.request.OrderCreationRequest;
 import com.swd301.foodmarket.dto.request.OrderUpdateRequest;
+import com.swd301.foodmarket.dto.request.QcBuyerDecisionRequest;
 import com.swd301.foodmarket.dto.response.*;
 import com.swd301.foodmarket.enums.OrderStatus;
 import com.swd301.foodmarket.service.OrderService;
@@ -105,6 +107,13 @@ public class OrderController {
                 .build();
     }
 
+    @PostMapping("/checkout-batch")
+    public ApiResponse<CheckoutBatchResponse> checkoutBatch(@RequestBody @Valid CheckoutBatchRequest request) {
+        return ApiResponse.<CheckoutBatchResponse>builder()
+                .result(orderService.checkoutBatch(request))
+                .build();
+    }
+
     @PatchMapping(value =  "/{id}", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
     public ApiResponse<OrderResponse> updateOrder(
             @PathVariable Integer id,
@@ -114,6 +123,16 @@ public class OrderController {
         log.info("Request status: {}", request.getStatus());
         return ApiResponse.<OrderResponse>builder()
                 .result(orderService.updateOrder(id, request,files))
+                .build();
+    }
+
+    @PostMapping("/{id}/qc-buyer-decision")
+    public ApiResponse<OrderResponse> qcBuyerDecision(
+            @PathVariable Integer id,
+            @RequestBody @Valid QcBuyerDecisionRequest request
+    ) {
+        return ApiResponse.<OrderResponse>builder()
+                .result(orderService.processQcBuyerDecision(id, Boolean.TRUE.equals(request.getAcceptRemaining())))
                 .build();
     }
 

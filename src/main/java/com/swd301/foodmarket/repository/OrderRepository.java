@@ -18,6 +18,7 @@ import java.util.Optional;
 public interface OrderRepository extends JpaRepository<Order, Integer> {
 
     List<Order> findByShipperIsNullAndStatus(OrderStatus status);
+    List<Order> findByCheckoutBatchId(Integer checkoutBatchId);
     Page<Order> findByShipperIsNullAndStatus(OrderStatus status, Pageable pageable);
 
     List<Order> findByShipper(User shipper);
