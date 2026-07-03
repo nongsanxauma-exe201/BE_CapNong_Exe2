@@ -195,10 +195,6 @@ public class PaymentServiceImpl implements PaymentService {
 
         paymentRepository.save(payment);
 
-        if (order.getCheckoutBatch() != null) {
-            invalidateBatchPayosLink(order.getCheckoutBatch());
-        }
-
         return toOrderPaymentResponse(payment);
     }
 
@@ -632,7 +628,7 @@ public class PaymentServiceImpl implements PaymentService {
         return paymentRepository
                 .findTopByOrderIdAndStatusOrderByCreatedAtDesc(orderId, PaymentStatus.PENDING)
                 .map(this::toOrderPaymentResponse)
-                .orElseGet(() -> resolvePendingBatchPaymentByOrderId(orderId));
+                .orElse(null);
     }
 
     @Override
@@ -640,13 +636,27 @@ public class PaymentServiceImpl implements PaymentService {
         Order order = orderRepository.findById(orderId)
                 .orElseThrow(() -> new AppException(ErrorCode.ORDER_NOT_FOUND));
 
+        // Terminal state check applies regardless of batch membership
+        if (order.getStatus() == OrderStatus.PAID
+                || order.getStatus() == OrderStatus.DELIVERED
+                || order.getStatus() == OrderStatus.CONFIRMED
+                || order.getStatus() == OrderStatus.READY_FOR_PICKUP
+                || order.getStatus() == OrderStatus.SHIPPING
+                || order.getStatus() == OrderStatus.QUALITY_CHECKED
+                || order.getStatus() == OrderStatus.READY) {
+            throw new AppException(ErrorCode.ORDER_ALREADY_PAID);
+        }
+        if (order.getStatus() == OrderStatus.CANCELLED || order.getStatus() == OrderStatus.FAILED) {
+            throw new AppException(ErrorCode.ORDER_ALREADY_CANCELLED);
+        }
+
         CheckoutBatch batch = order.getCheckoutBatch();
         if (batch == null || batch.getStatus() == CheckoutBatchStatus.CANCELLED) {
             PaymentResponse singleOrderPayment = null;
             try {
                 singleOrderPayment = getLatestPendingByOrderId(orderId);
             } catch (AppException ignored) {
-                // no pending payment yet
+                // no pending payment yet — will attempt to create one
             }
             return ResumePaymentOptionsResponse.builder()
                     .isBatch(false)
@@ -656,7 +666,7 @@ public class PaymentServiceImpl implements PaymentService {
         }
 
         if (batch.getStatus() == CheckoutBatchStatus.PAID) {
-            throw new AppException(ErrorCode.ORDER_NOT_PAYABLE);
+            throw new AppException(ErrorCode.ORDER_ALREADY_PAID);
         }
 
         List<Order> unpaid = getUnpaidPayosOrders(batch);
