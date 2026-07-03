@@ -17,6 +17,7 @@ import com.swd301.foodmarket.repository.ProductRepository;
 import com.swd301.foodmarket.repository.UserRepository;
 import com.swd301.foodmarket.service.BuildComboService;
 import com.swd301.foodmarket.service.CloudinaryService;
+import jakarta.transaction.Transactional;
 import lombok.RequiredArgsConstructor;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.context.SecurityContextHolder;
@@ -38,12 +39,18 @@ public class BuildComboServiceImpl implements BuildComboService {
     private final BuildComboMapper comboMapper;
     private final CloudinaryService cloudinaryService;
 
+    @Transactional
     @Override
     public BuildComboResponse create(BuildComboCreationRequest request, MultipartFile image) {
         User shopOwner = getCurrentUser();
 
+        int totalQuantity = request.getTotalQuantity() != null && request.getTotalQuantity() > 0
+                ? request.getTotalQuantity() : 1;
+
         BuildCombo combo = comboMapper.toEntity(request);
         combo.setShopOwner(shopOwner);
+        combo.setTotalQuantity(totalQuantity);
+        combo.setSoldQuantity(0);
 
         if (image != null && !image.isEmpty()) {
             String imageUrl = cloudinaryService.uploadImage(image);
@@ -66,15 +73,27 @@ public class BuildComboServiceImpl implements BuildComboService {
 
         combo.setItems(items);
 
-
         BigDecimal total = items.stream()
                 .map(i -> i.getProduct().getSellingPrice()
                         .multiply(resolveProductComboKg(i)))
                 .reduce(BigDecimal.ZERO, BigDecimal::add);
 
-
         if (request.getDiscountPrice().compareTo(total) > 0) {
             throw new AppException(ErrorCode.INVALID_PRICE);
+        }
+
+        // Lock stock for all combos (same pattern as MysteryBox)
+        for (ProductCombo item : items) {
+            Product product = item.getProduct();
+            BigDecimal totalNeededKg = resolveProductComboKg(item)
+                    .multiply(BigDecimal.valueOf(totalQuantity));
+            BigDecimal currentStock = resolveProductStockKg(product);
+            if (currentStock.compareTo(totalNeededKg) < 0) {
+                throw new AppException(ErrorCode.OUT_OF_STOCK);
+            }
+            product.setStockKg(currentStock.subtract(totalNeededKg));
+            product.setStockQuantity(product.getStockKg().setScale(0, RoundingMode.DOWN).intValue());
+            productRepository.save(product);
         }
 
         return comboMapper.toResponse(comboRepository.save(combo));
@@ -135,6 +154,7 @@ public class BuildComboServiceImpl implements BuildComboService {
         return comboMapper.toResponse(comboRepository.save(combo));
     }
 
+    @Transactional
     @Override
     public void delete(Integer id) {
 
@@ -143,6 +163,22 @@ public class BuildComboServiceImpl implements BuildComboService {
 
         if (!combo.getShopOwner().getId().equals(getCurrentUser().getId())) {
             throw new AppException(ErrorCode.UNAUTHORIZED);
+        }
+
+        // Restore stock for unsold combos
+        int totalQty = combo.getTotalQuantity() != null ? combo.getTotalQuantity() : 0;
+        int soldQty = combo.getSoldQuantity() != null ? combo.getSoldQuantity() : 0;
+        int remaining = totalQty - soldQty;
+
+        if (remaining > 0 && combo.getItems() != null) {
+            for (ProductCombo item : combo.getItems()) {
+                Product product = item.getProduct();
+                BigDecimal restoreKg = resolveProductComboKg(item)
+                        .multiply(BigDecimal.valueOf(remaining));
+                product.setStockKg(resolveProductStockKg(product).add(restoreKg));
+                product.setStockQuantity(product.getStockKg().setScale(0, RoundingMode.DOWN).intValue());
+                productRepository.save(product);
+            }
         }
 
         comboRepository.delete(combo);
@@ -214,6 +250,12 @@ public class BuildComboServiceImpl implements BuildComboService {
 
         return userRepository.findByEmail(email)
                 .orElseThrow(() -> new AppException(ErrorCode.USER_NOT_EXISTED));
+    }
+
+    private BigDecimal resolveProductStockKg(Product product) {
+        if (product.getStockKg() != null) return product.getStockKg();
+        return BigDecimal.valueOf(product.getStockQuantity() == null ? 0 : product.getStockQuantity())
+                .setScale(2, RoundingMode.HALF_UP);
     }
 
     private BigDecimal resolveComboItemKg(ProductComboRequest itemReq) {

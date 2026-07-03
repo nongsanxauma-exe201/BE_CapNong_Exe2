@@ -655,7 +655,7 @@ public class UserServiceImpl implements UserService {
             MimeMessage message = javaMailSender.createMimeMessage();
             MimeMessageHelper helper = new MimeMessageHelper(message, true, "UTF-8");
             helper.setTo(user.getEmail());
-            helper.setFrom("vinhhien8882004@gmail.com");
+            helper.setFrom("nongsanxauma@gmail.com");
             helper.setSubject("Tài khoản người bán của bạn đã được duyệt - Nông sản xấu mã");
             helper.setText(html, true);
             javaMailSender.send(message);
@@ -674,7 +674,7 @@ public class UserServiceImpl implements UserService {
             MimeMessage message = javaMailSender.createMimeMessage();
             MimeMessageHelper helper = new MimeMessageHelper(message, true, "UTF-8");
             helper.setTo(user.getEmail());
-            helper.setFrom("vinhhien8882004@gmail.com");
+            helper.setFrom("nongsanxauma@gmail.com");
             helper.setSubject("Hồ sơ tài xế của bạn đã được duyệt - Nông sản xấu mã");
             helper.setText(html, true);
             javaMailSender.send(message);
