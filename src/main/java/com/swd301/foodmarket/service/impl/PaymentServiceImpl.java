@@ -1080,8 +1080,7 @@ public class PaymentServiceImpl implements PaymentService {
         String formattedAmount = String.format("%,.0f", refundNow) + "đ";
         Notification notification = Notification.builder()
                 .title("Hoàn tiền QC đơn #" + order.getId())
-                .message((reason != null ? reason + ". " : "")
-                        + formattedAmount + " đã được hoàn vào ví của bạn.")
+                .message(buildQcRefundNotificationMessage(order, formattedAmount, reason))
                 .evidence(String.valueOf(order.getId()))
                 .receiverType("USER_" + order.getBuyer().getId())
                 .build();
@@ -1159,5 +1158,12 @@ public class PaymentServiceImpl implements PaymentService {
         }
     }
 
+    private String buildQcRefundNotificationMessage(Order order, String formattedAmount, String reason) {
+        String prefix = reason != null ? reason + ". " : "";
+        if ("COD".equalsIgnoreCase(order.getPaymentMethod())) {
+            return prefix + formattedAmount + " đã được trừ khỏi số tiền COD khi nhận hàng.";
+        }
+        return prefix + formattedAmount + " đã được hoàn vào ví của bạn.";
+    }
 
 }
