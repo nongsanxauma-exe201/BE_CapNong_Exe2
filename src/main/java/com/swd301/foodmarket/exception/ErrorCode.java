@@ -82,6 +82,8 @@ public enum ErrorCode {
     CHECKOUT_BATCH_NOT_FOUND(4011, "Không tìm thấy phiên thanh toán gộp", HttpStatus.NOT_FOUND),
     LOCATION_NOT_FOUND(4004, "Không tìm thấy vị trí shipper cho đơn hàng này", HttpStatus.NOT_FOUND),
     PAYMENT_ALREADY_SUCCESS(5006, "Payment has already been marked as successful", HttpStatus.BAD_REQUEST),
+    ORDER_ALREADY_PAID(5007, "Đơn hàng này đã được thanh toán thành công. Cảm ơn bạn!", HttpStatus.BAD_REQUEST),
+    ORDER_ALREADY_CANCELLED(5008, "Đơn hàng này đã bị hủy và không thể thanh toán.", HttpStatus.BAD_REQUEST),
 
     //Build plan
     BUILD_PLAN_NOT_FOUND(6001, "Build plan not found", HttpStatus.NOT_FOUND),

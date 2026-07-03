@@ -46,6 +46,10 @@ public class Order {
     @JsonIgnore
     CheckoutBatch checkoutBatch;
 
+    // Read-only FK column — avoids lazy-proxy init in mapper
+    @Column(name = "checkout_batch_id", insertable = false, updatable = false)
+    Integer checkoutBatchFkId;
+
     @ManyToOne
     @JoinColumn(name = "shipper_id")
     @JsonIgnore

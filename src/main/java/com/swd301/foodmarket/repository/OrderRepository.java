@@ -30,6 +30,41 @@ public interface OrderRepository extends JpaRepository<Order, Integer> {
     Page<Order> findByBuyerId(Integer buyerId, Pageable pageable);
     Page<Order> findByBuyerIdAndStatusIn(Integer buyerId, List<OrderStatus> statuses, Pageable pageable);
 
+    @Query(
+        value = """
+            SELECT o FROM Order o
+            LEFT JOIN FETCH o.checkoutBatch
+            WHERE o.buyer.id = :buyerId
+              AND o.status IN :statuses
+        """,
+        countQuery = """
+            SELECT COUNT(o) FROM Order o
+            WHERE o.buyer.id = :buyerId
+              AND o.status IN :statuses
+        """
+    )
+    Page<Order> findByBuyerIdAndStatusInWithBatch(
+            @Param("buyerId") Integer buyerId,
+            @Param("statuses") List<OrderStatus> statuses,
+            Pageable pageable
+    );
+
+    @Query(
+        value = """
+            SELECT o FROM Order o
+            LEFT JOIN FETCH o.checkoutBatch
+            WHERE o.buyer.id = :buyerId
+        """,
+        countQuery = """
+            SELECT COUNT(o) FROM Order o
+            WHERE o.buyer.id = :buyerId
+        """
+    )
+    Page<Order> findByBuyerIdWithBatch(
+            @Param("buyerId") Integer buyerId,
+            Pageable pageable
+    );
+
     List<Order> findByShipperAndStatus(User shipper, OrderStatus status);
 
     @Query("""

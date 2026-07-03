@@ -539,12 +539,13 @@ public class OrderServiceImpl implements OrderService {
         return getOrdersByUserIdPaged(userId, page, size, null);
     }
 
+    @Transactional(readOnly = true)
     @Override
     public PageResponse<OrderResponse> getOrdersByUserIdPaged(Integer userId, int page, int size, List<OrderStatus> statuses) {
         Pageable pageable = PageRequest.of(page, size, Sort.by("createdAt").descending());
         Page<Order> pageResult = (statuses == null || statuses.isEmpty())
-                ? orderRepository.findByBuyerId(userId, pageable)
-                : orderRepository.findByBuyerIdAndStatusIn(userId, statuses, pageable);
+                ? orderRepository.findByBuyerIdWithBatch(userId, pageable)
+                : orderRepository.findByBuyerIdAndStatusInWithBatch(userId, statuses, pageable);
         return PageResponse.<OrderResponse>builder()
                 .content(pageResult.getContent().stream().map(orderMapper::toResponse).toList())
                 .page(pageResult.getNumber())

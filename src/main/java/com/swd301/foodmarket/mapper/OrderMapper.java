@@ -17,16 +17,9 @@ public interface OrderMapper {
     @Mapping(target = "buyerId", source = "buyer.id")
     @Mapping(target = "passedQualityCheck", expression = "java(allPassQualityChecks(order))")
     @Mapping(target = "rescuedKg", source = "rescuedWeight")
-    @Mapping(target = "checkoutBatchId", ignore = true)
+    @Mapping(target = "checkoutBatchId", source = "checkoutBatchFkId")
     @Mapping(target = "batchUnpaidCount", ignore = true)
     OrderResponse toResponse(Order order);
-
-    @AfterMapping
-    default void mapCheckoutBatchFields(Order order, @MappingTarget OrderResponse response) {
-        if (order.getCheckoutBatch() != null) {
-            response.setCheckoutBatchId(order.getCheckoutBatch().getId());
-        }
-    }
 
     // ================== PRODUCT ==================
     @Mapping(target = "orderDetailId", source = "id")
