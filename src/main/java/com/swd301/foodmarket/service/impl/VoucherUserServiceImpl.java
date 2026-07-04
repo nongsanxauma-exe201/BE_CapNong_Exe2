@@ -154,6 +154,8 @@ public class VoucherUserServiceImpl  implements  com.swd301.foodmarket.service.V
         for (String voucherIdentifier : normalizeVoucherIdentifiers(voucherIdentifiers)) {
             VoucherUser voucherUser = resolveVoucherUser(currentUser, List.of(voucherIdentifier))
                     .orElseThrow(() -> new AppException(ErrorCode.VOUCHER_USER_NOT_FOUND));
+            voucherUser = voucherUserRepository.findByIdForUpdate(voucherUser.getId())
+                    .orElseThrow(() -> new AppException(ErrorCode.VOUCHER_USER_NOT_FOUND));
             if (voucherUser.getId() != null && !appliedVoucherUserIds.add(voucherUser.getId())) {
                 continue;
             }
@@ -173,6 +175,8 @@ public class VoucherUserServiceImpl  implements  com.swd301.foodmarket.service.V
             voucherUser.setQuantity(Math.max(0, (voucherUser.getQuantity() == null ? 0 : voucherUser.getQuantity()) - 1));
             voucherUserRepository.save(voucherUser);
 
+            voucher = voucherRespository.findByIdForUpdate(voucher.getId())
+                    .orElseThrow(() -> new AppException(ErrorCode.VOUCHER_NOT_FOUND));
             voucher.setUsedCount((voucher.getUsedCount() == null ? 0 : voucher.getUsedCount()) + 1);
             if (voucher.getUsageLimit() != null && voucher.getUsedCount() >= voucher.getUsageLimit()) {
                 voucher.setActive(false);
@@ -222,6 +226,8 @@ public class VoucherUserServiceImpl  implements  com.swd301.foodmarket.service.V
         User currentUser = getCurrentUser();
         VoucherUser voucherUser = voucherUserRepository.findByIdAndUser(batchVoucherUserId, currentUser)
                 .orElseThrow(() -> new AppException(ErrorCode.VOUCHER_USER_NOT_FOUND));
+        voucherUser = voucherUserRepository.findByIdForUpdate(batchVoucherUserId)
+                .orElseThrow(() -> new AppException(ErrorCode.VOUCHER_USER_NOT_FOUND));
         Voucher voucher = voucherUser.getVoucher();
         if (voucher == null) {
             throw new AppException(ErrorCode.VOUCHER_NOT_FOUND);
@@ -253,16 +259,6 @@ public class VoucherUserServiceImpl  implements  com.swd301.foodmarket.service.V
             return BigDecimal.ZERO;
         }
 
-        voucherUser.setQuantityUsed((voucherUser.getQuantityUsed() == null ? 0 : voucherUser.getQuantityUsed()) + 1);
-        voucherUser.setQuantity(Math.max(0, (voucherUser.getQuantity() == null ? 0 : voucherUser.getQuantity()) - 1));
-        voucherUserRepository.save(voucherUser);
-
-        voucher.setUsedCount((voucher.getUsedCount() == null ? 0 : voucher.getUsedCount()) + 1);
-        if (voucher.getUsageLimit() != null && voucher.getUsedCount() >= voucher.getUsageLimit()) {
-            voucher.setActive(false);
-        }
-        voucherRespository.save(voucher);
-
         BigDecimal appliedTotal = BigDecimal.ZERO;
         for (Order order : orders) {
             BigDecimal alloc = allocations.getOrDefault(order, BigDecimal.ZERO);
@@ -281,6 +277,22 @@ public class VoucherUserServiceImpl  implements  com.swd301.foodmarket.service.V
             }
             appliedTotal = appliedTotal.add(actualAlloc);
         }
+
+        if (appliedTotal.compareTo(BigDecimal.ZERO) <= 0) {
+            return BigDecimal.ZERO;
+        }
+
+        voucherUser.setQuantityUsed((voucherUser.getQuantityUsed() == null ? 0 : voucherUser.getQuantityUsed()) + 1);
+        voucherUser.setQuantity(Math.max(0, (voucherUser.getQuantity() == null ? 0 : voucherUser.getQuantity()) - 1));
+        voucherUserRepository.save(voucherUser);
+
+        voucher = voucherRespository.findByIdForUpdate(voucher.getId())
+                .orElseThrow(() -> new AppException(ErrorCode.VOUCHER_NOT_FOUND));
+        voucher.setUsedCount((voucher.getUsedCount() == null ? 0 : voucher.getUsedCount()) + 1);
+        if (voucher.getUsageLimit() != null && voucher.getUsedCount() >= voucher.getUsageLimit()) {
+            voucher.setActive(false);
+        }
+        voucherRespository.save(voucher);
 
         if (voucher.getVoucherType() == VoucherType.WELCOME) {
             saveTransaction(TransactionType.SHIPPING_SUBSIDY, appliedTotal.negate(), null,
@@ -352,12 +364,7 @@ public class VoucherUserServiceImpl  implements  com.swd301.foodmarket.service.V
 
                 int usedCount = voucher.getUsedCount() == null ? 0 : voucher.getUsedCount();
                 voucher.setUsedCount(Math.max(0, usedCount - 1));
-                if (voucher.getUsageLimit() != null
-                        && voucher.getUsedCount() < voucher.getUsageLimit()
-                        && voucher.getExpiryDate() != null
-                        && voucher.getExpiryDate().isAfter(LocalDateTime.now())) {
-                    voucher.setActive(true);
-                }
+                reactivateVoucherIfEligible(voucher);
                 voucherRespository.save(voucher);
                 voucherUsageRepository.delete(usage);
                 break;
@@ -395,9 +402,6 @@ public class VoucherUserServiceImpl  implements  com.swd301.foodmarket.service.V
             if (batch != null && batch.getBatchVoucherUserId() != null) {
                 continue;
             }
-            if (voucher.getVoucherType() == VoucherType.WELCOME) {
-                continue;
-            }
         }
 
         Optional<VoucherUser> voucherUserOptional = voucherUserRepository.findByUserAndVoucher(usage.getUser(), voucher);
@@ -411,12 +415,7 @@ public class VoucherUserServiceImpl  implements  com.swd301.foodmarket.service.V
 
         int usedCount = voucher.getUsedCount() == null ? 0 : voucher.getUsedCount();
         voucher.setUsedCount(Math.max(0, usedCount - 1));
-        if (voucher.getUsageLimit() != null
-                && voucher.getUsedCount() < voucher.getUsageLimit()
-                && voucher.getExpiryDate() != null
-                && voucher.getExpiryDate().isAfter(LocalDateTime.now())) {
-            voucher.setActive(true);
-        }
+        reactivateVoucherIfEligible(voucher);
         voucherRespository.save(voucher);
 
         BigDecimal discountAmount = usage.getDiscountAmount() == null ? BigDecimal.ZERO : usage.getDiscountAmount();
@@ -634,6 +633,19 @@ public class VoucherUserServiceImpl  implements  com.swd301.foodmarket.service.V
                 .status(TransactionStatus.SUCCESS)
                 .content(content)
                 .build());
+    }
+
+    private void reactivateVoucherIfEligible(Voucher voucher) {
+        if (voucher == null) {
+            return;
+        }
+        boolean underUsageLimit = voucher.getUsageLimit() == null
+                || voucher.getUsedCount() < voucher.getUsageLimit();
+        boolean notExpired = voucher.getExpiryDate() == null
+                || voucher.getExpiryDate().isAfter(LocalDateTime.now());
+        if (underUsageLimit && notExpired) {
+            voucher.setActive(true);
+        }
     }
 
     private User getCurrentUser() {

@@ -64,6 +64,9 @@ public class OrderResponse {
 
     Integer checkoutBatchId;
     Integer batchUnpaidCount;
+    Integer batchShopCount;
+    Boolean hasPlatformBatchVoucher;
+    BigDecimal batchPendingTotalAmount;
 
     BigDecimal qcRefundedAmount;
     LocalDateTime qcBuyerDecisionDeadline;

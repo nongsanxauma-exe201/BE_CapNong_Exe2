@@ -21,6 +21,8 @@ public interface PaymentService {
 
     void confirmPaymentByOrderCode(String orderCode);
 
+    void confirmPaymentByOrderCode(String orderCode, Long webhookAmount);
+
     void cancelPaymentByOrderCode(String orderCode);
 
     void notifyPendingPayment(String orderCode);
@@ -32,6 +34,8 @@ public interface PaymentService {
     PaymentResponse createBatchPayOS(Integer batchId);
 
     void refundPayosOrderOnCancel(Order order);
+
+    void refundPayosOrderOnFailed(Order order);
 
     /** @return số tiền thực hoàn (0 nếu đã hết hạn mức hoàn) */
     BigDecimal refundQcDamage(Order order, BigDecimal amount, String reason);

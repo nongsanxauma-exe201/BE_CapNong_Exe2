@@ -10,6 +10,7 @@ import com.swd301.foodmarket.dto.response.*;
 import com.swd301.foodmarket.entity.*;
 import com.swd301.foodmarket.enums.CheckoutBatchStatus;
 import com.swd301.foodmarket.enums.OrderStatus;
+import com.swd301.foodmarket.enums.RoleName;
 import com.swd301.foodmarket.enums.ProductStatus;
 import com.swd301.foodmarket.exception.AppException;
 import com.swd301.foodmarket.exception.ErrorCode;
@@ -546,8 +547,11 @@ public class OrderServiceImpl implements OrderService {
         Page<Order> pageResult = (statuses == null || statuses.isEmpty())
                 ? orderRepository.findByBuyerIdWithBatch(userId, pageable)
                 : orderRepository.findByBuyerIdAndStatusInWithBatch(userId, statuses, pageable);
+        List<Order> entities = pageResult.getContent();
+        List<OrderResponse> content = entities.stream().map(orderMapper::toResponse).toList();
+        enrichBatchMetadata(content, entities);
         return PageResponse.<OrderResponse>builder()
-                .content(pageResult.getContent().stream().map(orderMapper::toResponse).toList())
+                .content(content)
                 .page(pageResult.getNumber())
                 .size(pageResult.getSize())
                 .totalElements(pageResult.getTotalElements())
@@ -555,6 +559,154 @@ public class OrderServiceImpl implements OrderService {
                 .first(pageResult.isFirst())
                 .last(pageResult.isLast())
                 .build();
+    }
+
+    private void enrichBatchMetadata(List<OrderResponse> responses, List<Order> entities) {
+        if (responses.isEmpty() || entities.isEmpty()) {
+            return;
+        }
+
+        Set<Integer> batchIds = new LinkedHashSet<>();
+        for (Order entity : entities) {
+            if (entity.getCheckoutBatch() != null) {
+                batchIds.add(entity.getCheckoutBatch().getId());
+            }
+        }
+        if (batchIds.isEmpty()) {
+            return;
+        }
+
+        Map<Integer, List<Order>> ordersByBatch = new HashMap<>();
+        for (Order batchOrder : orderRepository.findByCheckoutBatchIdIn(batchIds)) {
+            if (batchOrder.getCheckoutBatch() == null) {
+                continue;
+            }
+            Integer batchId = batchOrder.getCheckoutBatch().getId();
+            ordersByBatch.computeIfAbsent(batchId, ignored -> new ArrayList<>()).add(batchOrder);
+        }
+
+        for (int i = 0; i < responses.size(); i++) {
+            Order entity = entities.get(i);
+            OrderResponse response = responses.get(i);
+            if (entity.getCheckoutBatch() == null) {
+                continue;
+            }
+
+            CheckoutBatch batch = entity.getCheckoutBatch();
+            List<Order> batchOrders = ordersByBatch.getOrDefault(batch.getId(), List.of());
+            int unpaidCount = (int) batchOrders.stream()
+                    .filter(this::isBatchUnpaidOrder)
+                    .count();
+
+            response.setBatchUnpaidCount(unpaidCount);
+            response.setBatchShopCount(batchOrders.size());
+            response.setHasPlatformBatchVoucher(batch.getBatchVoucherUserId() != null);
+
+            BigDecimal pendingTotal = batchOrders.stream()
+                    .filter(this::isBatchUnpaidOrder)
+                    .map(Order::getTotalAmount)
+                    .filter(Objects::nonNull)
+                    .reduce(BigDecimal.ZERO, BigDecimal::add);
+            if (pendingTotal.compareTo(BigDecimal.ZERO) > 0) {
+                response.setBatchPendingTotalAmount(pendingTotal);
+            }
+        }
+    }
+
+    private boolean isBatchUnpaidOrder(Order order) {
+        return order.getStatus() == OrderStatus.AWAITING_PAYMENT
+                || order.getStatus() == OrderStatus.PENDING;
+    }
+
+    private void ensureProductAvailableForOrder(Product product) {
+        if (product.getStatus() != ProductStatus.AVAILABLE) {
+            String name = product.getProductName() != null ? product.getProductName() : ("#" + product.getId());
+            throw new AppException(
+                    ErrorCode.PRODUCT_OUT_OF_STOCK,
+                    "Sản phẩm \"" + name + "\" không còn bán. Vui lòng xóa khỏi giỏ hàng và chọn sản phẩm khác.");
+        }
+    }
+
+    private void validateOrderItemRequest(OrderItemRequest item) {
+        if (item.getProductId() != null) {
+            Product product = productRepository.findById(item.getProductId())
+                    .orElseThrow(() -> new AppException(
+                            ErrorCode.PRODUCT_NOT_FOUND,
+                            "Không tìm thấy sản phẩm #" + item.getProductId() + ". Vui lòng làm mới giỏ hàng."));
+            ensureProductAvailableForOrder(product);
+            BigDecimal quantityKg = resolveRequestKg(item.getQuantityKg(), item.getQuantity());
+            if (resolveProductStockKg(product).compareTo(quantityKg) < 0) {
+                throw new AppException(
+                        ErrorCode.PRODUCT_OUT_OF_STOCK,
+                        "Sản phẩm \"" + product.getProductName() + "\" không đủ tồn kho");
+            }
+            return;
+        }
+
+        if (item.getMysteryBoxId() != null) {
+            MysteryBox box = mysteryBoxRepository.findById(item.getMysteryBoxId())
+                    .orElseThrow(() -> new AppException(
+                            ErrorCode.MYSTERY_BOX_NOT_FOUND,
+                            "Không tìm thấy túi mù #" + item.getMysteryBoxId()));
+            if (!Boolean.TRUE.equals(box.getIsActive())) {
+                throw new AppException(ErrorCode.MYSTERY_BOX_NOT_AVAILABLE);
+            }
+            validateMysteryBoxStock(box, item.getQuantity());
+            return;
+        }
+
+        if (item.getBuildComboId() != null) {
+            BuildCombo combo = buildComboRepository.findByIdWithItems(item.getBuildComboId())
+                    .orElseThrow(() -> new AppException(
+                            ErrorCode.BUILD_COMBO_NOT_FOUND,
+                            "Không tìm thấy combo #" + item.getBuildComboId()));
+            BigDecimal comboCount = resolveRequestKg(item.getQuantityKg(), item.getQuantity());
+            if (combo.getItems() == null || combo.getItems().isEmpty()) {
+                throw new AppException(
+                        ErrorCode.INVALID_REQUEST,
+                        "Combo \"" + combo.getComboName() + "\" không có sản phẩm");
+            }
+            for (ProductCombo comboItem : combo.getItems()) {
+                Product product = comboItem.getProduct();
+                if (product == null) {
+                    throw new AppException(
+                            ErrorCode.PRODUCT_NOT_FOUND,
+                            "Combo \"" + combo.getComboName() + "\" chứa sản phẩm không còn tồn tại");
+                }
+                ensureProductAvailableForOrder(product);
+                BigDecimal requiredKg = resolveProductComboKg(comboItem).multiply(comboCount).setScale(2, RoundingMode.HALF_UP);
+                if (resolveProductStockKg(product).compareTo(requiredKg) < 0) {
+                    throw new AppException(
+                            ErrorCode.PRODUCT_OUT_OF_STOCK,
+                            "Sản phẩm \"" + product.getProductName() + "\" trong combo không đủ tồn kho");
+                }
+            }
+            return;
+        }
+
+        throw new AppException(
+                ErrorCode.INVALID_REQUEST,
+                "Dòng giỏ hàng không hợp lệ (thiếu productId / mysteryBoxId / buildComboId)");
+    }
+
+    private void clearCartItemsForBatch(CheckoutBatchRequest request) {
+        for (ShopOrderRequest shopOrder : request.getShopOrders()) {
+            if (shopOrder.getItems() == null) {
+                continue;
+            }
+            for (OrderItemRequest item : shopOrder.getItems()) {
+                try {
+                    if (item.getProductId() != null) {
+                        cartService.removeItem(item.getProductId());
+                    } else if (item.getMysteryBoxId() != null) {
+                        cartService.removeMysteryBox(item.getMysteryBoxId());
+                    } else if (item.getBuildComboId() != null) {
+                        cartService.removeBuildCombo(item.getBuildComboId());
+                    }
+                } catch (Exception ignored) {
+                }
+            }
+        }
     }
 
     @Transactional
@@ -590,11 +742,11 @@ public class OrderServiceImpl implements OrderService {
             if (item.getProductId() != null) {
                 BigDecimal quantityKg = resolveRequestKg(item.getQuantityKg(), item.getQuantity());
                 Product product = productRepository.findById(item.getProductId())
-                        .orElseThrow(() -> new AppException(ErrorCode.PRODUCT_NOT_FOUND));
+                        .orElseThrow(() -> new AppException(
+                                ErrorCode.PRODUCT_NOT_FOUND,
+                                "Không tìm thấy sản phẩm #" + item.getProductId()));
 
-                if (product.getStatus() != ProductStatus.AVAILABLE) {
-                    throw new AppException(ErrorCode.PRODUCT_NOT_FOUND);
-                }
+                ensureProductAvailableForOrder(product);
 
                 if (resolveProductStockKg(product).compareTo(quantityKg) < 0) {
                     throw new RuntimeException(
@@ -673,8 +825,10 @@ public class OrderServiceImpl implements OrderService {
                 }
             } else if (item.getBuildComboId() != null) {
                 BigDecimal comboCount = resolveRequestKg(item.getQuantityKg(), item.getQuantity());
-                BuildCombo combo = buildComboRepository.findById(item.getBuildComboId())
-                        .orElseThrow(() -> new AppException(ErrorCode.BUILD_COMBO_NOT_FOUND));
+                BuildCombo combo = buildComboRepository.findByIdWithItems(item.getBuildComboId())
+                        .orElseThrow(() -> new AppException(
+                                ErrorCode.BUILD_COMBO_NOT_FOUND,
+                                "Không tìm thấy combo #" + item.getBuildComboId()));
 
                 if (shopOwner == null && combo.getShopOwner() != null) {
                     shopOwner = combo.getShopOwner();
@@ -683,12 +837,20 @@ public class OrderServiceImpl implements OrderService {
                 }
 
                 // Tạo OrderDetail cho từng product trong combo
-                for (ProductCombo comboItem : combo.getItems()) {
+                for (ProductCombo comboItem : combo.getItems() == null ? List.<ProductCombo>of() : combo.getItems()) {
                     Product product = comboItem.getProduct();
+                    if (product == null) {
+                        throw new AppException(
+                                ErrorCode.PRODUCT_NOT_FOUND,
+                                "Combo \"" + combo.getComboName() + "\" chứa sản phẩm không còn tồn tại");
+                    }
+                    ensureProductAvailableForOrder(product);
                     BigDecimal requiredKg = resolveProductComboKg(comboItem).multiply(comboCount).setScale(2, RoundingMode.HALF_UP);
 
                     if (resolveProductStockKg(product).compareTo(requiredKg) < 0) {
-                        throw new AppException(ErrorCode.PRODUCT_OUT_OF_STOCK);
+                        throw new AppException(
+                                ErrorCode.PRODUCT_OUT_OF_STOCK,
+                                "Sản phẩm \"" + product.getProductName() + "\" trong combo không đủ tồn kho");
                     }
 
                     product.setStockKg(resolveProductStockKg(product).subtract(requiredKg));
@@ -769,6 +931,9 @@ public class OrderServiceImpl implements OrderService {
         }
         for (OrderItemRequest item : request.getItems()) {
             try {
+                if (Boolean.TRUE.equals(request.getSkipCartCleanup())) {
+                    continue;
+                }
                 if (item.getProductId() != null) cartService.removeItem(item.getProductId());
                 else if (item.getMysteryBoxId() != null) cartService.removeMysteryBox(item.getMysteryBoxId());
                 else if (item.getBuildComboId() != null) cartService.removeBuildCombo(item.getBuildComboId());
@@ -801,6 +966,8 @@ public class OrderServiceImpl implements OrderService {
         if (request.getStatus() == OrderStatus.CANCELLED
                 && order.getStatus() != OrderStatus.CANCELLED) {
 
+            validateCancelPermission(order, getCurrentUser());
+
             boolean paidViaPayos = "PAYOS".equalsIgnoreCase(order.getPaymentMethod())
                     && isPayosBuyerCancellableStatus(order.getStatus());
 
@@ -829,6 +996,12 @@ public class OrderServiceImpl implements OrderService {
 
             productRepository.saveAll(productsToUpdate.values());
             voucherUserService.restoreVoucherForOrder(order);
+
+            CheckoutBatch batch = order.getCheckoutBatch();
+            if (batch != null && batch.getBatchVoucherUserId() != null) {
+                List<Order> batchOrders = orderRepository.findByCheckoutBatchId(batch.getId());
+                voucherUserService.restoreBatchVoucher(batch, batchOrders);
+            }
 
             if (paidViaPayos) {
                 paymentService.refundPayosOrderOnCancel(order);
@@ -874,6 +1047,16 @@ public class OrderServiceImpl implements OrderService {
 
     private boolean isPayosBuyerCancellableStatus(OrderStatus status) {
         return status == OrderStatus.PAID || status == OrderStatus.CONFIRMED;
+    }
+
+    private void validateCancelPermission(Order order, User currentUser) {
+        boolean isBuyer = order.getBuyer().getId().equals(currentUser.getId());
+        boolean isShop = order.getShopOwner().getId().equals(currentUser.getId());
+        RoleName role = currentUser.getRole() != null ? currentUser.getRole().getName() : null;
+        boolean isStaffOrAdmin = role == RoleName.STAFF || role == RoleName.ADMIN;
+        if (!isBuyer && !isShop && !isStaffOrAdmin) {
+            throw new AppException(ErrorCode.UNAUTHORIZED);
+        }
     }
 
     private boolean hasShippableItemsForPacking(Order order) {
@@ -1095,6 +1278,15 @@ public class OrderServiceImpl implements OrderService {
         boolean isPayos = request.getPaymentMethod() != null
                 && !"COD".equalsIgnoreCase(request.getPaymentMethod());
 
+        for (ShopOrderRequest shopOrder : request.getShopOrders()) {
+            if (shopOrder.getItems() == null || shopOrder.getItems().isEmpty()) {
+                throw new AppException(ErrorCode.INVALID_REQUEST);
+            }
+            for (OrderItemRequest item : shopOrder.getItems()) {
+                validateOrderItemRequest(item);
+            }
+        }
+
         CheckoutBatch batch = CheckoutBatch.builder()
                 .buyer(buyer)
                 .paymentMethod(request.getPaymentMethod() != null ? request.getPaymentMethod() : "PAYOS")
@@ -1122,6 +1314,7 @@ public class OrderServiceImpl implements OrderService {
                     .voucherUserIds(shopOrder.getVoucherUserIds())
                     .voucherCodes(shopOrder.getVoucherCodes())
                     .restrictToShopVouchers(true)
+                    .skipCartCleanup(true)
                     .items(shopOrder.getItems())
                     .build();
 
@@ -1189,6 +1382,8 @@ public class OrderServiceImpl implements OrderService {
         }
 
         checkoutBatchRepository.save(batch);
+
+        clearCartItemsForBatch(request);
 
         return CheckoutBatchResponse.builder()
                 .batchId(batch.getId())

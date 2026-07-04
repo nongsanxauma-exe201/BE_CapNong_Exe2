@@ -23,6 +23,7 @@ public class OrderCreationRequest {
     List<String> voucherCodes;
 
     Boolean restrictToShopVouchers;
+    Boolean skipCartCleanup;
 
     List<OrderItemRequest> items;
 }

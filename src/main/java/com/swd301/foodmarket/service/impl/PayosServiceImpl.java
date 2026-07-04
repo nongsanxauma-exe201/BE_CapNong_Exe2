@@ -1,5 +1,6 @@
 package com.swd301.foodmarket.service.impl;
 
+import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.swd301.foodmarket.config.PayOSConfig;
 import com.swd301.foodmarket.config.PayosClient;
@@ -206,6 +207,61 @@ public class PayosServiceImpl implements PayosService {
             return sanitized.substring(0, 25);
         }
         return sanitized;
+    }
+
+    @Override
+    public boolean verifyWebhookSignature(JsonNode webhookBody) {
+        if (webhookBody == null || !webhookBody.hasNonNull("signature") || !webhookBody.has("data")) {
+            return false;
+        }
+        JsonNode data = webhookBody.get("data");
+        if (data == null || data.isNull()) {
+            return false;
+        }
+        try {
+            String expectedSignature = webhookBody.get("signature").asText();
+            String computed = hmacSha256(buildWebhookDataString(data));
+            return expectedSignature.equalsIgnoreCase(computed);
+        } catch (Exception e) {
+            log.error("Failed to verify PayOS webhook signature", e);
+            return false;
+        }
+    }
+
+    private String buildWebhookDataString(JsonNode data) {
+        TreeMap<String, String> sortedParams = new TreeMap<>();
+        data.fields().forEachRemaining(entry -> {
+            JsonNode value = entry.getValue();
+            if (value == null || value.isNull()) {
+                sortedParams.put(entry.getKey(), "");
+            } else if (value.isNumber()) {
+                sortedParams.put(entry.getKey(), value.asText());
+            } else {
+                sortedParams.put(entry.getKey(), value.asText());
+            }
+        });
+
+        StringBuilder rawData = new StringBuilder();
+        for (Map.Entry<String, String> entry : sortedParams.entrySet()) {
+            if (rawData.length() > 0) {
+                rawData.append("&");
+            }
+            rawData.append(entry.getKey()).append("=").append(entry.getValue());
+        }
+        return rawData.toString();
+    }
+
+    private String hmacSha256(String rawData) throws Exception {
+        Mac hmac = Mac.getInstance("HmacSHA256");
+        SecretKeySpec secretKey = new SecretKeySpec(checksumKey.getBytes(StandardCharsets.UTF_8), "HmacSHA256");
+        hmac.init(secretKey);
+        byte[] bytes = hmac.doFinal(rawData.getBytes(StandardCharsets.UTF_8));
+
+        StringBuilder hash = new StringBuilder();
+        for (byte b : bytes) {
+            hash.append(String.format("%02x", b));
+        }
+        return hash.toString();
     }
 
     private String generateSignature(PayOSCreateRequest request) throws Exception {

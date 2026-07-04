@@ -95,7 +95,7 @@ public class WalletServiceImpl implements WalletService {
     public WithdrawRequestResponse createShipperWithdrawRequest(WithdrawRequestCreationRequest request) {
         User shipper = getCurrentUser();
 
-        Wallet wallet = walletRepository.findByShipper(shipper)
+        Wallet wallet = walletRepository.findByShipperIdForUpdate(shipper.getId())
                 .orElseThrow(() -> new AppException(ErrorCode.WALLET_NOT_FOUND));
 
         if (request.getAmount().compareTo(BigDecimal.ZERO) <= 0) {
@@ -261,16 +261,8 @@ public class WalletServiceImpl implements WalletService {
             throw new AppException(ErrorCode.PLATFORM_BALANCE_NOT_ENOUGH);
         }
 
-        if (platformWallet.getFrozenBalance().compareTo(withdrawAmount) < 0) {
-            throw new AppException(ErrorCode.PLATFORM_BALANCE_NOT_ENOUGH);
-        }
-
         platformWallet.setTotalBalance(
                 platformWallet.getTotalBalance().subtract(receiveAmount)
-        );
-
-        platformWallet.setFrozenBalance(
-                platformWallet.getFrozenBalance().subtract(withdrawAmount)
         );
 
         platformWallet.setTotalWithdrawn(
@@ -316,7 +308,7 @@ public class WalletServiceImpl implements WalletService {
 
         User shopOwner = getCurrentUser();
 
-        Wallet wallet = walletRepository.findByShopOwner(shopOwner)
+        Wallet wallet = walletRepository.findByShopOwnerIdForUpdate(shopOwner.getId())
                 .orElseThrow(() -> new AppException(ErrorCode.WALLET_NOT_FOUND));
 
         if (request.getAmount().compareTo(BigDecimal.ZERO) <= 0) {

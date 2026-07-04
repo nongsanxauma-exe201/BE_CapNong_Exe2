@@ -145,6 +145,13 @@ public class PaymentServiceImpl implements PaymentService {
             throw new AppException(ErrorCode.ORDER_NOT_PAYABLE);
         }
 
+        CheckoutBatch checkoutBatch = order.getCheckoutBatch();
+        if (checkoutBatch != null
+                && checkoutBatch.getStatus() != CheckoutBatchStatus.CANCELLED
+                && checkoutBatch.getBatchVoucherUserId() != null) {
+            throw new AppException(ErrorCode.ORDER_IN_BATCH_USE_BATCH_PAYMENT);
+        }
+
         if (paymentRepository.existsByOrder_IdAndStatus(order.getId(), PaymentStatus.PENDING)
                 || paymentRepository.existsByOrder_IdAndStatus(order.getId(), PaymentStatus.SUCCESS)) {
             throw new AppException(ErrorCode.ORDER_NOT_PAYABLE);
@@ -195,19 +202,30 @@ public class PaymentServiceImpl implements PaymentService {
 
         paymentRepository.save(payment);
 
+        if (checkoutBatch != null
+                && checkoutBatch.getBatchVoucherUserId() == null
+                && checkoutBatch.getStatus() != CheckoutBatchStatus.CANCELLED) {
+            invalidateBatchPayosLink(checkoutBatch);
+        }
+
         return toOrderPaymentResponse(payment);
     }
 
 
     @Transactional
     public void confirmPaymentByOrderCode(String orderCode) {
+        confirmPaymentByOrderCode(orderCode, null);
+    }
+
+    @Transactional
+    public void confirmPaymentByOrderCode(String orderCode, Long webhookAmount) {
 
         log.info("===== CONFIRM PAYMENT START =====");
-        log.info("OrderCode received: {}", orderCode);
+        log.info("OrderCode received: {}, webhookAmount={}", orderCode, webhookAmount);
 
         var batchOpt = checkoutBatchRepository.findByPayosOrderCodeForUpdate(orderCode);
         if (batchOpt.isPresent()) {
-            confirmBatchPayment(batchOpt.get());
+            confirmBatchPayment(batchOpt.get(), webhookAmount);
             return;
         }
 
@@ -233,6 +251,7 @@ public class PaymentServiceImpl implements PaymentService {
             throw new AppException(ErrorCode.ORDER_NOT_PAYABLE);
         }
 
+        verifyWebhookAmount(webhookAmount, payment.getAmount());
 
         log.info("Order found: id={}, status={}", order.getId(), order.getStatus());
 
@@ -251,11 +270,13 @@ public class PaymentServiceImpl implements PaymentService {
         log.info("===== CONFIRM PAYMENT COMPLETED =====");
     }
 
-    private void confirmBatchPayment(CheckoutBatch batch) {
+    private void confirmBatchPayment(CheckoutBatch batch, Long webhookAmount) {
         if (batch.getStatus() == CheckoutBatchStatus.PAID) {
             log.warn("Batch already PAID → skip. batchId={}", batch.getId());
             return;
         }
+
+        verifyWebhookAmount(webhookAmount, batch.getTotalAmount());
 
         List<Order> orders = orderRepository.findByCheckoutBatchId(batch.getId());
         for (Order order : orders) {
@@ -450,6 +471,16 @@ public class PaymentServiceImpl implements PaymentService {
         }
 
         log.info("Transaction created: id={}, amount={}", transaction.getId(), buyerPaid);
+    }
+
+    private void verifyWebhookAmount(Long webhookAmount, BigDecimal expectedAmount) {
+        if (webhookAmount == null || expectedAmount == null) {
+            return;
+        }
+        if (expectedAmount.longValue() != webhookAmount) {
+            log.error("[PAYOS_AMOUNT_MISMATCH] expected={}, webhook={}", expectedAmount, webhookAmount);
+            throw new AppException(ErrorCode.PAYOS_AMOUNT_MISMATCH);
+        }
     }
 
     @Transactional
@@ -700,6 +731,7 @@ public class PaymentServiceImpl implements PaymentService {
         return ResumePaymentOptionsResponse.builder()
                 .isBatch(true)
                 .batchId(batch.getId())
+                .hasPlatformVoucher(batch.getBatchVoucherUserId() != null)
                 .triggerOrderId(orderId)
                 .unpaidOrders(unpaidOptions)
                 .payAllOption(payAllOption)
@@ -925,22 +957,37 @@ public class PaymentServiceImpl implements PaymentService {
     @Override
     @Transactional
     public void refundPayosOrderOnCancel(Order order) {
+        refundPayosOrderToBuyer(order, "Hủy đơn sau thanh toán PayOS");
+    }
+
+    @Override
+    @Transactional
+    public void refundPayosOrderOnFailed(Order order) {
+        refundPayosOrderToBuyer(order, "Hoàn tiền do giao hàng thất bại đơn #" + order.getId());
+    }
+
+    private void refundPayosOrderToBuyer(Order order, String reasonPrefix) {
         if (order == null
                 || !"PAYOS".equalsIgnoreCase(order.getPaymentMethod())
-                || (order.getStatus() != OrderStatus.PAID && order.getStatus() != OrderStatus.CONFIRMED)) {
+                || order.getStatus() == OrderStatus.CANCELLED
+                || order.getStatus() == OrderStatus.DELIVERED) {
             return;
         }
 
         BigDecimal buyerPaid = order.getTotalAmount() != null ? order.getTotalAmount() : BigDecimal.ZERO;
         if (buyerPaid.compareTo(BigDecimal.ZERO) <= 0) {
-            log.warn("[PAYOS_CANCEL_REFUND] Order {} has invalid totalAmount, skip", order.getId());
+            log.warn("[PAYOS_REFUND] Order {} has invalid totalAmount, skip", order.getId());
             return;
         }
 
         Payment payment = paymentRepository
                 .findTopByOrderIdAndStatusOrderByCreatedAtDesc(order.getId(), PaymentStatus.SUCCESS)
                 .orElse(null);
-        if (payment != null && payment.getAmount() != null && payment.getAmount().compareTo(BigDecimal.ZERO) > 0) {
+        if (payment == null) {
+            log.warn("[PAYOS_REFUND] Order {} has no SUCCESS payment, skip", order.getId());
+            return;
+        }
+        if (payment.getAmount() != null && payment.getAmount().compareTo(BigDecimal.ZERO) > 0) {
             buyerPaid = payment.getAmount();
         }
 
@@ -949,7 +996,7 @@ public class PaymentServiceImpl implements PaymentService {
                 : BigDecimal.ZERO;
         BigDecimal remainingRefund = buyerPaid.subtract(qcRefunded);
         if (remainingRefund.compareTo(BigDecimal.ZERO) <= 0) {
-            log.warn("[PAYOS_CANCEL_REFUND] Order {} already fully refunded via QC (qcRefunded={}), skip",
+            log.warn("[PAYOS_REFUND] Order {} already fully refunded via QC (qcRefunded={}), skip",
                     order.getId(), qcRefunded);
             return;
         }
@@ -964,14 +1011,14 @@ public class PaymentServiceImpl implements PaymentService {
                 : BigDecimal.ZERO;
         BigDecimal shopRemainingReversal = shopGross.subtract(qcShopDebit).max(BigDecimal.ZERO);
 
-        log.info("[PAYOS_CANCEL_REFUND] orderId={}, buyerPaid={}, qcRefunded={}, remainingRefund={}, platformBatchSubsidy={}, shopRemainingReversal={}",
-                order.getId(), buyerPaid, qcRefunded, remainingRefund, platformBatchSubsidy, shopRemainingReversal);
+        log.info("[PAYOS_REFUND] orderId={}, buyerPaid={}, qcRefunded={}, remainingRefund={}, reason={}",
+                order.getId(), buyerPaid, qcRefunded, remainingRefund, reasonPrefix);
 
         Wallet platformWallet = walletRepository.findByTypeForUpdate(WalletType.PLATFORM)
                 .orElseThrow(() -> new AppException(ErrorCode.PLATFORM_WALLET_NOT_FOUND));
         Wallet shopWallet = walletRepository.findByShopOwnerIdForUpdate(order.getShopOwner().getId())
                 .orElseThrow(() -> new AppException(ErrorCode.WALLET_NOT_FOUND));
-        Wallet buyerWallet = walletRepository.findByBuyer(order.getBuyer());
+        Wallet buyerWallet = walletRepository.findByBuyerForUpdate(order.getBuyer());
         if (buyerWallet == null) {
             throw new AppException(ErrorCode.WALLET_NOT_FOUND);
         }
@@ -993,9 +1040,7 @@ public class PaymentServiceImpl implements PaymentService {
         walletRepository.save(buyerWallet);
 
         String referenceId = "ORDER_" + order.getId();
-        String gateway = payment != null && payment.getPaymentGateway() != null
-                ? payment.getPaymentGateway()
-                : "PAYOS";
+        String gateway = payment.getPaymentGateway() != null ? payment.getPaymentGateway() : "PAYOS";
 
         transactionRepository.save(Transaction.builder()
                 .payment(payment)
@@ -1005,7 +1050,7 @@ public class PaymentServiceImpl implements PaymentService {
                 .amount(remainingRefund.negate())
                 .balanceAfter(platformWallet.getFrozenBalance())
                 .status(TransactionStatus.SUCCESS)
-                .content("Hoàn khóa tiền PayOS do hủy đơn #" + order.getId())
+                .content("Hoàn khóa tiền PayOS: " + reasonPrefix + " #" + order.getId())
                 .build());
 
         if (shopRemainingReversal.signum() > 0) {
@@ -1017,7 +1062,7 @@ public class PaymentServiceImpl implements PaymentService {
                     .amount(shopRemainingReversal.negate())
                     .balanceAfter(shopWallet.getTotalBalance())
                     .status(TransactionStatus.SUCCESS)
-                    .content("Hoàn tiền shop do hủy đơn PayOS #" + order.getId())
+                    .content("Hoàn tiền shop do hoàn PayOS #" + order.getId())
                     .build());
         }
 
@@ -1029,26 +1074,25 @@ public class PaymentServiceImpl implements PaymentService {
                 .amount(remainingRefund)
                 .balanceAfter(buyerWallet.getTotalBalance())
                 .status(TransactionStatus.SUCCESS)
-                .content("Hoàn tiền vào ví buyer do hủy đơn PayOS #" + order.getId())
+                .content("Hoàn tiền vào ví buyer: " + reasonPrefix)
                 .build());
 
         order.setRefundAmount(buyerPaid);
         order.setRefundReason(qcRefunded.signum() > 0
-                ? "Hủy đơn sau thanh toán PayOS (đã hoàn QC trước đó " + qcRefunded + "đ)"
-                : "Hủy đơn sau thanh toán PayOS");
+                ? reasonPrefix + " (đã hoàn QC trước đó " + qcRefunded + "đ)"
+                : reasonPrefix);
 
         String formattedAmount = String.format("%,.0f", remainingRefund) + "đ";
         Notification notification = Notification.builder()
                 .title("Hoàn tiền đơn hàng #" + order.getId())
-                .message("Đơn hàng #" + order.getId() + " đã được hủy. "
+                .message("Đơn hàng #" + order.getId() + ". "
                         + formattedAmount + " đã được hoàn vào ví của bạn.")
                 .evidence(String.valueOf(order.getId()))
                 .receiverType("USER_" + order.getBuyer().getId())
                 .build();
         notificationService.sendNotificationWebsocket(order.getBuyer(), notification);
 
-        log.info("[PAYOS_CANCEL_REFUND] Completed for orderId={}, remainingRefunded={}, totalQcRefunded={}",
-                order.getId(), remainingRefund, qcRefunded);
+        log.info("[PAYOS_REFUND] Completed for orderId={}, remainingRefunded={}", order.getId(), remainingRefund);
     }
 
     @Override
@@ -1109,7 +1153,7 @@ public class PaymentServiceImpl implements PaymentService {
                 .orElseThrow(() -> new AppException(ErrorCode.PLATFORM_WALLET_NOT_FOUND));
         Wallet shopWallet = walletRepository.findByShopOwnerIdForUpdate(order.getShopOwner().getId())
                 .orElseThrow(() -> new AppException(ErrorCode.WALLET_NOT_FOUND));
-        Wallet buyerWallet = walletRepository.findByBuyer(order.getBuyer());
+        Wallet buyerWallet = walletRepository.findByBuyerForUpdate(order.getBuyer());
         if (buyerWallet == null) {
             throw new AppException(ErrorCode.WALLET_NOT_FOUND);
         }
