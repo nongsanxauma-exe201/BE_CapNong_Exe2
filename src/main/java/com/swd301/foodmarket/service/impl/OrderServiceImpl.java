@@ -613,20 +613,22 @@ public class OrderServiceImpl implements OrderService {
                     assertSameShopOwner(shopOwner, product.getShopOwner());
                 }
 
+                BigDecimal effectivePrice = resolveEffectiveSellingPrice(product);
+
                 OrderDetail detail = new OrderDetail();
                 detail.setOrder(order);
                 detail.setProduct(product);
                 detail.setQuantity(resolveLegacyQuantity(quantityKg, item.getQuantity()));
                 detail.setQuantityKg(quantityKg);
-                detail.setUnitPrice(product.getSellingPrice());
-                detail.setPricePerKg(product.getSellingPrice());
+                detail.setUnitPrice(effectivePrice);
+                detail.setPricePerKg(effectivePrice);
                 detail.setUnitWeightKg(BigDecimal.ONE);
                 detail.setRescuedWeightKg(quantityKg);
 
                 orderDetails.add(detail);
 
                 totalAmount = totalAmount.add(
-                        product.getSellingPrice().multiply(quantityKg)
+                        effectivePrice.multiply(quantityKg)
                 );
             }
 
@@ -709,7 +711,7 @@ public class OrderServiceImpl implements OrderService {
                 BigDecimal comboPrice = combo.getDiscountPrice() != null
                         ? combo.getDiscountPrice()
                         : combo.getItems().stream()
-                        .map(i -> i.getProduct().getSellingPrice()
+                        .map(i -> resolveEffectiveSellingPrice(i.getProduct())
                                 .multiply(resolveProductComboKg(i)))
                         .reduce(BigDecimal.ZERO, BigDecimal::add);
                 totalAmount = totalAmount.add(comboPrice.multiply(comboCount));
@@ -943,6 +945,23 @@ public class OrderServiceImpl implements OrderService {
     private BigDecimal resolveProductStockKg(Product product) {
         if (product.getStockKg() != null) return product.getStockKg();
         return BigDecimal.valueOf(product.getStockQuantity() == null ? 0 : product.getStockQuantity()).setScale(2, RoundingMode.HALF_UP);
+    }
+
+    private BigDecimal resolveEffectiveSellingPrice(Product product) {
+        BigDecimal sellingPrice = product.getSellingPrice();
+        Integer pct = product.getDiscountPercent();
+        if (pct != null && pct > 0 && pct < 100 && sellingPrice != null) {
+            LocalDateTime now = LocalDateTime.now();
+            LocalDateTime start = product.getDiscountStartDate();
+            LocalDateTime end = product.getDiscountEndDate();
+            boolean active = (start == null || !now.isBefore(start))
+                    && (end == null || !now.isAfter(end));
+            if (active) {
+                return sellingPrice.multiply(BigDecimal.valueOf(100 - pct))
+                        .divide(BigDecimal.valueOf(100), 0, RoundingMode.HALF_UP);
+            }
+        }
+        return sellingPrice;
     }
 
     private BigDecimal resolveRequestKg(BigDecimal quantityKg, Integer quantity) {
