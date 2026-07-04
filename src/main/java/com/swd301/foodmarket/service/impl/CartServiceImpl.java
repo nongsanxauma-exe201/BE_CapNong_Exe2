@@ -224,18 +224,7 @@ public class CartServiceImpl implements CartService {
                 Product product = item.getProduct();
                 BigDecimal sellingPrice = product.getSellingPrice();
                 Integer pct = product.getDiscountPercent();
-                BigDecimal salePrice = null;
-                if (pct != null && pct > 0 && pct < 100 && sellingPrice != null) {
-                    LocalDateTime now   = LocalDateTime.now();
-                    LocalDateTime start = product.getDiscountStartDate();
-                    LocalDateTime end   = product.getDiscountEndDate();
-                    boolean active = (start == null || !now.isBefore(start))
-                                  && (end   == null || !now.isAfter(end));
-                    if (active) {
-                        salePrice = sellingPrice.multiply(BigDecimal.valueOf(100 - pct))
-                                .divide(BigDecimal.valueOf(100), 0, RoundingMode.HALF_UP);
-                    }
-                }
+                BigDecimal salePrice = resolveSalePriceIfActive(product);
                 builder
                         .productId(product.getId())
                         .mysteryBoxId(null)
@@ -276,7 +265,7 @@ public class CartServiceImpl implements CartService {
                         return item.getMysteryBox().getPrice()
                                 .multiply(resolveCartItemKg(item));
                     } else if (item.getProduct() != null && item.getProduct().getSellingPrice() != null) {
-                        return item.getProduct().getSellingPrice()
+                        return resolveEffectiveSellingPrice(item.getProduct())
                                 .multiply(resolveCartItemKg(item));
                     } else if (item.getBuildCombo() != null && item.getBuildCombo().getDiscountPrice() != null) {
                         return item.getBuildCombo().getDiscountPrice()
@@ -511,6 +500,28 @@ public class CartServiceImpl implements CartService {
     private BigDecimal multiplyMoney(BigDecimal pricePerKg, BigDecimal quantityKg) {
         if (pricePerKg == null || quantityKg == null) return BigDecimal.ZERO;
         return pricePerKg.multiply(quantityKg).setScale(0, RoundingMode.HALF_UP);
+    }
+
+    private BigDecimal resolveSalePriceIfActive(Product product) {
+        BigDecimal sellingPrice = product.getSellingPrice();
+        Integer pct = product.getDiscountPercent();
+        if (pct != null && pct > 0 && pct < 100 && sellingPrice != null) {
+            LocalDateTime now = LocalDateTime.now();
+            LocalDateTime start = product.getDiscountStartDate();
+            LocalDateTime end = product.getDiscountEndDate();
+            boolean active = (start == null || !now.isBefore(start))
+                    && (end == null || !now.isAfter(end));
+            if (active) {
+                return sellingPrice.multiply(BigDecimal.valueOf(100 - pct))
+                        .divide(BigDecimal.valueOf(100), 0, RoundingMode.HALF_UP);
+            }
+        }
+        return null;
+    }
+
+    private BigDecimal resolveEffectiveSellingPrice(Product product) {
+        BigDecimal salePrice = resolveSalePriceIfActive(product);
+        return salePrice != null ? salePrice : product.getSellingPrice();
     }
 
     private void validateProductStockKg(Product product, BigDecimal requestedKg) {
