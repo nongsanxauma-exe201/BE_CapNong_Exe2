@@ -8,6 +8,7 @@ import com.swd301.foodmarket.exception.AppException;
 import com.swd301.foodmarket.exception.ErrorCode;
 import com.swd301.foodmarket.repository.*;
 import com.swd301.foodmarket.service.CartService;
+import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
 import lombok.RequiredArgsConstructor;
 import org.springframework.security.core.Authentication;
@@ -158,7 +159,7 @@ public class CartServiceImpl implements CartService {
         return getCart();
     }
 
-    @Transactional
+    @Transactional(propagation = Propagation.REQUIRES_NEW)
     @Override
     public void removeItem(Integer productId) {
         User user = getCurrentUser();
@@ -170,7 +171,7 @@ public class CartServiceImpl implements CartService {
         cartItemRepository.delete(item);
     }
 
-    @Transactional
+    @Transactional(propagation = Propagation.REQUIRES_NEW)
     @Override
     public void removeMysteryBox(Integer mysteryBoxId) {
         User user = getCurrentUser();
@@ -313,7 +314,7 @@ public class CartServiceImpl implements CartService {
         return getCart();
     }
 
-    @Transactional
+    @Transactional(propagation = Propagation.REQUIRES_NEW)
     @Override
     public void removeBuildCombo(Integer comboId) {
         User user = getCurrentUser();
