@@ -164,10 +164,10 @@ public class CartServiceImpl implements CartService {
     public void removeItem(Integer productId) {
         User user = getCurrentUser();
         Cart cart = getOrCreateCart(user);
-        Product product = productRepository.findById(productId)
-                .orElseThrow(() -> new AppException(ErrorCode.PRODUCT_NOT_FOUND));
-        CartItem item = cartItemRepository.findByCartAndProduct(cart, product)
-                .orElseThrow(() -> new AppException(ErrorCode.CART_ITEM_NOT_FOUND));
+        Product product = productRepository.findById(productId).orElse(null);
+        if (product == null) return;
+        CartItem item = cartItemRepository.findByCartAndProduct(cart, product).orElse(null);
+        if (item == null) return;
         cartItemRepository.delete(item);
     }
 
@@ -176,10 +176,10 @@ public class CartServiceImpl implements CartService {
     public void removeMysteryBox(Integer mysteryBoxId) {
         User user = getCurrentUser();
         Cart cart = getOrCreateCart(user);
-        MysteryBox box = mysteryBoxRepository.findById(mysteryBoxId)
-                .orElseThrow(() -> new AppException(ErrorCode.MYSTERY_BOX_NOT_FOUND));
-        CartItem item = cartItemRepository.findByCartAndMysteryBox(cart, box)
-                .orElseThrow(() -> new AppException(ErrorCode.CART_ITEM_NOT_FOUND));
+        MysteryBox box = mysteryBoxRepository.findById(mysteryBoxId).orElse(null);
+        if (box == null) return;
+        CartItem item = cartItemRepository.findByCartAndMysteryBox(cart, box).orElse(null);
+        if (item == null) return;
         cartItemRepository.delete(item);
     }
 
@@ -319,13 +319,10 @@ public class CartServiceImpl implements CartService {
     public void removeBuildCombo(Integer comboId) {
         User user = getCurrentUser();
         Cart cart = getOrCreateCart(user);
-
-        BuildCombo combo = buildComboRepository.findById(comboId)
-                .orElseThrow(() -> new AppException(ErrorCode.BUILD_COMBO_NOT_FOUND));
-
-        CartItem item = cartItemRepository.findByCartAndBuildCombo(cart, combo)
-                .orElseThrow(() -> new AppException(ErrorCode.CART_ITEM_NOT_FOUND));
-
+        BuildCombo combo = buildComboRepository.findById(comboId).orElse(null);
+        if (combo == null) return;
+        CartItem item = cartItemRepository.findByCartAndBuildCombo(cart, combo).orElse(null);
+        if (item == null) return;
         cartItemRepository.delete(item);
     }
     @Override
@@ -333,9 +330,6 @@ public class CartServiceImpl implements CartService {
     public CartResponse addBuildPlanToCart(Integer planId) {
         User user = getCurrentUser();
         Cart cart = getOrCreateCart(user);
-
-        // Clear existing cart to make it a "Buy Plan" primary action
-        cartItemRepository.deleteAllByCart(cart);
 
         BuildPlan plan = buildPlanRepository.findById(planId)
                 .orElseThrow(() -> new AppException(ErrorCode.BUILD_PLAN_NOT_FOUND));
