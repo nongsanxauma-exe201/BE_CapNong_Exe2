@@ -29,10 +29,10 @@ public interface VoucherUserRepository extends JpaRepository<VoucherUser, UUID> 
     from VoucherUser vu
     join vu.voucher v
     where vu.user = :user
-      and v.expiryDate > :voucherExpiryDateAfter
+      and (v.expiryDate is null or v.expiryDate > :voucherExpiryDateAfter)
       and v.active = :voucherActive
       and vu.quantity > 0
-      and v.usedCount < v.usageLimit
+      and (v.usageLimit is null or v.usedCount < v.usageLimit)
 """)
     Page<VoucherUser> getMyVoucherOfBuyerCanUse(
             @Param("user") User user,
@@ -46,12 +46,15 @@ public interface VoucherUserRepository extends JpaRepository<VoucherUser, UUID> 
     from VoucherUser vu
     join vu.voucher v
     where vu.user = :user
-      and  v.shopOwner = :shop
-      and v.expiryDate > :voucherExpiryDateAfter
+      and (
+          (v.shopOwner = :shop and v.voucherType = com.swd301.foodmarket.enums.VoucherType.SHOP)
+          or (v.voucherType = com.swd301.foodmarket.enums.VoucherType.DAMAGED_ORDER and v.shopOwner = :shop)
+      )
+      and (v.expiryDate is null or v.expiryDate > :voucherExpiryDateAfter)
       and v.active = :voucherActive
       and vu.quantity > 0
-      and v.usedCount < v.usageLimit
-      and v.minOrderValue <= :amount
+      and (v.usageLimit is null or v.usedCount < v.usageLimit)
+      and (v.minOrderValue is null or v.minOrderValue <= :amount)
 """)
     Page<VoucherUser> getMyVoucherForOrder(
             @Param("user") User user,
@@ -59,6 +62,29 @@ public interface VoucherUserRepository extends JpaRepository<VoucherUser, UUID> 
             @Param("voucherActive") boolean voucherActive,
             @Param("amount") BigDecimal amount,
             @Param("shop") User shop,
+            Pageable pageable
+    );
+
+    @Query("""
+    select vu
+    from VoucherUser vu
+    join vu.voucher v
+    where vu.user = :user
+      and v.voucherType in (
+          com.swd301.foodmarket.enums.VoucherType.PLATFORM,
+          com.swd301.foodmarket.enums.VoucherType.WELCOME
+      )
+      and (v.expiryDate is null or v.expiryDate > :voucherExpiryDateAfter)
+      and v.active = :voucherActive
+      and vu.quantity > 0
+      and (v.usageLimit is null or v.usedCount < v.usageLimit)
+      and (v.minOrderValue is null or v.minOrderValue <= :amount)
+""")
+    Page<VoucherUser> getMyBatchVouchers(
+            @Param("user") User user,
+            @Param("voucherExpiryDateAfter") LocalDateTime voucherExpiryDateAfter,
+            @Param("voucherActive") boolean voucherActive,
+            @Param("amount") BigDecimal amount,
             Pageable pageable
     );
 }

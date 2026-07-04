@@ -16,9 +16,6 @@ public class VoucherUpdateRequest {
     private Integer usageLimit;
     private LocalDateTime expiryDate;
     private Integer claimLimit;        // tổng số lượt được nhận
-    private Integer claimedCount;      // đã có bao nhiêu lượt nhận
-
-    private Integer usedCount;         // đã dùng bao nhiêu lượt
 
     private Integer perUserLimit;    // mỗi user dùng được mấy lần
 

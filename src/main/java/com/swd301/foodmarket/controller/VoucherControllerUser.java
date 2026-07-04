@@ -1,5 +1,6 @@
 package com.swd301.foodmarket.controller;
 
+import com.swd301.foodmarket.dto.request.GetVoucherForBatch;
 import com.swd301.foodmarket.dto.request.GetVoucherForOrder;
 import com.swd301.foodmarket.dto.response.ApiResponse;
 import com.swd301.foodmarket.dto.response.VoucherUserResponse;
@@ -55,6 +56,17 @@ public class VoucherControllerUser {
     {
         return ApiResponse.<Page<VoucherUserResponse>>builder()
                 .result(voucherUserService.getVoucherForOrder(request,page,size))
+                .build();
+    }
+
+    @PostMapping("/voucher-batch")
+    public ApiResponse<Page<VoucherUserResponse>> getMyBatchVouchers(
+            @RequestBody GetVoucherForBatch request,
+            @RequestParam(defaultValue = "0") int page,
+            @RequestParam(defaultValue = "10") int size
+    ) {
+        return ApiResponse.<Page<VoucherUserResponse>>builder()
+                .result(voucherUserService.getVoucherForBatch(request, page, size))
                 .build();
     }
 

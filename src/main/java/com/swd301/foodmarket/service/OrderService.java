@@ -1,5 +1,6 @@
 package com.swd301.foodmarket.service;
 
+import com.swd301.foodmarket.dto.request.CheckoutBatchRequest;
 import com.swd301.foodmarket.dto.request.OrderCreationRequest;
 import com.swd301.foodmarket.dto.request.OrderUpdateRequest;
 import com.swd301.foodmarket.dto.response.*;
@@ -13,11 +14,14 @@ import java.util.List;
 
 public interface OrderService {
     OrderResponse createOrder(OrderCreationRequest request);
+    CheckoutBatchResponse checkoutBatch(CheckoutBatchRequest request);
     List<OrderResponse> getAllOrders();
     PageResponse<OrderResponse> getAllOrdersPaged(int page, int size);
+    PageResponse<OrderResponse> getAllOrdersPaged(int page, int size, List<OrderStatus> statuses);
     OrderResponse updateOrder(Integer id, OrderUpdateRequest request, List<MultipartFile> files);
     List<OrderResponse> getOrdersByUserId(Integer userId);
     PageResponse<OrderResponse> getOrdersByUserIdPaged(Integer userId, int page, int size);
+    PageResponse<OrderResponse> getOrdersByUserIdPaged(Integer userId, int page, int size, List<OrderStatus> statuses);
     OrderResponse getOrderById(Integer id);
     void deleteOrder(Integer id);
 
@@ -29,4 +33,6 @@ public interface OrderService {
     StaffOrderReportResponse generateStaffOrderReport();
     OrderShopReport  orderShopReport(String type);
     OrderResponseReport orderReport();
+
+    OrderResponse processQcBuyerDecision(Integer orderId, boolean acceptRemaining);
 }

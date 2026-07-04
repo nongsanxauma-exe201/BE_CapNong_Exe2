@@ -5,6 +5,8 @@ import jakarta.persistence.*;
 import lombok.*;
 import lombok.experimental.FieldDefaults;
 
+import java.math.BigDecimal;
+
 @Entity
 @Table(name = "product_mystery")
 @Getter
@@ -32,4 +34,7 @@ public class ProductMystery {
     private MysteryBox mysteryBox;
 
     Integer quantity;
+
+    @Column(name = "quantity_kg", precision = 12, scale = 2)
+    BigDecimal quantityKg;
 }

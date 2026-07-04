@@ -102,7 +102,7 @@ public class AiCartGatewayImpl implements AiCartGateway {
                 .name(mysteryBox.getBoxType())
                 .imageUrl(mysteryBox.getImageUrl())
                 .quantity((double) finalQuantity)
-                .unit("hộp")
+                .unit("kg")
                 .unitPrice(unitPrice)
                 .totalPrice(totalPrice)
                 .build();

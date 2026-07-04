@@ -36,7 +36,7 @@ public class Review {
     User shopOwner;
 
     @OneToOne
-    @JoinColumn(name = "order_detail_id", nullable = false, unique = true)
+    @JoinColumn(name = "order_detail_id", nullable = true, unique = true)
     @JsonIgnore
     OrderDetail orderDetail;
 

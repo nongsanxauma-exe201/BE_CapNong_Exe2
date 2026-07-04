@@ -1,6 +1,7 @@
 package com.swd301.foodmarket.dto.response;
 
 import lombok.Data;
+import com.swd301.foodmarket.enums.VoucherType;
 
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
@@ -23,4 +24,9 @@ public class VoucherResponse {
     private Integer usedCount;
 
     private Integer perUserLimit;
+    private VoucherType voucherType;
+    private Integer shopId;
+    private String shopName;
+    private String autoCreatedReason;
+    private Integer autoCreatedFromOrderId;
 }

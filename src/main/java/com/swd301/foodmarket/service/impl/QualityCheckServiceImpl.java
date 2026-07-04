@@ -1,17 +1,14 @@
 package com.swd301.foodmarket.service.impl;
 
-import com.swd301.foodmarket.dto.request.OrderUpdateRequest;
 import com.swd301.foodmarket.dto.request.QualityCheckRequest;
 import com.swd301.foodmarket.dto.response.QualityCheckResponse;
 import com.swd301.foodmarket.entity.*;
-import com.swd301.foodmarket.enums.OrderStatus;
 import com.swd301.foodmarket.exception.AppException;
 import com.swd301.foodmarket.exception.ErrorCode;
 import com.swd301.foodmarket.mapper.QualityResultMapper;
 import com.swd301.foodmarket.repository.*;
 import com.swd301.foodmarket.service.CloudinaryService;
-import com.swd301.foodmarket.service.NotificationService;
-import com.swd301.foodmarket.service.OrderService;
+import com.swd301.foodmarket.service.QcSettlementService;
 import com.swd301.foodmarket.service.QualityCheckService;
 import jakarta.transaction.Transactional;
 import lombok.RequiredArgsConstructor;
@@ -24,9 +21,8 @@ import org.springframework.util.MultiValueMap;
 import org.springframework.web.multipart.MultipartFile;
 
 import java.math.BigDecimal;
-import java.util.HashMap;
+import java.math.RoundingMode;
 import java.util.List;
-import java.util.Map;
 
 @Slf4j
 @Service
@@ -39,22 +35,19 @@ public class QualityCheckServiceImpl implements QualityCheckService {
     private final ImageRepository imageRepository;
     private final CloudinaryService cloudinaryService;
     private final QualityResultMapper qualityResultMapper;
-    private final OrderRepository orderRepository;
-    private final OrderService orderService;
-    private final NotificationService notificationService;
-    private final MysteryBoxRepository mysteryBoxRepository;
     private final OrderMyteryRepository orderMyteryRepository;
+    private final QcSettlementService qcSettlementService;
 
     @Override
     @Transactional
     public QualityCheckResponse checkQuality(QualityCheckRequest qualityCheckRequest, MultiValueMap<String, MultipartFile> fileMap) {
         OrderDetail orderDetail = null;
         OrderMysteryBox mysteryBox = null;
-        log.info("[QC_REQUEST] orderDetailId={}, orderMysteryBoxId={}, qualityResult={}, rejectedWeight={}"                , qualityCheckRequest.getOrderDetailId()
-                , qualityCheckRequest.getOrderMysteryBoxId()
-                , qualityCheckRequest.getQualityResult()
-                , qualityCheckRequest.getRejectedWeight()
-        );
+        log.info("[QC_REQUEST] orderDetailId={}, orderMysteryBoxId={}, rejectedWeight={}",
+                qualityCheckRequest.getOrderDetailId(),
+                qualityCheckRequest.getOrderMysteryBoxId(),
+                qualityCheckRequest.getRejectedWeight());
+
         if (qualityCheckRequest.getOrderDetailId() != null) {
             orderDetail = orderDetailRepository.findById(qualityCheckRequest.getOrderDetailId()).orElseThrow(
                     () -> new AppException(ErrorCode.ORDER_DETAIL_NOT_FOUND)
@@ -65,194 +58,132 @@ public class QualityCheckServiceImpl implements QualityCheckService {
             );
         } else {
             throw new AppException(ErrorCode.INVALID_QUALITY_CHECK_REQUEST);
-
         }
+
+        BigDecimal rejectedKg = qualityCheckRequest.getRejectedKg() != null
+                ? qualityCheckRequest.getRejectedKg()
+                : BigDecimal.valueOf(qualityCheckRequest.getRejectedWeight());
+        if (mysteryBox != null) {
+            validateMysteryBoxRejectedQuantity(rejectedKg, mysteryBox);
+        }
+        BigDecimal requestedKg = orderDetail != null
+                ? resolveOrderDetailKg(orderDetail)
+                : resolveMysteryBoxKg(mysteryBox);
+
+        String damageNote = normalizeText(qualityCheckRequest.getDamageNote());
+        com.swd301.foodmarket.enums.QualityResult finalQualityResult = resolveFinalQualityResult(
+                qualityCheckRequest, rejectedKg, damageNote);
 
         QualityResult qualityResult = QualityResult.builder()
                 .note(qualityCheckRequest.getNote())
-                .qualityResult(qualityCheckRequest.getQualityResult())
-                .rejectedWeight(qualityCheckRequest.getRejectedWeight())
+                .damageNote(damageNote)
+                .qualityResult(finalQualityResult)
+                .rejectedWeight(rejectedKg.doubleValue())
+                .requestedKg(requestedKg)
+                .approvedKg(qualityCheckRequest.getApprovedKg() != null
+                        ? qualityCheckRequest.getApprovedKg()
+                        : requestedKg.subtract(rejectedKg).max(BigDecimal.ZERO))
+                .rejectedKg(rejectedKg)
                 .build();
-        Order order = null;
+
+        Order order;
         if (mysteryBox != null) {
             qualityResult.setOrderMysteryBox(mysteryBox);
-            mysteryBox.setQualityResult(qualityResult); // thêm dòng này
+            mysteryBox.setQualityResult(qualityResult);
             order = mysteryBox.getOrder();
-        } else if (orderDetail != null) {
+        } else {
             qualityResult.setOrderDetail(orderDetail);
-            orderDetail.setQualityResult(qualityResult); // nên thêm luôn cho product
+            orderDetail.setQualityResult(qualityResult);
             order = orderDetail.getOrder();
         }
+
         qualityResutlRepository.saveAndFlush(qualityResult);
+
         int count = 1;
-        for (QualityCheckRequest.QualityCheckingRequest qualityCheckingRequest : qualityCheckRequest.getQualityChecks()) {
-            com.swd301.foodmarket.entity.QualityCheck qualityCheck = com.swd301.foodmarket.entity.QualityCheck.builder()
-                    .qualityCriteria(qualityCrieriaRepository.findById(qualityCheckingRequest.getQualityCrieriaId()).orElseThrow(
-                            () -> new AppException(ErrorCode.QUALITY_CRIERIA_NOT_FOUND)
-                    ))
-                    .qualityResult(qualityResult)
-                    .isPassed(qualityCheckingRequest.isPassed())
-                    .build();
-            qualityCheckRepository.save(qualityCheck);
-            String key = "qc_" + count;
-
-            List<MultipartFile> files = fileMap.get(key);
-
-            log.info(
-                    "Processing quality check {}: Found {} files for key '{}'",
-                    count,
-                    files != null ? files.size() : 0,
-                    key
-            );
-
-            if (files != null && !files.isEmpty()) {
-
-                for (MultipartFile file : files) {
-
-                    if (file == null || file.isEmpty()) {
-                        continue;
+        if (qualityCheckRequest.getQualityChecks() != null) {
+            for (QualityCheckRequest.QualityCheckingRequest qualityCheckingRequest : qualityCheckRequest.getQualityChecks()) {
+                com.swd301.foodmarket.entity.QualityCheck qualityCheck = com.swd301.foodmarket.entity.QualityCheck.builder()
+                        .qualityCriteria(qualityCrieriaRepository.findById(qualityCheckingRequest.getQualityCrieriaId()).orElseThrow(
+                                () -> new AppException(ErrorCode.QUALITY_CRIERIA_NOT_FOUND)
+                        ))
+                        .qualityResult(qualityResult)
+                        .isPassed(qualityCheckingRequest.isPassed())
+                        .build();
+                qualityCheckRepository.save(qualityCheck);
+                String key = "qc_" + count;
+                List<MultipartFile> files = fileMap.get(key);
+                if (files != null && !files.isEmpty()) {
+                    for (MultipartFile file : files) {
+                        if (file == null || file.isEmpty()) {
+                            continue;
+                        }
+                        String imageUrl = cloudinaryService.uploadImage(file);
+                        imageRepository.save(
+                                Image.builder()
+                                        .imageUrl(imageUrl)
+                                        .qualityCheck(qualityCheck)
+                                        .build()
+                        );
                     }
-
-                    String imageUrl = cloudinaryService.uploadImage(file);
-
-                    imageRepository.save(
-                            Image.builder()
-                                    .imageUrl(imageUrl)
-                                    .qualityCheck(qualityCheck)
-                                    .build()
-                    );
                 }
-            }
-            count++;
-        }
-        // update status order
-        updateOrderStatus(order);
-        // update Reject quality
-        Integer qualityCheckCount = orderDetail != null
-                ? orderDetail.getQuantity()
-                : mysteryBox.getQuantity();
-
-        String message = "";
-        BigDecimal refundAmount = BigDecimal.ZERO;
-
-        if (qualityResult.getRejectedWeight() != null
-                && qualityResult.getRejectedWeight() > 0) {
-
-            double percentage =
-                    (double) (qualityResult.getRejectedWeight() * 100) / qualityCheckCount;
-
-            if (percentage > 5) {
-
-                BigDecimal unitPrice;
-
-                String itemName;
-
-                if (orderDetail != null) {
-                    unitPrice = orderDetail.getUnitPrice();
-                    itemName = orderDetail.getProduct().getProductName();
-                } else {
-                    unitPrice = mysteryBox.getMysteryBox().getPrice();
-                    itemName = mysteryBox.getMysteryBox().getDescription();
-                }
-
-                refundAmount = unitPrice.multiply(
-                        BigDecimal.valueOf(qualityResult.getRejectedWeight())
-                );
-
-                String rejectedUnit = orderDetail != null ? "kg/số lượng" : "túi";
-
-                message = "Sản phẩm " + itemName
-                        + " bị hư hỏng " + qualityResult.getRejectedWeight() + " " + rejectedUnit
-                        + ", phải hoàn " + refundAmount + "đ";
+                count++;
             }
         }
-        BigDecimal currentRefund = order.getRefundAmount() != null
-                ? order.getRefundAmount()
-                : BigDecimal.ZERO;
-        order.setRefundAmount(currentRefund.add(refundAmount));
-        if ("COD".equalsIgnoreCase(order.getPaymentMethod())) {
-            BigDecimal totalAmount = order.getTotalAmount() != null
-                    ? order.getTotalAmount()
-                    : BigDecimal.ZERO;
 
-            BigDecimal newRefundAmount = order.getRefundAmount() != null
-                    ? order.getRefundAmount()
-                    : BigDecimal.ZERO;
+        qcSettlementService.applyLineQcResult(order, orderDetail, mysteryBox, qualityResult, rejectedKg, requestedKg);
+        qualityResutlRepository.save(qualityResult);
+        qcSettlementService.syncOrderAfterQcItem(order);
 
-            BigDecimal codAmount = totalAmount.subtract(newRefundAmount);
-
-            if (codAmount.compareTo(BigDecimal.ZERO) < 0) {
-                throw new AppException(ErrorCode.INVALID_AMOUNT);
-            }
-
-            order.setCodAmount(codAmount);
-        }
-        order.setRefundReason(order.getRefundReason() == null ? message : order.getRefundReason() + "\n" + message);
-        orderRepository.save(order);
         return qualityResultMapper.toQualityCheckResponse(qualityResult);
     }
 
-    // update status order
-    public void updateOrderStatus(Order order) {
-        int totalProductItems = order.getOrderDetails() != null
-                ? order.getOrderDetails().size()
-                : 0;
+    private BigDecimal resolveOrderDetailKg(OrderDetail detail) {
+        if (detail.getQuantityKg() != null) return detail.getQuantityKg();
+        return BigDecimal.valueOf(detail.getQuantity() == null ? 0 : detail.getQuantity()).setScale(2, RoundingMode.HALF_UP);
+    }
 
-        int totalMysteryItems = order.getMysteryBoxes() != null
-                ? order.getMysteryBoxes().size()
-                : 0;
+    private BigDecimal resolveMysteryBoxKg(OrderMysteryBox mysteryBox) {
+        if (mysteryBox.getRescuedWeightKg() != null) return mysteryBox.getRescuedWeightKg();
+        if (mysteryBox.getUnitWeightKg() != null && mysteryBox.getQuantity() != null) {
+            return mysteryBox.getUnitWeightKg()
+                    .multiply(BigDecimal.valueOf(mysteryBox.getQuantity()))
+                    .setScale(2, RoundingMode.HALF_UP);
+        }
+        return BigDecimal.valueOf(mysteryBox.getQuantity() == null ? 0 : mysteryBox.getQuantity()).setScale(2, RoundingMode.HALF_UP);
+    }
 
-        int totalItems = totalProductItems + totalMysteryItems;
-
-        int uncheckedProductItems = order.getOrderDetails() == null
-                ? 0
-                : (int) order.getOrderDetails()
-                .stream()
-                .filter(item -> item.getQualityResult() == null)
-                .count();
-
-        int uncheckedMysteryItems = order.getMysteryBoxes() == null
-                ? 0
-                : (int) order.getMysteryBoxes()
-                .stream()
-                .filter(item -> item.getQualityResult() == null)
-                .count();
-
-        int uncheckedItems = uncheckedProductItems + uncheckedMysteryItems;
-
-        log.info(
-                "Order {} quality status: totalItems={}, uncheckedProductItems={}, uncheckedMysteryItems={}, uncheckedItems={}",
-                order.getId(),
-                totalItems,
-                uncheckedProductItems,
-                uncheckedMysteryItems,
-                uncheckedItems
-        );
-
-        if (totalItems <= 0) {
+    private void validateMysteryBoxRejectedQuantity(BigDecimal rejectedKg, OrderMysteryBox mysteryBox) {
+        if (rejectedKg == null || rejectedKg.signum() <= 0) {
             return;
         }
-
-        if (uncheckedItems == 0) {
-            orderService.updateOrder(
-                    order.getId(),
-                    OrderUpdateRequest.builder()
-                            .status(OrderStatus.QUALITY_CHECKED)
-                            .build(),
-                    null
-            );
-            return;
+        if (rejectedKg.stripTrailingZeros().scale() > 0) {
+            throw new AppException(ErrorCode.INVALID_QUALITY_CHECK_REQUEST);
         }
-
-        if (order.getStatus().equals(OrderStatus.ARRIVED_AT_WAREHOUSE)) {
-            orderService.updateOrder(
-                    order.getId(),
-                    OrderUpdateRequest.builder()
-                            .status(OrderStatus.QUALITY_CHECKING)
-                            .build(),
-                    null
-            );
+        int orderedBags = mysteryBox.getQuantity() == null ? 0 : mysteryBox.getQuantity();
+        if (rejectedKg.compareTo(BigDecimal.valueOf(orderedBags)) > 0) {
+            throw new AppException(ErrorCode.INVALID_QUALITY_CHECK_REQUEST);
         }
+    }
+
+    private com.swd301.foodmarket.enums.QualityResult resolveFinalQualityResult(
+            QualityCheckRequest request,
+            BigDecimal rejectedKg,
+            String damageNote
+    ) {
+        if (request.getQualityResult() != null) {
+            return request.getQualityResult();
+        }
+        boolean hasFailedCriteria = request.getQualityChecks() != null
+                && request.getQualityChecks().stream().anyMatch(item -> !item.isPassed());
+        boolean hasRejectedKg = rejectedKg != null && rejectedKg.signum() > 0;
+        return (damageNote != null || hasRejectedKg || hasFailedCriteria)
+                ? com.swd301.foodmarket.enums.QualityResult.REJECTED
+                : com.swd301.foodmarket.enums.QualityResult.APPROVED;
+    }
+
+    private String normalizeText(String value) {
+        if (value == null || value.trim().isEmpty()) return null;
+        return value.trim();
     }
 
     @Override
@@ -273,7 +204,6 @@ public class QualityCheckServiceImpl implements QualityCheckService {
         );
         if (mysteryBox.getQualityResult() == null) {
             throw new AppException(ErrorCode.QUALITY_CHECK_NOT_FOUND);
-
         }
         return qualityResultMapper.toQualityCheckResponse(mysteryBox.getQualityResult());
     }

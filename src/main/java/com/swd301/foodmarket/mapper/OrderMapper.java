@@ -16,6 +16,9 @@ public interface OrderMapper {
     @Mapping(target = "items", expression = "java(mapItems(order))")
     @Mapping(target = "buyerId", source = "buyer.id")
     @Mapping(target = "passedQualityCheck", expression = "java(allPassQualityChecks(order))")
+    @Mapping(target = "rescuedKg", source = "rescuedWeight")
+    @Mapping(target = "checkoutBatchId", source = "checkoutBatchFkId")
+    @Mapping(target = "batchUnpaidCount", ignore = true)
     OrderResponse toResponse(Order order);
 
     // ================== PRODUCT ==================
@@ -23,11 +26,15 @@ public interface OrderMapper {
     @Mapping(target = "productId", source = "product.id")
     @Mapping(target = "productName", source = "product.productName")
     @Mapping(target = "quantity", source = "quantity")
+    @Mapping(target = "quantityKg", source = "quantityKg")
     @Mapping(target = "unitPrice", source = "unitPrice")
+    @Mapping(target = "pricePerKg", source = "pricePerKg")
+    @Mapping(target = "unitWeightKg", source = "unitWeightKg")
+    @Mapping(target = "rescuedWeightKg", source = "rescuedWeightKg")
     @Mapping(target = "imageUrl", source = "product.imageUrl")
     @Mapping(target = "itemType", constant = "PRODUCT")
     @Mapping(target = "isRequestedReturn", source = "isRequestedReturn")
-    @Mapping(target = "unit", source = "product.unit")
+    @Mapping(target = "unit", constant = "kg")
     OrderItemResponse toItemResponse(OrderDetail detail);
 
     @AfterMapping
@@ -57,6 +64,8 @@ public interface OrderMapper {
     @Mapping(target = "productName", source = "mysteryBox.boxType")
     @Mapping(target = "quantity", source = "quantity")
     @Mapping(target = "unitPrice", source = "mysteryBox.price")
+    @Mapping(target = "unitWeightKg", source = "unitWeightKg")
+    @Mapping(target = "rescuedWeightKg", source = "rescuedWeightKg")
     @Mapping(target = "imageUrl", source = "mysteryBox.imageUrl")
     @Mapping(target = "itemType", constant = "MYSTERY_BOX")
     @Mapping(target = "orderMysteryBoxId", source = "id")

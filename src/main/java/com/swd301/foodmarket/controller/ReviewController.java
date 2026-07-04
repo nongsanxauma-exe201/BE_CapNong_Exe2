@@ -2,6 +2,7 @@ package com.swd301.foodmarket.controller;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.swd301.foodmarket.dto.request.ReviewCreateRequest;
+import com.swd301.foodmarket.dto.request.ReviewReactionRequest;
 import com.swd301.foodmarket.dto.request.ReviewReplyRequest;
 import com.swd301.foodmarket.dto.request.ReviewUpdateRequest;
 import com.swd301.foodmarket.dto.response.ApiResponse;
@@ -107,6 +108,13 @@ public class ReviewController {
                 .build();
     }
 
+    @GetMapping("/my")
+    public ApiResponse<List<ReviewResponse>> getMyReviews() {
+        return ApiResponse.<List<ReviewResponse>>builder()
+                .result(reviewService.getMyReviews())
+                .build();
+    }
+
     @GetMapping("/shop/{shopId}")
     public ApiResponse<List<ReviewResponse>> getByShopId(
             @PathVariable Integer shopId
@@ -135,6 +143,25 @@ public class ReviewController {
                 .result(reviewService.getReviewsByShopPaged(shopId, page, size))
                 .build();
     }
+    @GetMapping("/mystery-box/{mysteryBoxId}")
+    public ApiResponse<List<ReviewResponse>> getByMysteryBoxId(
+            @PathVariable Integer mysteryBoxId
+    ) {
+        return ApiResponse.<List<ReviewResponse>>builder()
+                .result(reviewService.getReviewsByMysteryBox(mysteryBoxId))
+                .build();
+    }
+
+    @PostMapping("/{id}/react")
+    public ApiResponse<ReviewResponse> reactToReview(
+            @PathVariable Integer id,
+            @RequestBody ReviewReactionRequest request
+    ) {
+        return ApiResponse.<ReviewResponse>builder()
+                .result(reviewService.reactToReview(id, request))
+                .build();
+    }
+
     @GetMapping("/shop/report")
     public  ApiResponse<ReviewShopReport> getReport() {
 

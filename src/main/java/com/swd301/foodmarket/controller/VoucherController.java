@@ -34,6 +34,24 @@ public class VoucherController {
                 .result(voucherService.createVoucher(voucherRequest))
                 .build();
     }
+
+    @GetMapping("/admin/platform")
+    public ApiResponse<Page<VoucherResponse>> getPlatformVouchers(
+            @RequestParam(defaultValue = "0") int page,
+            @RequestParam(defaultValue = "10") int size,
+            @RequestParam(defaultValue = "true") boolean active
+    ) {
+        return ApiResponse.<Page<VoucherResponse>>builder()
+                .result(voucherService.getPlatformVouchers(page, size, active))
+                .build();
+    }
+
+    @PostMapping("/admin/platform")
+    public ApiResponse<VoucherResponse> createPlatformVoucher(@RequestBody VoucherCreateRequest voucherRequest) {
+        return ApiResponse.<VoucherResponse>builder()
+                .result(voucherService.createPlatformVoucher(voucherRequest))
+                .build();
+    }
     @PutMapping("/{voucherCode}")
     public ApiResponse<VoucherResponse> updateVoucher(@PathVariable String voucherCode, @RequestBody VoucherUpdateRequest voucherRequest) {
         return ApiResponse.<VoucherResponse>builder()
@@ -64,7 +82,7 @@ public class VoucherController {
     public ApiResponse<Page<VoucherResponse>> getShopBuyer(
             @RequestParam (defaultValue = "0") int page,
             @RequestParam(defaultValue = "10") int size,
-            @RequestParam Integer shopId
+            @PathVariable Integer shopId
 
     ) {
 

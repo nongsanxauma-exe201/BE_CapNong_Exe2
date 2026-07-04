@@ -51,25 +51,25 @@ public enum ErrorCode {
     USER_PENDING(1019, "User account is pending approval", HttpStatus.FORBIDDEN),
     PRODUCT_IN_USE(1020, "Product is in use and cannot be deleted", HttpStatus.BAD_REQUEST),
     // Wallet errors
-    WALLET_EXISTED(3001, "Wallet already exists for this shop owner", HttpStatus.BAD_REQUEST),
-    WALLET_NOT_FOUND(3002, "Wallet not found for this shop owner", HttpStatus.NOT_FOUND),
-    WITHDRAW_REQUEST_NOT_FOUND(3003, "Withdraw request not found", HttpStatus.NOT_FOUND),
-    INSUFFICIENT_BALANCE(3004, "Insufficient balance in wallet", HttpStatus.BAD_REQUEST),
-    BANK_ACCOUNT_NOT_FOUND(3005, "Bank account not found for this user", HttpStatus.BAD_REQUEST),
-    WITHDRAW_REQUEST_ALREADY_PROCESSED(3006, "Withdraw request has already been processed", HttpStatus.BAD_REQUEST),
-    INVALID_AMOUNT(3007, "Invalid amount for withdraw request", HttpStatus.BAD_REQUEST),
+    WALLET_EXISTED(3001, "Ví đã tồn tại cho tài khoản này", HttpStatus.BAD_REQUEST),
+    WALLET_NOT_FOUND(3002, "Không tìm thấy ví của tài khoản này", HttpStatus.NOT_FOUND),
+    WITHDRAW_REQUEST_NOT_FOUND(3003, "Không tìm thấy yêu cầu rút tiền", HttpStatus.NOT_FOUND),
+    INSUFFICIENT_BALANCE(3004, "Số dư ví không đủ để thực hiện thao tác này", HttpStatus.BAD_REQUEST),
+    BANK_ACCOUNT_NOT_FOUND(3005, "Không tìm thấy tài khoản ngân hàng của người dùng này", HttpStatus.BAD_REQUEST),
+    WITHDRAW_REQUEST_ALREADY_PROCESSED(3006, "Yêu cầu rút tiền đã được xử lý trước đó", HttpStatus.BAD_REQUEST),
+    INVALID_AMOUNT(3007, "Số tiền yêu cầu không hợp lệ", HttpStatus.BAD_REQUEST),
     OUT_OF_STOCK(3008, "Product is out of stock", HttpStatus.BAD_REQUEST),
     PRODUCT_LIST_EMPTY(3009, "Product list cannot be empty", HttpStatus.BAD_REQUEST),
     MYSTERY_BOX_OUT_OF_STOCK(3010, "Mystery box is out of stock", HttpStatus.BAD_REQUEST),
     INVALID_REVIEW_TARGET(3011, "Invalid target for review", HttpStatus.BAD_REQUEST),
     MYSTERY_BOX_NOT_AVAILABLE(3012, "Mystery box is not available for purchase", HttpStatus.BAD_REQUEST),
-    INVALID_WITHDRAW_STATUS(3008, "Invalid status for withdraw request", HttpStatus.BAD_REQUEST),
-    PAYOS_CREATE_QR_FAILED(3009, "Failed to create QR code for PayOS", HttpStatus.INTERNAL_SERVER_ERROR),
-    PLATFORM_WALLET_NOT_FOUND(3010, "Platform wallet not found", HttpStatus.INTERNAL_SERVER_ERROR),
-    WALLET_FROZEN_BALANCE_NOT_ENOUGH(3011, "Frozen balance in wallet is not enough for this operation", HttpStatus.BAD_REQUEST),
-    PLATFORM_BALANCE_NOT_ENOUGH(3012, "Platform balance is not enough for this operation", HttpStatus.INTERNAL_SERVER_ERROR),
-    WALLET_BALANCE_NOT_ENOUGH(3013, "Wallet balance is not enough for this operation", HttpStatus.BAD_REQUEST),
-    INVALID_REFUND_AMOUNT(3014, "Invalid refund amount", HttpStatus.BAD_REQUEST),
+    INVALID_WITHDRAW_STATUS(3008, "Trạng thái yêu cầu rút tiền không hợp lệ", HttpStatus.BAD_REQUEST),
+    PAYOS_CREATE_QR_FAILED(3009, "Không thể tạo mã QR PayOS", HttpStatus.INTERNAL_SERVER_ERROR),
+    PLATFORM_WALLET_NOT_FOUND(3010, "Không tìm thấy ví nền tảng", HttpStatus.INTERNAL_SERVER_ERROR),
+    WALLET_FROZEN_BALANCE_NOT_ENOUGH(3011, "Số dư đang phong tỏa trong ví không đủ để thực hiện thao tác này", HttpStatus.BAD_REQUEST),
+    PLATFORM_BALANCE_NOT_ENOUGH(3012, "Số dư ví nền tảng không đủ để thực hiện thao tác này", HttpStatus.INTERNAL_SERVER_ERROR),
+    WALLET_BALANCE_NOT_ENOUGH(3013, "Số dư ví không đủ để thực hiện thao tác này", HttpStatus.BAD_REQUEST),
+    INVALID_REFUND_AMOUNT(3014, "Số tiền hoàn không hợp lệ", HttpStatus.BAD_REQUEST),
     BLOG_NOT_FOUND(4001, "Blog not found", HttpStatus.NOT_FOUND),
     //PAYMENT
     PAYMENT_NOT_FOUND(5001, "Payment not found", HttpStatus.NOT_FOUND),
@@ -77,9 +77,13 @@ public enum ErrorCode {
     PAYOS_CREATE_FAILED(5003, "Failed to create PayOS payment", HttpStatus.INTERNAL_SERVER_ERROR),
     ORDER_NOT_PAYABLE(5004, "Order is not in a payable status", HttpStatus.BAD_REQUEST),
     INVALID_REQUEST(5005, "Invalid request data", HttpStatus.BAD_REQUEST),
-    ORDER_ALREADY_TAKEN(4009, "Order already accepted by another shipper", HttpStatus.BAD_REQUEST),
-    LOCATION_NOT_FOUND(4004, "Shipper location not found for this order", HttpStatus.NOT_FOUND),
+    ORDER_ALREADY_TAKEN(4009, "Đơn hàng này đã được shipper khác nhận", HttpStatus.BAD_REQUEST),
+    ORDER_MULTI_SHOP_NOT_ALLOWED(4010, "Giỏ hàng có sản phẩm từ nhiều cửa hàng. Vui lòng đặt từng cửa hàng riêng hoặc dùng checkout batch.", HttpStatus.BAD_REQUEST),
+    CHECKOUT_BATCH_NOT_FOUND(4011, "Không tìm thấy phiên thanh toán gộp", HttpStatus.NOT_FOUND),
+    LOCATION_NOT_FOUND(4004, "Không tìm thấy vị trí shipper cho đơn hàng này", HttpStatus.NOT_FOUND),
     PAYMENT_ALREADY_SUCCESS(5006, "Payment has already been marked as successful", HttpStatus.BAD_REQUEST),
+    ORDER_ALREADY_PAID(5007, "Đơn hàng này đã được thanh toán thành công. Cảm ơn bạn!", HttpStatus.BAD_REQUEST),
+    ORDER_ALREADY_CANCELLED(5008, "Đơn hàng này đã bị hủy và không thể thanh toán.", HttpStatus.BAD_REQUEST),
 
     //Build plan
     BUILD_PLAN_NOT_FOUND(6001, "Build plan not found", HttpStatus.NOT_FOUND),
@@ -99,6 +103,7 @@ public enum ErrorCode {
     QUALITY_CRIERIA_NOT_FOUND(10001, "Quality criteria not found", HttpStatus.NOT_FOUND),
     QUALITY_CHECK_NOT_FOUND(10002, "Quality check not found", HttpStatus.NOT_FOUND),
     INVALID_QUALITY_CHECK_REQUEST(10003, "Invalid quality check request", HttpStatus.BAD_REQUEST),
+    QC_BUYER_DECISION_INVALID(10004, "Order is not awaiting buyer QC decision", HttpStatus.BAD_REQUEST),
     // Vie QR
     BANK_NOT_FOUND(11001, "bankBin is required", HttpStatus.BAD_REQUEST),
     ACCOUNT_NOT_FOUND(11002, "accountNo is required", HttpStatus.BAD_REQUEST),
@@ -126,13 +131,19 @@ public enum ErrorCode {
     INVALID_TYPE(17001, "Invalid report type", HttpStatus.BAD_REQUEST),
     INVALID_DATE(17002, "from date must be before or equal to to date", HttpStatus.BAD_REQUEST),
     // VOUCHER
-    VOUCHER_NOT_FOUND(18001, "Voucher not found", HttpStatus.NOT_FOUND),
-    VOUCHER_RECEIVE_LIMIT_REACHED(18002, "Voucher receive limit reached", HttpStatus.BAD_REQUEST),
-    VOUCHER_ALREADY_CLAIMED(18003, "Voucher already claimed by this user", HttpStatus.BAD_REQUEST),
-    VOUCHER_USER_NOT_FOUND(18004, "User not found for this voucher", HttpStatus.NOT_FOUND),
-    VOUCHER_EXPIRED(18005, "Voucher has expired", HttpStatus.BAD_REQUEST),
-    VOUCHER_INACTIVE(18006, "Voucher not active ", HttpStatus.BAD_REQUEST)
-    ;
+    VOUCHER_NOT_FOUND(18001, "Không tìm thấy voucher", HttpStatus.NOT_FOUND),
+    VOUCHER_RECEIVE_LIMIT_REACHED(18002, "Voucher đã hết lượt nhận", HttpStatus.BAD_REQUEST),
+    VOUCHER_ALREADY_CLAIMED(18003, "Bạn đã nhận voucher này rồi", HttpStatus.BAD_REQUEST),
+    VOUCHER_USER_NOT_FOUND(18004, "Không tìm thấy voucher trong kho của bạn", HttpStatus.NOT_FOUND),
+    VOUCHER_EXPIRED(18005, "Voucher đã hết hạn", HttpStatus.BAD_REQUEST),
+    VOUCHER_INACTIVE(18006, "Voucher chưa được kích hoạt", HttpStatus.BAD_REQUEST),
+
+    // Code confirm
+    PENDING_ADMIN_CONFIRM(
+            19001,
+            "Đơn hàng đang chờ Admin xác nhận đã nhận tiền ứng.",
+            HttpStatus.BAD_REQUEST
+    )    ;
     private final int code;
     private final String message;
     private final HttpStatus statusCode;

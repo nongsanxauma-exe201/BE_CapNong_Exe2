@@ -40,6 +40,14 @@ public class WalletController {
                                 .build();
         }
 
+        @GetMapping("/platform")
+        @PreAuthorize("hasRole('ADMIN')")
+        public ApiResponse<WalletResponse> platformWallet() {
+                return ApiResponse.<WalletResponse>builder()
+                                .result(walletService.getPlatformWallet())
+                                .build();
+        }
+
         // Shipper gửi yêu cầu rút tiền
         @PostMapping("/shipper/withdraw-requests")
         @PreAuthorize("hasRole('SHIPPER')")

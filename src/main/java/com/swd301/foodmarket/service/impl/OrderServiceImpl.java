@@ -1,12 +1,16 @@
 package com.swd301.foodmarket.service.impl;
 
 import com.swd301.foodmarket.dto.goong.LatLong;
+import com.swd301.foodmarket.dto.request.CheckoutBatchRequest;
 import com.swd301.foodmarket.dto.request.OrderCreationRequest;
 import com.swd301.foodmarket.dto.request.OrderItemRequest;
 import com.swd301.foodmarket.dto.request.OrderUpdateRequest;
+import com.swd301.foodmarket.dto.request.ShopOrderRequest;
 import com.swd301.foodmarket.dto.response.*;
 import com.swd301.foodmarket.entity.*;
+import com.swd301.foodmarket.enums.CheckoutBatchStatus;
 import com.swd301.foodmarket.enums.OrderStatus;
+import com.swd301.foodmarket.enums.ProductStatus;
 import com.swd301.foodmarket.exception.AppException;
 import com.swd301.foodmarket.exception.ErrorCode;
 import com.swd301.foodmarket.mapper.OrderMapper;
@@ -28,6 +32,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.web.multipart.MultipartFile;
 
 import java.math.BigDecimal;
+import java.math.RoundingMode;
 import java.time.DayOfWeek;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
@@ -59,6 +64,11 @@ public class OrderServiceImpl implements OrderService {
     ReviewRepository reviewRepository;
     WarehouseRepository warehouseRepository;
     VoucherUserService voucherUserService;
+    OrderRewardService orderRewardService;
+    CheckoutBatchRepository checkoutBatchRepository;
+    PayosService payosService;
+    PaymentService paymentService;
+    QcSettlementService qcSettlementService;
 
     @NonFinal
     @Value("${ADDRESS_WAREHOUSE}")
@@ -495,8 +505,16 @@ public class OrderServiceImpl implements OrderService {
 
     @Override
     public PageResponse<OrderResponse> getAllOrdersPaged(int page, int size) {
+        return getAllOrdersPaged(page, size, null);
+    }
+
+    @Override
+    public PageResponse<OrderResponse> getAllOrdersPaged(int page, int size, List<OrderStatus> statuses) {
         Pageable pageable = PageRequest.of(page, size, Sort.by("createdAt").descending());
-        Page<Order> pageResult = orderRepository.findByShopOwner(getCurrentUser(), pageable);
+        User shopOwner = getCurrentUser();
+        Page<Order> pageResult = (statuses == null || statuses.isEmpty())
+                ? orderRepository.findByShopOwner(shopOwner, pageable)
+                : orderRepository.findByShopOwnerAndStatusIn(shopOwner, statuses, pageable);
         return PageResponse.<OrderResponse>builder()
                 .content(pageResult.getContent().stream().map(orderMapper::toResponse).toList())
                 .page(pageResult.getNumber())
@@ -518,8 +536,16 @@ public class OrderServiceImpl implements OrderService {
 
     @Override
     public PageResponse<OrderResponse> getOrdersByUserIdPaged(Integer userId, int page, int size) {
+        return getOrdersByUserIdPaged(userId, page, size, null);
+    }
+
+    @Transactional(readOnly = true)
+    @Override
+    public PageResponse<OrderResponse> getOrdersByUserIdPaged(Integer userId, int page, int size, List<OrderStatus> statuses) {
         Pageable pageable = PageRequest.of(page, size, Sort.by("createdAt").descending());
-        Page<Order> pageResult = orderRepository.findByBuyerId(userId, pageable);
+        Page<Order> pageResult = (statuses == null || statuses.isEmpty())
+                ? orderRepository.findByBuyerIdWithBatch(userId, pageable)
+                : orderRepository.findByBuyerIdAndStatusInWithBatch(userId, statuses, pageable);
         return PageResponse.<OrderResponse>builder()
                 .content(pageResult.getContent().stream().map(orderMapper::toResponse).toList())
                 .page(pageResult.getNumber())
@@ -562,32 +588,45 @@ public class OrderServiceImpl implements OrderService {
 
             // ================= PRODUCT =================
             if (item.getProductId() != null) {
+                BigDecimal quantityKg = resolveRequestKg(item.getQuantityKg(), item.getQuantity());
                 Product product = productRepository.findById(item.getProductId())
                         .orElseThrow(() -> new AppException(ErrorCode.PRODUCT_NOT_FOUND));
 
-                if (product.getStockQuantity() < item.getQuantity()) {
+                if (product.getStatus() != ProductStatus.AVAILABLE) {
+                    throw new AppException(ErrorCode.PRODUCT_NOT_FOUND);
+                }
+
+                if (resolveProductStockKg(product).compareTo(quantityKg) < 0) {
                     throw new RuntimeException(
-                            "Product " + product.getProductName() + " is out of stock"
+                            "Sản phẩm chỉ còn " + resolveProductStockKg(product).stripTrailingZeros().toPlainString()
+                                    + " kg trong kho, không đủ để mua " + quantityKg.stripTrailingZeros().toPlainString() + " kg."
                     );
                 }
 
-                product.setStockQuantity(product.getStockQuantity() - item.getQuantity());
+                product.setStockKg(resolveProductStockKg(product).subtract(quantityKg));
+                product.setStockQuantity(product.getStockKg().setScale(0, RoundingMode.DOWN).intValue());
                 productRepository.save(product);
 
                 if (shopOwner == null) {
                     shopOwner = product.getShopOwner();
+                } else {
+                    assertSameShopOwner(shopOwner, product.getShopOwner());
                 }
 
                 OrderDetail detail = new OrderDetail();
                 detail.setOrder(order);
                 detail.setProduct(product);
-                detail.setQuantity(item.getQuantity());
+                detail.setQuantity(resolveLegacyQuantity(quantityKg, item.getQuantity()));
+                detail.setQuantityKg(quantityKg);
                 detail.setUnitPrice(product.getSellingPrice());
+                detail.setPricePerKg(product.getSellingPrice());
+                detail.setUnitWeightKg(BigDecimal.ONE);
+                detail.setRescuedWeightKg(quantityKg);
 
                 orderDetails.add(detail);
 
                 totalAmount = totalAmount.add(
-                        product.getSellingPrice().multiply(BigDecimal.valueOf(item.getQuantity()))
+                        product.getSellingPrice().multiply(quantityKg)
                 );
             }
 
@@ -611,13 +650,17 @@ public class OrderServiceImpl implements OrderService {
 
                 if (shopOwner == null && box.getShopOwner() != null) {
                     shopOwner = box.getShopOwner();
+                } else if (box.getShopOwner() != null) {
+                    assertSameShopOwner(shopOwner, box.getShopOwner());
                 }
 
                 OrderMysteryBox orderBox = OrderMysteryBox.builder()
                         .order(order)
                         .mysteryBox(box)
                         .quantity(item.getQuantity())
+                        .unitWeightKg(calculateMysteryBoxUnitWeight(box))
                         .build();
+                orderBox.setRescuedWeightKg(orderBox.getUnitWeightKg().multiply(BigDecimal.valueOf(item.getQuantity())));
 
                 mysteryBoxes.add(orderBox);
 
@@ -627,30 +670,38 @@ public class OrderServiceImpl implements OrderService {
                     );
                 }
             } else if (item.getBuildComboId() != null) {
+                BigDecimal comboCount = resolveRequestKg(item.getQuantityKg(), item.getQuantity());
                 BuildCombo combo = buildComboRepository.findById(item.getBuildComboId())
                         .orElseThrow(() -> new AppException(ErrorCode.BUILD_COMBO_NOT_FOUND));
 
                 if (shopOwner == null && combo.getShopOwner() != null) {
                     shopOwner = combo.getShopOwner();
+                } else if (combo.getShopOwner() != null) {
+                    assertSameShopOwner(shopOwner, combo.getShopOwner());
                 }
 
                 // Tạo OrderDetail cho từng product trong combo
                 for (ProductCombo comboItem : combo.getItems()) {
                     Product product = comboItem.getProduct();
-                    int requiredQty = comboItem.getQuantity() * item.getQuantity();
+                    BigDecimal requiredKg = resolveProductComboKg(comboItem).multiply(comboCount).setScale(2, RoundingMode.HALF_UP);
 
-                    if (product.getStockQuantity() < requiredQty) {
+                    if (resolveProductStockKg(product).compareTo(requiredKg) < 0) {
                         throw new AppException(ErrorCode.PRODUCT_OUT_OF_STOCK);
                     }
 
-                    product.setStockQuantity(product.getStockQuantity() - requiredQty);
+                    product.setStockKg(resolveProductStockKg(product).subtract(requiredKg));
+                    product.setStockQuantity(product.getStockKg().setScale(0, RoundingMode.DOWN).intValue());
                     productRepository.save(product);
 
                     OrderDetail detail = new OrderDetail();
                     detail.setOrder(order);
                     detail.setProduct(product);
-                    detail.setQuantity(requiredQty);
+                    detail.setQuantity(resolveLegacyQuantity(requiredKg, null));
+                    detail.setQuantityKg(requiredKg);
                     detail.setUnitPrice(product.getSellingPrice());
+                    detail.setPricePerKg(product.getSellingPrice());
+                    detail.setUnitWeightKg(BigDecimal.ONE);
+                    detail.setRescuedWeightKg(requiredKg);
                     orderDetails.add(detail);
                 }
 
@@ -659,9 +710,9 @@ public class OrderServiceImpl implements OrderService {
                         ? combo.getDiscountPrice()
                         : combo.getItems().stream()
                         .map(i -> i.getProduct().getSellingPrice()
-                                .multiply(BigDecimal.valueOf(i.getQuantity())))
+                                .multiply(resolveProductComboKg(i)))
                         .reduce(BigDecimal.ZERO, BigDecimal::add);
-                totalAmount = totalAmount.add(comboPrice.multiply(BigDecimal.valueOf(item.getQuantity())));
+                totalAmount = totalAmount.add(comboPrice.multiply(comboCount));
             } else {
                 throw new AppException(ErrorCode.INVALID_REQUEST);
             }
@@ -681,6 +732,11 @@ public class OrderServiceImpl implements OrderService {
         order.setTotalAmount(totalAmount.add(shippingFee));
         order.setOrderDetails(orderDetails);
         order.setMysteryBoxes(mysteryBoxes);
+        BigDecimal rescuedWeight = calculateSnapshotRescuedWeight(orderDetails, mysteryBoxes);
+        order.setTotalKg(rescuedWeight);
+        order.setRescuedWeight(rescuedWeight);
+        order.setRewardPoints(rescuedWeight);
+        order.setRewardApplied(false);
         if ("COD".equalsIgnoreCase(order.getPaymentMethod())) {
             order.setStatus(OrderStatus.PENDING);
             order.setCodAmount(order.getTotalAmount());
@@ -695,7 +751,8 @@ public class OrderServiceImpl implements OrderService {
         Order savedOrder = orderRepository.save(order);
         List<String> voucherIdentifiers = collectVoucherIdentifiers(request);
         if (!voucherIdentifiers.isEmpty()) {
-            voucherUserService.useVoucherForOrder(savedOrder, voucherIdentifiers);
+            boolean shopOnly = Boolean.TRUE.equals(request.getRestrictToShopVouchers());
+            voucherUserService.useVoucherForOrder(savedOrder, voucherIdentifiers, shopOnly);
             if ("COD".equalsIgnoreCase(savedOrder.getPaymentMethod())) {
                 savedOrder.setCodAmount(savedOrder.getTotalAmount());
             }
@@ -725,6 +782,14 @@ public class OrderServiceImpl implements OrderService {
         Order order = orderRepository.findById(id)
                 .orElseThrow(() -> new AppException(ErrorCode.ORDER_NOT_FOUND));
 
+        if (request.getStatus() == OrderStatus.READY) {
+            if (order.getStatus() == OrderStatus.QC_PENDING_BUYER) {
+                throw new AppException(ErrorCode.QC_BUYER_DECISION_INVALID);
+            }
+            if (!hasShippableItemsForPacking(order)) {
+                throw new AppException(ErrorCode.INVALID_ORDER_STATUS);
+            }
+        }
 
         // soldQuantity, nguyên liệu và product stock đã được cập nhật tại PENDING
         // → không cần thay đổi stock khi CONFIRMED
@@ -734,12 +799,16 @@ public class OrderServiceImpl implements OrderService {
         if (request.getStatus() == OrderStatus.CANCELLED
                 && order.getStatus() != OrderStatus.CANCELLED) {
 
+            boolean paidViaPayos = "PAYOS".equalsIgnoreCase(order.getPaymentMethod())
+                    && isPayosBuyerCancellableStatus(order.getStatus());
+
             Map<Integer, Product> productsToUpdate = new HashMap<>();
 
             // Hoàn trả stockQuantity cho product thường (đã giảm tại PENDING)
             for (OrderDetail detail : order.getOrderDetails()) {
                 Product product = detail.getProduct();
-                product.setStockQuantity(product.getStockQuantity() + detail.getQuantity());
+                product.setStockKg(resolveProductStockKg(product).add(resolveOrderDetailKg(detail)));
+                product.setStockQuantity(product.getStockKg().setScale(0, RoundingMode.DOWN).intValue());
                 productsToUpdate.put(product.getId(), product);
             }
 
@@ -758,11 +827,19 @@ public class OrderServiceImpl implements OrderService {
 
             productRepository.saveAll(productsToUpdate.values());
             voucherUserService.restoreVoucherForOrder(order);
-            cartService.restoreOrderItemsToCart(order);
+
+            if (paidViaPayos) {
+                paymentService.refundPayosOrderOnCancel(order);
+            } else {
+                cartService.restoreOrderItemsToCart(order);
+            }
+
+            orderRewardService.revokeRewardIfApplied(order);
 
         }
 
         order.setStatus(request.getStatus());
+        orderRewardService.applyRewardIfEligible(order);
 
 
         Order savedOrder = orderRepository.save(order);
@@ -785,6 +862,42 @@ public class OrderServiceImpl implements OrderService {
         }
 
         return orderMapper.toResponse(savedOrder);
+    }
+
+    @Override
+    @Transactional
+    public OrderResponse processQcBuyerDecision(Integer orderId, boolean acceptRemaining) {
+        return qcSettlementService.processQcBuyerDecision(orderId, acceptRemaining);
+    }
+
+    private boolean isPayosBuyerCancellableStatus(OrderStatus status) {
+        return status == OrderStatus.PAID || status == OrderStatus.CONFIRMED;
+    }
+
+    private boolean hasShippableItemsForPacking(Order order) {
+        if (order.getOrderDetails() != null) {
+            for (OrderDetail detail : order.getOrderDetails()) {
+                QualityResult qr = detail.getQualityResult();
+                if (qr == null) {
+                    return false;
+                }
+                if (!qr.isLineCancelled() && qr.getApprovedKg() != null && qr.getApprovedKg().signum() > 0) {
+                    return true;
+                }
+            }
+        }
+        if (order.getMysteryBoxes() != null) {
+            for (OrderMysteryBox box : order.getMysteryBoxes()) {
+                QualityResult qr = box.getQualityResult();
+                if (qr == null) {
+                    return false;
+                }
+                if (!qr.isLineCancelled() && qr.getApprovedKg() != null && qr.getApprovedKg().signum() > 0) {
+                    return true;
+                }
+            }
+        }
+        return false;
     }
 
     @Transactional
@@ -821,6 +934,60 @@ public class OrderServiceImpl implements OrderService {
 
     private String getOrDefault(String input, String defaultValue) {
         return (input == null || input.isBlank()) ? defaultValue : input;
+    }
+
+    private BigDecimal resolveProductWeightKg(Product product) {
+        return BigDecimal.ONE;
+    }
+
+    private BigDecimal resolveProductStockKg(Product product) {
+        if (product.getStockKg() != null) return product.getStockKg();
+        return BigDecimal.valueOf(product.getStockQuantity() == null ? 0 : product.getStockQuantity()).setScale(2, RoundingMode.HALF_UP);
+    }
+
+    private BigDecimal resolveRequestKg(BigDecimal quantityKg, Integer quantity) {
+        BigDecimal resolved = quantityKg != null ? quantityKg : BigDecimal.valueOf(quantity == null ? 1 : quantity);
+        return resolved.setScale(2, RoundingMode.HALF_UP);
+    }
+
+    private Integer resolveLegacyQuantity(BigDecimal quantityKg, Integer quantity) {
+        if (quantity != null && quantity > 0) return quantity;
+        return quantityKg == null ? 1 : Math.max(1, quantityKg.setScale(0, RoundingMode.CEILING).intValue());
+    }
+
+    private BigDecimal resolveOrderDetailKg(OrderDetail detail) {
+        if (detail.getQuantityKg() != null) return detail.getQuantityKg();
+        return BigDecimal.valueOf(detail.getQuantity() == null ? 0 : detail.getQuantity()).setScale(2, RoundingMode.HALF_UP);
+    }
+
+    private BigDecimal resolveProductComboKg(ProductCombo item) {
+        if (item.getQuantityKg() != null) return item.getQuantityKg();
+        return BigDecimal.valueOf(item.getQuantity() == null ? 0 : item.getQuantity()).setScale(2, RoundingMode.HALF_UP);
+    }
+
+    private BigDecimal calculateMysteryBoxUnitWeight(MysteryBox box) {
+        // Mystery box should be counted by bag/box unit for reward preview.
+        // 1 mystery box = 1 rescued unit (mapped to 1 point) to match FE display "... túi".
+        return BigDecimal.ONE;
+    }
+
+    private BigDecimal calculateSnapshotRescuedWeight(List<OrderDetail> orderDetails, List<OrderMysteryBox> mysteryBoxes) {
+        BigDecimal total = BigDecimal.ZERO;
+        if (orderDetails != null) {
+            for (OrderDetail detail : orderDetails) {
+                if (detail.getRescuedWeightKg() != null) {
+                    total = total.add(detail.getRescuedWeightKg());
+                }
+            }
+        }
+        if (mysteryBoxes != null) {
+            for (OrderMysteryBox orderBox : mysteryBoxes) {
+                if (orderBox.getRescuedWeightKg() != null) {
+                    total = total.add(orderBox.getRescuedWeightKg());
+                }
+            }
+        }
+        return total.setScale(2, RoundingMode.HALF_UP);
     }
 
 
@@ -889,5 +1056,130 @@ public class OrderServiceImpl implements OrderService {
             }
         }
         return new ArrayList<>(identifiers);
+    }
+
+    private void assertSameShopOwner(User currentShop, User itemShop) {
+        if (currentShop == null || itemShop == null) return;
+        if (!currentShop.getId().equals(itemShop.getId())) {
+            throw new AppException(ErrorCode.ORDER_MULTI_SHOP_NOT_ALLOWED);
+        }
+    }
+
+    @Transactional
+    @Override
+    public CheckoutBatchResponse checkoutBatch(CheckoutBatchRequest request) {
+        if (request.getShopOrders() == null || request.getShopOrders().isEmpty()) {
+            throw new AppException(ErrorCode.INVALID_REQUEST);
+        }
+
+        User buyer = getCurrentUser();
+        boolean isPayos = request.getPaymentMethod() != null
+                && !"COD".equalsIgnoreCase(request.getPaymentMethod());
+
+        CheckoutBatch batch = CheckoutBatch.builder()
+                .buyer(buyer)
+                .paymentMethod(request.getPaymentMethod() != null ? request.getPaymentMethod() : "PAYOS")
+                .status(isPayos ? CheckoutBatchStatus.PENDING : CheckoutBatchStatus.COMPLETED)
+                .totalAmount(BigDecimal.ZERO)
+                .build();
+        checkoutBatchRepository.save(batch);
+
+        List<OrderResponse> orderResponses = new ArrayList<>();
+        List<Order> createdOrders = new ArrayList<>();
+        BigDecimal totalBatch = BigDecimal.ZERO;
+
+        for (ShopOrderRequest shopOrder : request.getShopOrders()) {
+            if (shopOrder.getItems() == null || shopOrder.getItems().isEmpty()) {
+                throw new AppException(ErrorCode.INVALID_REQUEST);
+            }
+
+            OrderCreationRequest single = OrderCreationRequest.builder()
+                    .recipientName(request.getRecipientName())
+                    .recipientPhone(request.getRecipientPhone())
+                    .shippingAddress(request.getShippingAddress())
+                    .note(request.getNote())
+                    .paymentMethod(request.getPaymentMethod())
+                    .voucherUserId(shopOrder.getVoucherUserId())
+                    .voucherUserIds(shopOrder.getVoucherUserIds())
+                    .voucherCodes(shopOrder.getVoucherCodes())
+                    .restrictToShopVouchers(true)
+                    .items(shopOrder.getItems())
+                    .build();
+
+            OrderResponse created = createOrder(single);
+            Order order = orderRepository.findById(created.getId())
+                    .orElseThrow(() -> new AppException(ErrorCode.ORDER_NOT_FOUND));
+
+            if (shopOrder.getShopOwnerId() != null
+                    && order.getShopOwner() != null
+                    && !shopOrder.getShopOwnerId().equals(order.getShopOwner().getId())) {
+                throw new AppException(ErrorCode.INVALID_REQUEST);
+            }
+
+            order.setCheckoutBatch(batch);
+            if (isPayos) {
+                order.setStatus(OrderStatus.AWAITING_PAYMENT);
+                orderRepository.save(order);
+                created.setStatus(OrderStatus.AWAITING_PAYMENT.name());
+            }
+
+            orderResponses.add(created);
+            createdOrders.add(order);
+            totalBatch = totalBatch.add(created.getTotalAmount() != null ? created.getTotalAmount() : BigDecimal.ZERO);
+        }
+
+        if (request.getBatchVoucherUserId() != null) {
+            BigDecimal batchDiscount = voucherUserService.applyBatchVoucher(
+                    batch, createdOrders, request.getBatchVoucherUserId());
+            totalBatch = totalBatch.subtract(batchDiscount).max(BigDecimal.ZERO);
+            for (int i = 0; i < createdOrders.size(); i++) {
+                Order order = createdOrders.get(i);
+                if ("COD".equalsIgnoreCase(order.getPaymentMethod())) {
+                    order.setCodAmount(order.getTotalAmount());
+                }
+                orderRepository.save(order);
+                if (i < orderResponses.size()) {
+                    orderResponses.get(i).setTotalAmount(order.getTotalAmount());
+                }
+            }
+            checkoutBatchRepository.save(batch);
+        }
+
+        batch.setTotalAmount(totalBatch);
+        String checkoutUrl = null;
+        String qrCodeUrl = null;
+        String payosOrderCode = null;
+
+        if (isPayos) {
+            long orderCode = System.currentTimeMillis() + batch.getId();
+            PayosPayoutResult qr = payosService.createOrderPaymentQr(
+                    totalBatch,
+                    orderCode,
+                    batch.getId(),
+                    buyer.getFullName()
+            );
+            if (qr == null || !qr.isSuccess()) {
+                throw new AppException(ErrorCode.PAYOS_CREATE_QR_FAILED);
+            }
+            payosOrderCode = String.valueOf(orderCode);
+            checkoutUrl = qr.getCheckoutUrl();
+            qrCodeUrl = qr.getQrCodeUrl();
+            batch.setPayosOrderCode(payosOrderCode);
+            batch.setCheckoutUrl(checkoutUrl);
+            batch.setQrCodeUrl(qrCodeUrl);
+        }
+
+        checkoutBatchRepository.save(batch);
+
+        return CheckoutBatchResponse.builder()
+                .batchId(batch.getId())
+                .orders(orderResponses)
+                .orderIds(orderResponses.stream().map(OrderResponse::getId).toList())
+                .totalAmount(totalBatch)
+                .paymentMethod(batch.getPaymentMethod())
+                .checkoutUrl(checkoutUrl)
+                .qrCodeUrl(qrCodeUrl)
+                .payosOrderCode(payosOrderCode)
+                .build();
     }
 }

@@ -21,6 +21,10 @@ import java.util.List;
 public interface ProductRepository extends JpaRepository<Product, Integer> {
     List<Product> findByShopOwnerId(Integer ownerId);
 
+    List<Product> findByShopOwnerIdAndStatus(Integer ownerId, ProductStatus status);
+
+    Page<Product> findByShopOwnerIdAndStatus(Integer ownerId, ProductStatus status, Pageable pageable);
+
     Page<Product> findAll(Pageable pageable);
 
     Page<Product> findByShopOwnerId(Integer ownerId, Pageable pageable);
@@ -64,5 +68,7 @@ public interface ProductRepository extends JpaRepository<Product, Integer> {
     Page<Product> findAllByStatusAndShopOwner_ShopActive(ProductStatus status, boolean shopOwnerShopActive, Pageable pageable);
 
     List<Product> findAllByStatusAndShopOwner_ShopActive(ProductStatus status, boolean shopOwnerShopActive);
+
+    List<Product> findAllByStatusAndShopOwner_ShopActiveAndExpiryDateIsAfter(ProductStatus status, boolean shopOwnerShopActive, LocalDate expiryDateAfter);
 }
 

@@ -1,6 +1,8 @@
 package com.swd301.foodmarket.dto.response;
 
 import com.swd301.foodmarket.enums.OrderStatus;
+import com.swd301.foodmarket.enums.CodPaymentOption;
+import com.swd301.foodmarket.enums.CodPaymentStatus;
 import lombok.*;
 import lombok.experimental.FieldDefaults;
 
@@ -23,7 +25,12 @@ public class AvailableOrderResponse {
     String recipientPhone;
 
     BigDecimal shippingFee;
+    BigDecimal shippingDiscountAmount;
     BigDecimal totalAmount;
+    String paymentMethod;
+    BigDecimal codPrepaidAmount;
+    CodPaymentOption codPaymentOption;
+    CodPaymentStatus codPaymentStatus;
     OrderStatus status;
     LocalDateTime createdAt;
     LocalDateTime estimatedDeliveryDate;

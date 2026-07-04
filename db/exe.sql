@@ -29,6 +29,8 @@ TRUNCATE TABLE blogs;
 TRUNCATE TABLE shipper_locations;
 TRUNCATE TABLE cart_item;
 TRUNCATE TABLE cart;
+TRUNCATE TABLE product_combo;
+TRUNCATE TABLE build_combos;
 TRUNCATE TABLE chat_messages;
 TRUNCATE TABLE conversations;
 TRUNCATE TABLE meal_products;
@@ -259,6 +261,9 @@ INSERT INTO products (shop_owner_id,category_id,product_name,unit,selling_price,
 (@shop2_id,@cat_trai_cay_quanh_nam,'Nước ép cam đóng chai','chai',25000,0,'Sản phẩm bị từ chối do không thuộc danh mục nông sản tươi.','INACTIVE','https://res.cloudinary.com/dfp44sbsj/image/upload/v1773916481/brands/s5ld5232nl4s4fwczawr.jpg'),
 (@shop2_id,@cat_trai_cay_nhiet_doi,'Trái cây sấy khô','gói',65000,0,'Sản phẩm bị từ chối do thiếu giấy tờ kiểm định an toàn thực phẩm.','INACTIVE','https://images.unsplash.com/photo-1512621776951-a57141f2eefd?w=400&h=300&fit=crop');
 
+-- Set expiry_date xa cho tất cả AVAILABLE products (tránh bị lọc bởi /products/buyer endpoint)
+UPDATE products SET expiry_date = '2030-12-31' WHERE status = 'AVAILABLE';
+
 -- ============================================================
 -- 6. MYSTERY BOXES
 -- ============================================================
@@ -304,6 +309,92 @@ SET @p2_buoi      =(SELECT product_id FROM products WHERE product_name='Bưởi'
 SET @p2_oi        =(SELECT product_id FROM products WHERE product_name='Ổi'        AND shop_owner_id=@shop2_id);
 SET @p2_nho       =(SELECT product_id FROM products WHERE product_name='Nho'       AND shop_owner_id=@shop2_id);
 
+-- ============================================================
+-- 6b. BUILD COMBOS (17 combo — đủ 4 bữa: BREAKFAST/LUNCH/DINNER/SNACK)
+-- Thiết kế dựa trên sản phẩm thực có trong DB này (Củ + Quả, không có Rau lá)
+-- ============================================================
+INSERT INTO build_combos (shop_owner_id,combo_name,discount_price,description,type,region,meal_type,image_url,total_quantity,sold_quantity) VALUES
+-- SHOP 1 — BREAKFAST (2 combo)
+(@shop1_id,'Combo Detox Củ Quả Sáng',70000,'Bộ củ quả giải độc buổi sáng: cà rốt tươi ngọt, cần tây giòn mát, gừng ấm bụng, dưa leo thanh mát. Ép nước hoặc ăn sống đều tốt cho cơ thể khởi đầu ngày mới.','Available','MIEN_NAM','BREAKFAST','https://res.cloudinary.com/dfp44sbsj/image/upload/v1773916721/brands/uj1eoinkwvthfjvtpvpq.jpg',20,0),
+(@shop1_id,'Combo Salad Eat Clean Đà Lạt',75000,'Bộ rau củ cho bữa salad eat clean: dưa leo giòn mát, cà chua đỏ ngọt, ớt chuông nhiều vitamin C, cần tây ít calo. Trộn dầu ô liu và chanh là có bữa sáng healthy hoàn hảo.','Available','MIEN_NAM','BREAKFAST','https://res.cloudinary.com/dfp44sbsj/image/upload/v1773917431/brands/yif2icgotbydg5qvzvbf.jpg',20,0),
+-- SHOP 1 — LUNCH (3 combo)
+(@shop1_id,'Combo Hầm Súp Củ Quả',85000,'Rau củ đầy đủ để hầm nồi súp bổ dưỡng: cà rốt ngọt tươi, khoai tây bùi mềm, bí đỏ vàng ươm, hành tây thơm ngọt. Hầm cùng xương heo 45 phút ra nồi súp thơm lừng cho cả nhà.','Available','MIEN_NAM','LUNCH','https://res.cloudinary.com/dfp44sbsj/image/upload/v1773916676/brands/bmgnazybi0rro8bnxhwp.jpg',20,0),
+(@shop1_id,'Combo Xào Củ Quả Thập Cẩm',75000,'Hỗn hợp củ quả để xào nhanh: hành tây thơm ngọt, cà chua đỏ tươi, mướp hương xanh non, tỏi ta Lý Sơn. Xào với nước mắm và tiêu đen ra món ăn đậm vị hấp dẫn trong 15 phút.','Available','MIEN_NAM','LUNCH','https://res.cloudinary.com/dfp44sbsj/image/upload/v1773917463/brands/xjz74sedvolg7woxywpo.jpg',20,0),
+(@shop1_id,'Combo Canh Chua Rau Củ',65000,'Nguyên liệu canh chua thanh mát: cà chua tươi ngọt, dưa leo giải nhiệt, hành tây thơm, gừng ấm bụng. Nấu cùng thịt heo hoặc tôm ra nồi canh chua vừa miệng cho cả gia đình.','Available','MIEN_NAM','LUNCH','https://res.cloudinary.com/dfp44sbsj/image/upload/v1773916530/brands/xjiiaehe5evwybwhmpmu.jpg',20,0),
+-- SHOP 1 — DINNER (2 combo)
+(@shop1_id,'Combo Hầm Tối Bổ Dưỡng',80000,'Củ quả hầm bổ cho bữa tối: khoai lang tím ngọt bùi, bí đỏ mềm vàng, củ cải trắng ngọt thanh, hành tây thơm. Hầm cùng thịt gà hoặc xương heo ra nồi canh ngọt tự nhiên rất bổ dưỡng.','Available','MIEN_NAM','DINNER','https://res.cloudinary.com/dfp44sbsj/image/upload/v1774249499/brands/pgdvlccom3lid5t24pnk.jpg',20,0),
+(@shop1_id,'Combo Xào Tối Thơm Ngon',80000,'Nguyên liệu xào tối đơn giản mà ngon: mướp hương non tươi, cà chua chín đỏ, tỏi thơm nồng, gừng cay nhẹ. Xào 10 phút là có món ăn vừa miệng cho bữa cơm tối gia đình.','Available','MIEN_NAM','DINNER','https://res.cloudinary.com/dfp44sbsj/image/upload/v1774249989/brands/o7csibhzy57s2wpmcus9.jpg',20,0),
+-- SHOP 1 — SNACK (2 combo)
+(@shop1_id,'Combo Tráng Miệng Trái Cây Đà Lạt',175000,'Bộ trái cây Đà Lạt tươi cho bữa tráng miệng: dâu tây chua ngọt thơm lừng, táo Fuji giòn ngọt, chuối sứ chín vàng thơm. Thơm ngon ngọt mát, giàu vitamin và khoáng chất cho cả nhà.','Available','MIEN_NAM','SNACK','https://res.cloudinary.com/dfp44sbsj/image/upload/v1773943061/brands/qtspypfmdjcxtsbme7xi.jpg',20,0),
+(@shop1_id,'Combo Giải Khát Củ Quả',100000,'Bộ củ quả giải khát bổ dưỡng: cà rốt tươi ngọt ngào, táo Fuji giòn ngọt, dưa leo mát lạnh. Ăn sống hoặc ép nước uống đều tốt cho sức khỏe, bổ sung vitamin A và C.','Available','MIEN_NAM','SNACK','https://res.cloudinary.com/dfp44sbsj/image/upload/v1773916721/brands/uj1eoinkwvthfjvtpvpq.jpg',20,0),
+-- SHOP 2 — BREAKFAST (2 combo)
+(@shop2_id,'Combo Ép Vitamin C Buổi Sáng',110000,'Trái cây giàu vitamin C cho buổi sáng: cam sành mọng nước, bưởi da xanh ngọt thanh, ổi ruột đỏ thơm giòn. Ép nước hoặc ăn tươi đều bổ sung vitamin tăng đề kháng tự nhiên mỗi sáng.','Available','MIEN_NAM','BREAKFAST','https://res.cloudinary.com/dfp44sbsj/image/upload/v1773916481/brands/s5ld5232nl4s4fwczawr.jpg',20,0),
+(@shop2_id,'Combo Sinh Tố Trái Cây Nhiệt Đới',120000,'Trái cây nhiệt đới xay sinh tố buổi sáng: xoài cát Hòa Lộc thơm ngọt, cam sành mọng nước, ổi ruột đỏ giòn ngọt. Xay với sữa chua ra ly sinh tố vừa ngon vừa bổ dưỡng khởi đầu ngày mới.','Available','MIEN_NAM','BREAKFAST','https://images.unsplash.com/photo-1553279768-865429fa0078?w=600&h=400&fit=crop',20,0),
+-- SHOP 2 — LUNCH (2 combo)
+(@shop2_id,'Combo Xào Cà Tím Sả Ớt',60000,'Nguyên liệu xào cà tím đặc sản miền Nam: cà tím tươi bóng mướt, hành tím thơm nồng, sả tươi đặc trưng, ớt đỏ cay vừa. Xào với nước tương và dầu hào ra món cà tím đậm đà hấp dẫn.','Available','MIEN_NAM','LUNCH','https://res.cloudinary.com/dfp44sbsj/image/upload/v1773943685/brands/sn8j7wqbpp6uhtitk5nf.jpg',20,0),
+(@shop2_id,'Combo Canh Củ Quả Miền Tây',55000,'Rau củ nấu canh thanh ngọt kiểu miền Tây: bí đao to tươi, su su non ngọt thanh, bí ngòi xanh mát, hành tím thơm. Nấu cùng tôm khô hoặc xương heo ra nồi canh ngọt tự nhiên giải nhiệt mùa hè.','Available','MIEN_NAM','LUNCH','https://res.cloudinary.com/dfp44sbsj/image/upload/v1774250920/brands/w0bf8nfrconotcqe8vec.jpg',20,0),
+-- SHOP 2 — DINNER (2 combo)
+(@shop2_id,'Combo Hầm Khoai Môn Miền Tây',60000,'Củ quả hầm kiểu miền Tây bổ dưỡng: khoai môn dẻo bùi thơm, su su non ngọt thanh, bí đao tươi giải nhiệt. Hầm cùng xương heo hoặc giò heo ra nồi canh bổ dưỡng cả nhà thích.','Available','MIEN_NAM','DINNER','https://res.cloudinary.com/dfp44sbsj/image/upload/v1774251234/brands/vocydo64vc5ljrztscl8.jpg',20,0),
+(@shop2_id,'Combo Lẩu Chay Rau Củ',65000,'Củ quả nhúng lẩu chay thanh đạm: bí đao thái miếng, bí ngòi thái khoanh, cà tím thái khúc, su su bổ tư, tỏi tây thái lát. Nhúng nước lẩu nấm hoặc nước dùng rau củ rất ngon miệng cho cả nhà.','Available','MIEN_NAM','DINNER','https://res.cloudinary.com/dfp44sbsj/image/upload/v1774250987/brands/z0qmi41ocaxbgaxa7kq1.jpg',20,0),
+-- SHOP 2 — SNACK (2 combo)
+(@shop2_id,'Combo Giải Nhiệt Mùa Hè',75000,'Trái cây giải nhiệt mùa hè: dưa hấu đỏ mọng nước ngọt lịm, thanh long ruột đỏ Bình Thuận, cam sành tươi mát. Ăn tươi hoặc ép nước uống đều mát lạnh, bổ sung điện giải tự nhiên cho cơ thể.','Available','MIEN_NAM','SNACK','https://res.cloudinary.com/dfp44sbsj/image/upload/v1773917373/brands/h0mivuwgipa6hssaawfi.jpg',20,0),
+(@shop2_id,'Combo Trái Cây Nhiệt Đới Cao Cấp',170000,'Đặc sản trái cây nhiệt đới Bình Dương: xoài cát Hòa Lộc thơm lừng, thanh long ruột đỏ mọng nước, ổi ruột đỏ giòn ngọt, nho đen không hạt ngọt đậm. Tổng hợp vitamin và khoáng chất cho sức khỏe tốt.','Available','MIEN_NAM','SNACK','https://res.cloudinary.com/dfp44sbsj/image/upload/v1773916419/brands/zdz1hvl9hcx6yyaq1wq3.jpg',20,0);
+
+-- Lấy combo_id
+SET @c1_s1 =(SELECT combo_id FROM build_combos WHERE combo_name='Combo Detox Củ Quả Sáng'              AND shop_owner_id=@shop1_id);
+SET @c2_s1 =(SELECT combo_id FROM build_combos WHERE combo_name='Combo Salad Eat Clean Đà Lạt'         AND shop_owner_id=@shop1_id);
+SET @c3_s1 =(SELECT combo_id FROM build_combos WHERE combo_name='Combo Hầm Súp Củ Quả'                AND shop_owner_id=@shop1_id);
+SET @c4_s1 =(SELECT combo_id FROM build_combos WHERE combo_name='Combo Xào Củ Quả Thập Cẩm'           AND shop_owner_id=@shop1_id);
+SET @c5_s1 =(SELECT combo_id FROM build_combos WHERE combo_name='Combo Canh Chua Rau Củ'              AND shop_owner_id=@shop1_id);
+SET @c6_s1 =(SELECT combo_id FROM build_combos WHERE combo_name='Combo Hầm Tối Bổ Dưỡng'             AND shop_owner_id=@shop1_id);
+SET @c7_s1 =(SELECT combo_id FROM build_combos WHERE combo_name='Combo Xào Tối Thơm Ngon'             AND shop_owner_id=@shop1_id);
+SET @c8_s1 =(SELECT combo_id FROM build_combos WHERE combo_name='Combo Tráng Miệng Trái Cây Đà Lạt'   AND shop_owner_id=@shop1_id);
+SET @c9_s1 =(SELECT combo_id FROM build_combos WHERE combo_name='Combo Giải Khát Củ Quả'              AND shop_owner_id=@shop1_id);
+SET @c1_s2 =(SELECT combo_id FROM build_combos WHERE combo_name='Combo Ép Vitamin C Buổi Sáng'        AND shop_owner_id=@shop2_id);
+SET @c2_s2 =(SELECT combo_id FROM build_combos WHERE combo_name='Combo Sinh Tố Trái Cây Nhiệt Đới'    AND shop_owner_id=@shop2_id);
+SET @c3_s2 =(SELECT combo_id FROM build_combos WHERE combo_name='Combo Xào Cà Tím Sả Ớt'             AND shop_owner_id=@shop2_id);
+SET @c4_s2 =(SELECT combo_id FROM build_combos WHERE combo_name='Combo Canh Củ Quả Miền Tây'          AND shop_owner_id=@shop2_id);
+SET @c5_s2 =(SELECT combo_id FROM build_combos WHERE combo_name='Combo Hầm Khoai Môn Miền Tây'        AND shop_owner_id=@shop2_id);
+SET @c6_s2 =(SELECT combo_id FROM build_combos WHERE combo_name='Combo Lẩu Chay Rau Củ'               AND shop_owner_id=@shop2_id);
+SET @c7_s2 =(SELECT combo_id FROM build_combos WHERE combo_name='Combo Giải Nhiệt Mùa Hè'             AND shop_owner_id=@shop2_id);
+SET @c8_s2 =(SELECT combo_id FROM build_combos WHERE combo_name='Combo Trái Cây Nhiệt Đới Cao Cấp'    AND shop_owner_id=@shop2_id);
+
+INSERT INTO product_combo (combo_id,product_id,quantity,price) VALUES
+-- c1_s1: Detox Củ Quả Sáng → Cà rốt + Cần tây + Gừng + Dưa leo
+(@c1_s1,@p_ca_rot,1,25000),(@c1_s1,@p_can_tay,1,15000),(@c1_s1,@p_gung,1,55000),(@c1_s1,@p_dua_leo,1,15000),
+-- c2_s1: Salad Eat Clean → Dưa leo + Cà chua + Ớt chuông + Cần tây
+(@c2_s1,@p_dua_leo,1,15000),(@c2_s1,@p_ca_chua,1,35000),(@c2_s1,@p_ot_chuong,1,55000),(@c2_s1,@p_can_tay,1,15000),
+-- c3_s1: Hầm Súp → Cà rốt + Khoai tây + Bí đỏ + Hành tây
+(@c3_s1,@p_ca_rot,1,25000),(@c3_s1,@p_khoai_tay,1,30000),(@c3_s1,@p_bi_do,1,22000),(@c3_s1,@p_hanh_tay,1,25000),
+-- c4_s1: Xào Thập Cẩm → Hành tây + Cà chua + Mướp + Tỏi
+(@c4_s1,@p_hanh_tay,1,25000),(@c4_s1,@p_ca_chua,1,35000),(@c4_s1,@p_muop,1,18000),(@c4_s1,@p_toi,1,85000),
+-- c5_s1: Canh Chua → Cà chua + Dưa leo + Hành tây + Gừng
+(@c5_s1,@p_ca_chua,2,35000),(@c5_s1,@p_dua_leo,1,15000),(@c5_s1,@p_hanh_tay,1,25000),(@c5_s1,@p_gung,1,55000),
+-- c6_s1: Hầm Tối → Khoai lang + Bí đỏ + Củ cải + Hành tây
+(@c6_s1,@p_khoai_lang,1,28000),(@c6_s1,@p_bi_do,1,22000),(@c6_s1,@p_cu_cai,1,18000),(@c6_s1,@p_hanh_tay,1,25000),
+-- c7_s1: Xào Tối → Mướp + Cà chua + Tỏi + Gừng
+(@c7_s1,@p_muop,1,18000),(@c7_s1,@p_ca_chua,1,35000),(@c7_s1,@p_toi,1,85000),(@c7_s1,@p_gung,1,55000),
+-- c8_s1: Tráng Miệng Trái Cây → Dâu tây + Táo + Chuối
+(@c8_s1,@p_dau_tay,1,180000),(@c8_s1,@p_tao,1,110000),(@c8_s1,@p_chuoi,1,25000),
+-- c9_s1: Giải Khát Củ Quả → Cà rốt + Táo + Dưa leo
+(@c9_s1,@p_ca_rot,1,25000),(@c9_s1,@p_tao,1,110000),(@c9_s1,@p_dua_leo,1,15000),
+-- c1_s2: Ép Vitamin C → Cam × 2 + Bưởi + Ổi
+(@c1_s2,@p2_cam,2,35000),(@c1_s2,@p2_buoi,1,65000),(@c1_s2,@p2_oi,1,30000),
+-- c2_s2: Sinh Tố Nhiệt Đới → Xoài + Cam + Ổi
+(@c2_s2,@p2_xoai,1,85000),(@c2_s2,@p2_cam,1,35000),(@c2_s2,@p2_oi,1,30000),
+-- c3_s2: Xào Cà Tím → Cà tím + Hành tím + Sả + Ớt đỏ
+(@c3_s2,@p2_ca_tim,1,22000),(@c3_s2,@p2_hanh_tim,1,45000),(@c3_s2,@p2_sa,1,10000),(@c3_s2,@p2_ot_do,1,50000),
+-- c4_s2: Canh Miền Tây → Bí đao + Su su + Bí ngòi + Hành tím
+(@c4_s2,@p2_bi_dao,1,15000),(@c4_s2,@p2_su_su,1,20000),(@c4_s2,@p2_bi_ngoi,1,18000),(@c4_s2,@p2_hanh_tim,1,45000),
+-- c5_s2: Hầm Khoai Môn → Khoai môn + Su su + Bí đao
+(@c5_s2,@p2_khoai_mon,1,32000),(@c5_s2,@p2_su_su,1,20000),(@c5_s2,@p2_bi_dao,1,15000),
+-- c6_s2: Lẩu Chay → Bí đao + Bí ngòi + Cà tím + Su su + Tỏi tây
+(@c6_s2,@p2_bi_dao,1,15000),(@c6_s2,@p2_bi_ngoi,1,18000),(@c6_s2,@p2_ca_tim,1,22000),(@c6_s2,@p2_su_su,1,20000),(@c6_s2,@p2_toi_tay,1,15000),
+-- c7_s2: Giải Nhiệt Mùa Hè → Dưa hấu × 2 + Thanh long + Cam
+(@c7_s2,@p2_dua_hau,2,12000),(@c7_s2,@p2_thanh_long,1,35000),(@c7_s2,@p2_cam,1,35000),
+-- c8_s2: Trái Cây Nhiệt Đới Cao Cấp → Xoài + Thanh long + Ổi + Nho
+(@c8_s2,@p2_xoai,1,85000),(@c8_s2,@p2_thanh_long,1,35000),(@c8_s2,@p2_oi,1,30000),(@c8_s2,@p2_nho,1,120000);
+
 SET @box1_s1=(SELECT mystery_id FROM mystery_boxes WHERE box_type='Hộp Củ Bí Ẩn Đà Lạt'     AND shop_owner_id=@shop1_id);
 SET @box2_s1=(SELECT mystery_id FROM mystery_boxes WHERE box_type='Hộp Trái Cây Dinh Dưỡng'  AND shop_owner_id=@shop1_id);
 SET @box1_s2=(SELECT mystery_id FROM mystery_boxes WHERE box_type='Hộp Củ Quả Miền Tây'      AND shop_owner_id=@shop2_id);
@@ -347,16 +438,15 @@ UPDATE products SET discount_percent=5,  discount_start_date='2026-06-16 00:00:0
 -- ============================================================
 -- 7. VOUCHERS
 -- ============================================================
-INSERT INTO vouchers (shop_id,voucher_code,discount_value,max_discount,min_order_value,usage_limit,expiry_date) VALUES
-                                                                                                                    (@shop1_id,'NONGSAN10',10000,20000,50000,100,DATE_ADD(NOW(),INTERVAL 30 DAY)),
-                                                                                                                    (@shop1_id,'ORGANIC20',20000,40000,100000,50,DATE_ADD(NOW(),INTERVAL 30 DAY)),
-                                                                                                                    (@shop1_id,'DALAT50K',50000,50000,200000,20,DATE_ADD(NOW(),INTERVAL 15 DAY)),
-                                                                                                                    (@shop1_id,'FREESHIP1',15000,15000,80000,200,DATE_ADD(NOW(),INTERVAL 60 DAY)),
-                                                                                                                    (@shop2_id,'VUONTRAI15',15000,30000,70000,100,DATE_ADD(NOW(),INTERVAL 30 DAY)),
-                                                                                                                    (@shop2_id,'MIENTAY25',25000,50000,120000,50,DATE_ADD(NOW(),INTERVAL 30 DAY)),
-                                                                                                                    (@shop2_id,'TRAICAY30',30000,30000,150000,30,DATE_ADD(NOW(),INTERVAL 20 DAY)),
-                                                                                                                    (@shop2_id,'SHIP0DONG',20000,20000,100000,150,DATE_ADD(NOW(),INTERVAL 45 DAY));
-
+INSERT INTO vouchers (shop_id,voucher_code,discount_value,max_discount,min_order_value,usage_limit,expiry_date,active) VALUES
+                                                                                                                           (@shop1_id,'NONGSAN10',10000,20000,50000,100,DATE_ADD(NOW(),INTERVAL 30 DAY),1),
+                                                                                                                           (@shop1_id,'ORGANIC20',20000,40000,100000,50,DATE_ADD(NOW(),INTERVAL 30 DAY),1),
+                                                                                                                           (@shop1_id,'DALAT50K',50000,50000,200000,20,DATE_ADD(NOW(),INTERVAL 15 DAY),1),
+                                                                                                                           (@shop1_id,'FREESHIP1',15000,15000,80000,200,DATE_ADD(NOW(),INTERVAL 60 DAY),1),
+                                                                                                                           (@shop2_id,'VUONTRAI15',15000,30000,70000,100,DATE_ADD(NOW(),INTERVAL 30 DAY),1),
+                                                                                                                           (@shop2_id,'MIENTAY25',25000,50000,120000,50,DATE_ADD(NOW(),INTERVAL 30 DAY),1),
+                                                                                                                           (@shop2_id,'TRAICAY30',30000,30000,150000,30,DATE_ADD(NOW(),INTERVAL 20 DAY),1),
+                                                                                                                           (@shop2_id,'SHIP0DONG',20000,20000,100000,150,DATE_ADD(NOW(),INTERVAL 45 DAY),1);
 -- ============================================================
 -- 8. ORDERS (25 đơn, xen kẽ status cách 30 phút, page 1 có đủ 6 status)
 -- Thứ tự DESC: PENDING, FAILED, DELIVERED, CANCELLED, SHIPPING,
@@ -368,7 +458,9 @@ INSERT INTO vouchers (shop_id,voucher_code,discount_value,max_discount,min_order
 ALTER TABLE orders
     MODIFY COLUMN status ENUM(
     'PENDING',
+    'AWAITING_PAYMENT',
     'CONFIRMED',
+    'READY_FOR_PICKUP',
     'SHIPPING',
     'SHIPPING_TO_WAREHOUSE',
     'ARRIVED_AT_WAREHOUSE',

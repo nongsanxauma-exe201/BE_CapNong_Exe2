@@ -2,6 +2,7 @@ package com.swd301.foodmarket.repository;
 
 import com.swd301.foodmarket.entity.Order;
 import com.swd301.foodmarket.entity.User;
+import com.swd301.foodmarket.enums.CodPaymentStatus;
 import com.swd301.foodmarket.enums.OrderStatus;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
@@ -17,6 +18,7 @@ import java.util.Optional;
 public interface OrderRepository extends JpaRepository<Order, Integer> {
 
     List<Order> findByShipperIsNullAndStatus(OrderStatus status);
+    List<Order> findByCheckoutBatchId(Integer checkoutBatchId);
     Page<Order> findByShipperIsNullAndStatus(OrderStatus status, Pageable pageable);
 
     List<Order> findByShipper(User shipper);
@@ -26,6 +28,42 @@ public interface OrderRepository extends JpaRepository<Order, Integer> {
 
     Page<Order> findAll(Pageable pageable);
     Page<Order> findByBuyerId(Integer buyerId, Pageable pageable);
+    Page<Order> findByBuyerIdAndStatusIn(Integer buyerId, List<OrderStatus> statuses, Pageable pageable);
+
+    @Query(
+        value = """
+            SELECT o FROM Order o
+            LEFT JOIN FETCH o.checkoutBatch
+            WHERE o.buyer.id = :buyerId
+              AND o.status IN :statuses
+        """,
+        countQuery = """
+            SELECT COUNT(o) FROM Order o
+            WHERE o.buyer.id = :buyerId
+              AND o.status IN :statuses
+        """
+    )
+    Page<Order> findByBuyerIdAndStatusInWithBatch(
+            @Param("buyerId") Integer buyerId,
+            @Param("statuses") List<OrderStatus> statuses,
+            Pageable pageable
+    );
+
+    @Query(
+        value = """
+            SELECT o FROM Order o
+            LEFT JOIN FETCH o.checkoutBatch
+            WHERE o.buyer.id = :buyerId
+        """,
+        countQuery = """
+            SELECT COUNT(o) FROM Order o
+            WHERE o.buyer.id = :buyerId
+        """
+    )
+    Page<Order> findByBuyerIdWithBatch(
+            @Param("buyerId") Integer buyerId,
+            Pageable pageable
+    );
 
     List<Order> findByShipperAndStatus(User shipper, OrderStatus status);
 
@@ -55,6 +93,7 @@ public interface OrderRepository extends JpaRepository<Order, Integer> {
     Integer countDistinctShopOwnerIdByStatusIsIn(Collection<OrderStatus> statuses);
 
     Page<Order> findByShopOwner(User shopOwner, Pageable pageable);
+    Page<Order> findByShopOwnerAndStatusIn(User shopOwner, List<OrderStatus> statuses, Pageable pageable);
     @Query("""
     SELECT o
     FROM Order o
@@ -145,4 +184,61 @@ public interface OrderRepository extends JpaRepository<Order, Integer> {
 
 
     List<Order>  findByPaymentMethodIgnoreCaseAndStatusAndCodSettled(String paymentMethod, OrderStatus status, Boolean codSettled);
+    List<Order> findByPaymentMethodIgnoreCaseAndCodPaymentStatus(String paymentMethod, CodPaymentStatus codPaymentStatus);
+
+    @Query("""
+        SELECT DISTINCT o FROM Order o
+        LEFT JOIN FETCH o.buyer
+        LEFT JOIN FETCH o.shopOwner
+        LEFT JOIN FETCH o.orderDetails od
+        LEFT JOIN FETCH od.product
+        WHERE (:statuses IS NULL OR o.status IN :statuses)
+          AND (:from IS NULL OR o.createdAt >= :from)
+          AND (:to IS NULL OR o.createdAt < :to)
+        ORDER BY o.createdAt DESC
+    """)
+    List<Order> findForAdminExport(
+            @Param("statuses") List<OrderStatus> statuses,
+            @Param("from") LocalDateTime from,
+            @Param("to") LocalDateTime to
+    );
+
+    @Query("""
+        SELECT DISTINCT o FROM Order o
+        LEFT JOIN FETCH o.buyer
+        LEFT JOIN FETCH o.shopOwner
+        LEFT JOIN FETCH o.orderDetails od
+        LEFT JOIN FETCH od.product
+        WHERE o.id IN :orderIds
+    """)
+    List<Order> findByIdInWithDetails(@Param("orderIds") List<Integer> orderIds);
+
+    @Query("""
+        SELECT DISTINCT o FROM Order o
+        LEFT JOIN FETCH o.buyer
+        LEFT JOIN FETCH o.shopOwner
+        LEFT JOIN FETCH o.orderDetails od
+        LEFT JOIN FETCH od.product
+        WHERE o.shopOwner = :shopOwner
+          AND (:statuses IS NULL OR o.status IN :statuses)
+          AND (:from IS NULL OR o.createdAt >= :from)
+          AND (:to IS NULL OR o.createdAt < :to)
+        ORDER BY o.createdAt DESC
+    """)
+    List<Order> findForShopExport(
+            @Param("shopOwner") User shopOwner,
+            @Param("from") LocalDateTime from,
+            @Param("to") LocalDateTime to,
+            @Param("statuses") List<OrderStatus> statuses
+    );
+
+    @Query("""
+        SELECT DISTINCT o FROM Order o
+        LEFT JOIN FETCH o.buyer
+        LEFT JOIN FETCH o.shopOwner
+        LEFT JOIN FETCH o.orderDetails od
+        LEFT JOIN FETCH od.product
+        WHERE o.id = :orderId
+    """)
+    Optional<Order> findByIdWithDetails(@Param("orderId") Integer orderId);
 }

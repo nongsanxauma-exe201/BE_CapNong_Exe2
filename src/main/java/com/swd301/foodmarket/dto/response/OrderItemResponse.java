@@ -19,7 +19,11 @@ public class OrderItemResponse {
     Integer productId;          // null nếu là mystery box
     String  productName;        // tên sản phẩm HOẶC boxType của túi mù
     Integer quantity;
+    BigDecimal quantityKg;
     BigDecimal unitPrice;
+    BigDecimal pricePerKg;
+    BigDecimal unitWeightKg;
+    BigDecimal rescuedWeightKg;
     String unit;
 
     String  itemType;           // "PRODUCT" hoặc "MYSTERY_BOX"
