@@ -321,6 +321,12 @@ public class VoucherUserServiceImpl  implements  com.swd301.foodmarket.service.V
     @Transactional
     @Override
     public void restoreBatchVoucher(CheckoutBatch batch, List<Order> orders) {
+        restoreBatchVoucher(batch, orders, true);
+    }
+
+    @Transactional
+    @Override
+    public void restoreBatchVoucher(CheckoutBatch batch, List<Order> orders, boolean adjustOrderTotals) {
         if (batch == null || batch.getBatchVoucherUserId() == null || orders == null || orders.isEmpty()) {
             return;
         }
@@ -331,14 +337,16 @@ public class VoucherUserServiceImpl  implements  com.swd301.foodmarket.service.V
             if (batchDiscount == null || batchDiscount.compareTo(BigDecimal.ZERO) <= 0) {
                 continue;
             }
-            if (order.getTotalAmount() != null) {
-                order.setTotalAmount(order.getTotalAmount().add(batchDiscount));
+            if (adjustOrderTotals) {
+                if (order.getTotalAmount() != null) {
+                    order.setTotalAmount(order.getTotalAmount().add(batchDiscount));
+                }
+                if (order.getShippingDiscountAmount() != null
+                        && order.getShippingDiscountAmount().compareTo(batchDiscount) >= 0) {
+                    order.setShippingDiscountAmount(order.getShippingDiscountAmount().subtract(batchDiscount));
+                }
+                order.setBatchDiscountAmount(BigDecimal.ZERO);
             }
-            if (order.getShippingDiscountAmount() != null
-                    && order.getShippingDiscountAmount().compareTo(batchDiscount) >= 0) {
-                order.setShippingDiscountAmount(order.getShippingDiscountAmount().subtract(batchDiscount));
-            }
-            order.setBatchDiscountAmount(BigDecimal.ZERO);
         }
 
         for (Order order : orders) {
@@ -375,12 +383,20 @@ public class VoucherUserServiceImpl  implements  com.swd301.foodmarket.service.V
         }
 
         batch.setBatchVoucherUserId(null);
-        batch.setBatchDiscountAmount(null);
+        if (adjustOrderTotals) {
+            batch.setBatchDiscountAmount(null);
+        }
     }
 
     @Transactional
     @Override
     public void restoreVoucherForOrder(Order order) {
+        restoreVoucherForOrder(order, true);
+    }
+
+    @Transactional
+    @Override
+    public void restoreVoucherForOrder(Order order, boolean adjustOrderTotals) {
         if (order == null || order.getId() == null) {
             return;
         }
@@ -419,7 +435,9 @@ public class VoucherUserServiceImpl  implements  com.swd301.foodmarket.service.V
         voucherRespository.save(voucher);
 
         BigDecimal discountAmount = usage.getDiscountAmount() == null ? BigDecimal.ZERO : usage.getDiscountAmount();
-        if (discountAmount.compareTo(BigDecimal.ZERO) > 0 && order.getTotalAmount() != null) {
+        if (adjustOrderTotals
+                && discountAmount.compareTo(BigDecimal.ZERO) > 0
+                && order.getTotalAmount() != null) {
             order.setTotalAmount(order.getTotalAmount().add(discountAmount));
             if (usage.getVoucher() != null && usage.getVoucher().getVoucherType() == VoucherType.WELCOME) {
                 BigDecimal currentShippingDiscount = order.getShippingDiscountAmount() == null

@@ -30,6 +30,7 @@ import com.swd301.foodmarket.service.NotificationService;
 import com.swd301.foodmarket.service.OrderRewardService;
 import com.swd301.foodmarket.service.PaymentService;
 import com.swd301.foodmarket.service.ShipperService;
+import com.swd301.foodmarket.service.TrackingService;
 import com.swd301.foodmarket.service.UserService;
 import com.swd301.foodmarket.service.VoucherService;
 import com.swd301.foodmarket.service.VoucherUserService;
@@ -49,6 +50,7 @@ import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.filter.RequestContextFilter;
+import org.springframework.web.multipart.MultipartFile;
 
 import java.math.BigDecimal;
 import java.math.RoundingMode;
@@ -81,6 +83,7 @@ public class ShipperServiceImpl implements ShipperService {
     private final PaymentService paymentService;
     private final VoucherUserService voucherUserService;
     private final OrderSettlementCalculator orderSettlementCalculator;
+    private final TrackingService trackingService;
     // ===================== HELPERS =====================
 
     private User getCurrentShipper() {
@@ -344,7 +347,11 @@ public class ShipperServiceImpl implements ShipperService {
 
     @Override
     @Transactional
-    public ShipperOrderResponse updateOrderStatus(Integer orderId, UpdateOrderStatusRequest request) {
+    public ShipperOrderResponse updateOrderStatus(
+            Integer orderId,
+            UpdateOrderStatusRequest request,
+            List<MultipartFile> files
+    ) {
 
 
         User shipper = getCurrentShipper();
@@ -409,6 +416,13 @@ public class ShipperServiceImpl implements ShipperService {
         }
 
         orderRepository.save(order);
+
+        // Tracking + ảnh bằng chứng (optional)
+        if (request.getStatus() == OrderStatus.DELIVERED
+                || request.getStatus() == OrderStatus.FAILED) {
+            trackingService.trackingOrder(order, files != null ? files : List.of());
+        }
+
         if (request.getStatus() == OrderStatus.FAILED) {
             if ("PAYOS".equalsIgnoreCase(order.getPaymentMethod()) && isPostPaymentStatus(previousStatus)) {
                 paymentService.refundPayosOrderOnFailed(order);
@@ -869,7 +883,15 @@ public class ShipperServiceImpl implements ShipperService {
             throw new AppException(ErrorCode.PLATFORM_BALANCE_NOT_ENOUGH);
         }
 
+        BigDecimal payoutTotal = finalShopRevenue.add(
+                shipperWallet != null && shipperNet.signum() > 0 ? shipperNet : BigDecimal.ZERO);
+        if (platformWallet.getTotalBalance().compareTo(payoutTotal) < 0) {
+            throw new AppException(ErrorCode.PLATFORM_BALANCE_NOT_ENOUGH);
+        }
+
+        // Mở khóa escrow prepaid, rồi trừ total khi chi shop + shipper (giống PayOS / settleCodOrder)
         platformWallet.setFrozenBalance(platformWallet.getFrozenBalance().subtract(prepaidAmount));
+        platformWallet.setTotalBalance(platformWallet.getTotalBalance().subtract(payoutTotal));
         platformWallet.setCommissionWallet(platformWallet.getCommissionWallet().add(platformFeeTotal));
         platformWallet.setTotalRevenueAllTime(platformWallet.getTotalRevenueAllTime().add(platformFeeTotal));
         platformWallet.setUpdatedAt(LocalDateTime.now(ZoneId.of("Asia/Ho_Chi_Minh")));

@@ -600,7 +600,14 @@ public class OrderServiceImpl implements OrderService {
 
             response.setBatchUnpaidCount(unpaidCount);
             response.setBatchShopCount(batchOrders.size());
+            response.setCheckoutBatchStatus(batch.getStatus() != null ? batch.getStatus().name() : null);
             response.setHasPlatformBatchVoucher(batch.getBatchVoucherUserId() != null);
+            if (batch.getTotalAmount() != null && batch.getTotalAmount().compareTo(BigDecimal.ZERO) > 0) {
+                response.setBatchCheckoutTotalAmount(batch.getTotalAmount());
+            }
+            if (batch.getBatchDiscountAmount() != null && batch.getBatchDiscountAmount().compareTo(BigDecimal.ZERO) > 0) {
+                response.setBatchPlatformDiscountAmount(batch.getBatchDiscountAmount());
+            }
 
             BigDecimal pendingTotal = batchOrders.stream()
                     .filter(this::isBatchUnpaidOrder)
@@ -885,7 +892,11 @@ public class OrderServiceImpl implements OrderService {
         BigDecimal shippingFee = BigDecimal.valueOf(15_000); // fallback
         if (shopOwner != null) {
             String buyerAddress = getOrDefault(request.getShippingAddress(), buyer.getAddress());
-            shippingFee = calculateShippingFee(buyerAddress, shopOwner.getId());
+            if (request.getPlaceId() != null && !request.getPlaceId().isBlank()) {
+                shippingFee = calculateShippingFeeByPlaceId(request.getPlaceId(), shopOwner.getId());
+            } else {
+                shippingFee = calculateShippingFee(buyerAddress, shopOwner.getId());
+            }
         }
 
         order.setShippingFee(shippingFee);
@@ -962,64 +973,51 @@ public class OrderServiceImpl implements OrderService {
         // → không cần thay đổi stock khi CONFIRMED
 
         // ================= CANCELLED =================
-        // Hoàn trả stock khi huỷ từ bất kỳ trạng thái nào (PENDING hoặc CONFIRMED)
         if (request.getStatus() == OrderStatus.CANCELLED
                 && order.getStatus() != OrderStatus.CANCELLED) {
 
             validateCancelPermission(order, getCurrentUser());
+            validateBatchCancellationAllowed(order);
 
-            boolean paidViaPayos = "PAYOS".equalsIgnoreCase(order.getPaymentMethod())
-                    && isPayosBuyerCancellableStatus(order.getStatus());
-
-            Map<Integer, Product> productsToUpdate = new HashMap<>();
-
-            // Hoàn trả stockQuantity cho product thường (đã giảm tại PENDING)
-            for (OrderDetail detail : order.getOrderDetails()) {
-                Product product = detail.getProduct();
-                product.setStockKg(resolveProductStockKg(product).add(resolveOrderDetailKg(detail)));
-                product.setStockQuantity(product.getStockKg().setScale(0, RoundingMode.DOWN).intValue());
-                productsToUpdate.put(product.getId(), product);
-            }
-
-            for (OrderMysteryBox orderBox : order.getMysteryBoxes()) {
-
-                MysteryBox box = orderBox.getMysteryBox();
-                int boxQuantity = orderBox.getQuantity();
-
-                // Hoàn trả soldQuantity (đã tăng tại PENDING)
-                box.setSoldQuantity(Math.max(0, box.getSoldQuantity() - boxQuantity));
-                if (!Boolean.TRUE.equals(box.getIsActive()) && box.getSoldQuantity() < box.getTotalQuantity()) {
-                    box.setIsActive(true);
-                }
-                mysteryBoxRepository.save(box);
-            }
-
-            productRepository.saveAll(productsToUpdate.values());
-            voucherUserService.restoreVoucherForOrder(order);
-
+            List<Order> toCancel = resolveOrdersForBatchCancellation(order);
             CheckoutBatch batch = order.getCheckoutBatch();
-            if (batch != null && batch.getBatchVoucherUserId() != null) {
+            boolean restoreBatchVoucher = batch != null && batch.getBatchVoucherUserId() != null
+                    && toCancel.stream().anyMatch(o ->
+                    o.getStatus() == OrderStatus.AWAITING_PAYMENT || o.getStatus() == OrderStatus.PENDING);
+
+            for (Order target : toCancel) {
+                if (target.getStatus() == OrderStatus.CANCELLED) {
+                    continue;
+                }
+                validateCancelPermission(target, getCurrentUser());
+                performCancellationSideEffects(target);
+                orderRewardService.revokeRewardIfApplied(target);
+                target.setStatus(OrderStatus.CANCELLED);
+                orderRepository.save(target);
+                List<MultipartFile> trackingFiles = target.getId().equals(order.getId()) ? files : List.of();
+                trackingService.trackingOrder(target, trackingFiles);
+            }
+
+            if (restoreBatchVoucher && batch != null) {
                 List<Order> batchOrders = orderRepository.findByCheckoutBatchId(batch.getId());
-                voucherUserService.restoreBatchVoucher(batch, batchOrders);
+                voucherUserService.restoreBatchVoucher(batch, batchOrders, false);
             }
-
-            if (paidViaPayos) {
-                paymentService.refundPayosOrderOnCancel(order);
-            } else {
-                cartService.restoreOrderItemsToCart(order);
+            if (batch != null) {
+                syncCheckoutBatchStatus(batch);
             }
-
-            orderRewardService.revokeRewardIfApplied(order);
-
         }
 
-        order.setStatus(request.getStatus());
+        if (request.getStatus() == OrderStatus.CANCELLED) {
+            order.setStatus(OrderStatus.CANCELLED);
+        } else {
+            order.setStatus(request.getStatus());
+        }
         orderRewardService.applyRewardIfEligible(order);
 
-
         Order savedOrder = orderRepository.save(order);
-        // tracking order
-        trackingService.trackingOrder(order, files);
+        if (request.getStatus() != OrderStatus.CANCELLED) {
+            trackingService.trackingOrder(order, files);
+        }
 
         if (savedOrder.getStatus() == OrderStatus.FAILED) {
 
@@ -1047,6 +1045,179 @@ public class OrderServiceImpl implements OrderService {
 
     private boolean isPayosBuyerCancellableStatus(OrderStatus status) {
         return status == OrderStatus.PAID || status == OrderStatus.CONFIRMED;
+    }
+
+    private boolean isBuyerCancellableStatus(OrderStatus status) {
+        return status == OrderStatus.AWAITING_PAYMENT
+                || status == OrderStatus.PENDING
+                || status == OrderStatus.PAID
+                || status == OrderStatus.CONFIRMED;
+    }
+
+    private boolean isAwaitingShopConfirmStatus(OrderStatus status) {
+        return status == OrderStatus.PENDING
+                || status == OrderStatus.PAID
+                || status == OrderStatus.AWAITING_PAYMENT;
+    }
+
+    /** Batch checkout (voucher sàn) — không cho hủy khi đã có shop xác nhận. */
+    private void validateBatchCancellationAllowed(Order trigger) {
+        CheckoutBatch batch = trigger.getCheckoutBatch();
+        if (batch == null || batch.getBatchVoucherUserId() == null) {
+            return;
+        }
+
+        List<Order> active = orderRepository.findByCheckoutBatchId(batch.getId()).stream()
+                .filter(o -> o.getStatus() != OrderStatus.CANCELLED)
+                .toList();
+        if (active.size() <= 1) {
+            return;
+        }
+
+        boolean hasShopConfirmed = active.stream()
+                .anyMatch(o -> !isAwaitingShopConfirmStatus(o.getStatus()));
+        if (hasShopConfirmed) {
+            throw new AppException(ErrorCode.BATCH_VOUCHER_CANCEL_ALL_REQUIRED,
+                    "Checkout batch không còn được hủy vì đã có shop xác nhận đơn.");
+        }
+    }
+
+    /**
+     * Chỉ gom hủy cả batch khi có voucher sàn (giảm giá chia chung).
+     * Không voucher → COD/PayOS hủy từng đơn độc lập.
+     */
+    private boolean requiresBatchWideCancellation(CheckoutBatch batch, List<Order> active) {
+        if (batch == null || active.size() <= 1) {
+            return false;
+        }
+        return batch.getBatchVoucherUserId() != null;
+    }
+
+    /**
+     * Đồng bộ CheckoutBatch.status theo trạng thái các đơn còn lại (sau hủy / thay đổi).
+     * Không restore voucher — caller đã xử lý nếu cần.
+     */
+    private void syncCheckoutBatchStatus(CheckoutBatch batch) {
+        if (batch == null || batch.getId() == null) {
+            return;
+        }
+        List<Order> all = orderRepository.findByCheckoutBatchId(batch.getId());
+        boolean isCod = "COD".equalsIgnoreCase(batch.getPaymentMethod())
+                || all.stream().allMatch(o -> "COD".equalsIgnoreCase(o.getPaymentMethod()));
+
+        if (isCod) {
+            boolean allCancelled = !all.isEmpty()
+                    && all.stream().allMatch(o -> o.getStatus() == OrderStatus.CANCELLED);
+            batch.setStatus(allCancelled ? CheckoutBatchStatus.CANCELLED : CheckoutBatchStatus.COMPLETED);
+            checkoutBatchRepository.save(batch);
+            return;
+        }
+
+        boolean hasUnpaid = all.stream().anyMatch(this::isPayosUnpaidOrder);
+        boolean hasSettled = all.stream().anyMatch(o ->
+                o.getStatus() != OrderStatus.CANCELLED && !isPayosUnpaidOrder(o));
+        boolean allCancelled = !all.isEmpty()
+                && all.stream().allMatch(o -> o.getStatus() == OrderStatus.CANCELLED);
+
+        if (allCancelled) {
+            batch.setStatus(CheckoutBatchStatus.CANCELLED);
+            clearBatchPayosLink(batch);
+        } else if (hasSettled && hasUnpaid) {
+            batch.setStatus(CheckoutBatchStatus.PARTIALLY_PAID);
+            clearBatchPayosLink(batch);
+        } else if (hasSettled) {
+            batch.setStatus(CheckoutBatchStatus.PAID);
+            clearBatchPayosLink(batch);
+        } else if (hasUnpaid) {
+            batch.setStatus(CheckoutBatchStatus.PENDING);
+        }
+        checkoutBatchRepository.save(batch);
+    }
+
+    private boolean isPayosUnpaidOrder(Order order) {
+        if (order == null || !"PAYOS".equalsIgnoreCase(order.getPaymentMethod())) {
+            return false;
+        }
+        return order.getStatus() == OrderStatus.PENDING
+                || order.getStatus() == OrderStatus.AWAITING_PAYMENT;
+    }
+
+    private void clearBatchPayosLink(CheckoutBatch batch) {
+        batch.setPayosOrderCode(null);
+        batch.setCheckoutUrl(null);
+        batch.setQrCodeUrl(null);
+    }
+
+    private List<Order> resolveOrdersForBatchCancellation(Order trigger) {
+        CheckoutBatch batch = trigger.getCheckoutBatch();
+        if (batch == null) {
+            return List.of(trigger);
+        }
+
+        List<Order> active = orderRepository.findByCheckoutBatchId(batch.getId()).stream()
+                .filter(o -> o.getStatus() != OrderStatus.CANCELLED)
+                .sorted(Comparator.comparing(Order::getId))
+                .toList();
+
+        if (active.size() <= 1) {
+            return List.of(trigger);
+        }
+
+        if (!requiresBatchWideCancellation(batch, active)) {
+            return List.of(trigger);
+        }
+
+        List<Order> nonCancellable = active.stream()
+                .filter(o -> !isBuyerCancellableStatus(o.getStatus()))
+                .toList();
+        if (!nonCancellable.isEmpty()) {
+            String ids = nonCancellable.stream()
+                    .map(o -> "#" + o.getId())
+                    .reduce((a, b) -> a + ", " + b)
+                    .orElse("");
+            throw new AppException(ErrorCode.BATCH_VOUCHER_CANCEL_ALL_REQUIRED,
+                    "Checkout PayOS không thể hủy lẻ khi còn đơn đang xử lý (" + ids + ").");
+        }
+
+        return active;
+    }
+
+    private void performCancellationSideEffects(Order order) {
+        Map<Integer, Product> productsToUpdate = new HashMap<>();
+
+        for (OrderDetail detail : order.getOrderDetails()) {
+            Product product = detail.getProduct();
+            product.setStockKg(resolveProductStockKg(product).add(resolveOrderDetailKg(detail)));
+            product.setStockQuantity(product.getStockKg().setScale(0, RoundingMode.DOWN).intValue());
+            productsToUpdate.put(product.getId(), product);
+        }
+
+        for (OrderMysteryBox orderBox : order.getMysteryBoxes()) {
+            MysteryBox box = orderBox.getMysteryBox();
+            int boxQuantity = orderBox.getQuantity();
+            box.setSoldQuantity(Math.max(0, box.getSoldQuantity() - boxQuantity));
+            if (!Boolean.TRUE.equals(box.getIsActive()) && box.getSoldQuantity() < box.getTotalQuantity()) {
+                box.setIsActive(true);
+            }
+            mysteryBoxRepository.save(box);
+        }
+
+        productRepository.saveAll(productsToUpdate.values());
+
+        boolean unpaidCheckout = order.getStatus() == OrderStatus.AWAITING_PAYMENT
+                || order.getStatus() == OrderStatus.PENDING;
+        boolean paidViaPayos = "PAYOS".equalsIgnoreCase(order.getPaymentMethod())
+                && isPayosBuyerCancellableStatus(order.getStatus());
+
+        if (unpaidCheckout) {
+            voucherUserService.restoreVoucherForOrder(order, false);
+        }
+
+        if (paidViaPayos) {
+            paymentService.refundPayosOrderOnCancel(order);
+        } else if (unpaidCheckout) {
+            cartService.restoreOrderItemsToCart(order);
+        }
     }
 
     private void validateCancelPermission(Order order, User currentUser) {
@@ -1308,6 +1479,7 @@ public class OrderServiceImpl implements OrderService {
                     .recipientName(request.getRecipientName())
                     .recipientPhone(request.getRecipientPhone())
                     .shippingAddress(request.getShippingAddress())
+                    .placeId(request.getPlaceId())
                     .note(request.getNote())
                     .paymentMethod(request.getPaymentMethod())
                     .voucherUserId(shopOrder.getVoucherUserId())
@@ -1356,6 +1528,10 @@ public class OrderServiceImpl implements OrderService {
             }
             checkoutBatchRepository.save(batch);
         }
+
+        totalBatch = createdOrders.stream()
+                .map(o -> o.getTotalAmount() != null ? o.getTotalAmount() : BigDecimal.ZERO)
+                .reduce(BigDecimal.ZERO, BigDecimal::add);
 
         batch.setTotalAmount(totalBatch);
         String checkoutUrl = null;

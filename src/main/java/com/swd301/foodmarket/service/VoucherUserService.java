@@ -25,5 +25,7 @@ public interface VoucherUserService {
     VoucherUsageResponse useVoucherForOrder(Order order, List<String> voucherCode, boolean shopVouchersOnly);
     BigDecimal applyBatchVoucher(CheckoutBatch batch, List<Order> orders, UUID batchVoucherUserId);
     void restoreBatchVoucher(CheckoutBatch batch, List<Order> orders);
+    void restoreBatchVoucher(CheckoutBatch batch, List<Order> orders, boolean adjustOrderTotals);
     void restoreVoucherForOrder(Order order);
+    void restoreVoucherForOrder(Order order, boolean adjustOrderTotals);
 }

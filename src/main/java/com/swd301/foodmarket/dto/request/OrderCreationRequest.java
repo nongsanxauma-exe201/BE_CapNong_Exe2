@@ -16,6 +16,7 @@ public class OrderCreationRequest {
     String recipientName;
     String recipientPhone;
     String shippingAddress;
+    String placeId;
     String note;
     String paymentMethod;
     UUID voucherUserId;

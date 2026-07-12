@@ -8,6 +8,7 @@ import com.swd301.foodmarket.dto.response.PageResponse;
 import com.swd301.foodmarket.dto.response.ShipperLocationResponse;
 import com.swd301.foodmarket.dto.response.ShipperOrderResponse;
 import org.springframework.data.domain.Page;
+import org.springframework.web.multipart.MultipartFile;
 
 import java.util.List;
 
@@ -18,8 +19,8 @@ public interface ShipperService {
     // Nhận đơn
     ShipperOrderResponse acceptOrder(Integer orderId, AcceptOrderRequest request);
 
-    // Cập nhật trạng thái đơn
-    ShipperOrderResponse updateOrderStatus(Integer orderId, UpdateOrderStatusRequest request);
+    // Cập nhật trạng thái đơn (files = ảnh bằng chứng, optional)
+    ShipperOrderResponse updateOrderStatus(Integer orderId, UpdateOrderStatusRequest request, List<MultipartFile> files);
 
     // Đơn của tôi
     List<ShipperOrderResponse> getMyOrders();

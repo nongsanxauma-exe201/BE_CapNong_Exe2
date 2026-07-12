@@ -19,6 +19,7 @@ public interface OrderMapper {
     @Mapping(target = "rescuedKg", source = "rescuedWeight")
     @Mapping(target = "checkoutBatchId", source = "checkoutBatchFkId")
     @Mapping(target = "batchUnpaidCount", ignore = true)
+    @Mapping(target = "checkoutBatchStatus", ignore = true)
     OrderResponse toResponse(Order order);
 
     // ================== PRODUCT ==================

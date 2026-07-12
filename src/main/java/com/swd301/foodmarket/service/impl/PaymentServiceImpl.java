@@ -526,7 +526,7 @@ public class PaymentServiceImpl implements PaymentService {
         payment.setUpdatedAt(LocalDateTime.now(ZoneId.of("Asia/Ho_Chi_Minh")));
 
         restoreOrderInventory(order);
-        voucherUserService.restoreVoucherForOrder(order);
+        voucherUserService.restoreVoucherForOrder(order, shouldAdjustOrderTotalsOnCancel(order));
         cartService.restoreOrderItemsToCart(order);
         order.setStatus(OrderStatus.CANCELLED);
         orderRepository.save(order);
@@ -569,7 +569,6 @@ public class PaymentServiceImpl implements PaymentService {
         }
 
         List<Order> orders = orderRepository.findByCheckoutBatchId(batch.getId());
-        boolean hasPaid = orders.stream().anyMatch(o -> o.getStatus() == OrderStatus.PAID);
 
         for (Order order : orders) {
             if (order.getStatus() != OrderStatus.AWAITING_PAYMENT && order.getStatus() != OrderStatus.PENDING) {
@@ -579,20 +578,13 @@ public class PaymentServiceImpl implements PaymentService {
                 continue;
             }
             restoreOrderInventory(order);
-            voucherUserService.restoreVoucherForOrder(order);
+            voucherUserService.restoreVoucherForOrder(order, false);
             cartService.restoreOrderItemsToCart(order);
             order.setStatus(OrderStatus.CANCELLED);
             orderRepository.save(order);
         }
 
-        if (!hasPaid) {
-            voucherUserService.restoreBatchVoucher(batch, orders);
-            batch.setStatus(CheckoutBatchStatus.CANCELLED);
-        } else {
-            batch.setStatus(CheckoutBatchStatus.PARTIALLY_PAID);
-            invalidateBatchPayosLink(batch);
-        }
-        checkoutBatchRepository.save(batch);
+        syncBatchStatusAfterCancel(batch);
         log.info("===== BATCH CANCEL PAYMENT COMPLETED batchId={} =====", batch.getId());
     }
 
@@ -715,7 +707,7 @@ public class PaymentServiceImpl implements PaymentService {
         List<ResumePaymentOrderOption> unpaidOptions = unpaid.stream()
                 .map(o -> ResumePaymentOrderOption.builder()
                         .orderId(o.getId())
-                        .shopName(o.getShopOwner() != null ? o.getShopOwner().getFullName() : null)
+                        .shopName(resolveShopDisplayName(o.getShopOwner()))
                         .amount(o.getTotalAmount())
                         .status(o.getStatus() != null ? o.getStatus().name() : null)
                         .build())
@@ -887,17 +879,37 @@ public class PaymentServiceImpl implements PaymentService {
 
     private void syncBatchStatusAfterCancel(CheckoutBatch batch) {
         List<Order> all = orderRepository.findByCheckoutBatchId(batch.getId());
-        boolean hasPaid = all.stream().anyMatch(o -> o.getStatus() == OrderStatus.PAID);
         boolean hasUnpaid = !getUnpaidPayosOrders(batch).isEmpty();
+        boolean hasSettled = all.stream().anyMatch(o ->
+                o.getStatus() != OrderStatus.CANCELLED
+                        && o.getStatus() != OrderStatus.PENDING
+                        && o.getStatus() != OrderStatus.AWAITING_PAYMENT);
+        boolean allCancelled = !all.isEmpty()
+                && all.stream().allMatch(o -> o.getStatus() == OrderStatus.CANCELLED);
 
-        if (!hasPaid && !hasUnpaid) {
-            voucherUserService.restoreBatchVoucher(batch, all);
+        if (allCancelled || (!hasSettled && !hasUnpaid)) {
+            voucherUserService.restoreBatchVoucher(batch, all, false);
             batch.setStatus(CheckoutBatchStatus.CANCELLED);
-        } else if (hasPaid) {
+            invalidateBatchPayosLink(batch);
+        } else if (hasSettled && hasUnpaid) {
             batch.setStatus(CheckoutBatchStatus.PARTIALLY_PAID);
             invalidateBatchPayosLink(batch);
+        } else if (hasSettled) {
+            batch.setStatus(CheckoutBatchStatus.PAID);
+            invalidateBatchPayosLink(batch);
+        } else if (hasUnpaid) {
+            batch.setStatus(CheckoutBatchStatus.PENDING);
         }
         checkoutBatchRepository.save(batch);
+    }
+
+    /** Giữ totalAmount đơn như lúc checkout PayOS — chỉ hoàn voucher, không cộng lại giảm giá lên đơn. */
+    private boolean shouldAdjustOrderTotalsOnCancel(Order order) {
+        if (order == null || order.getStatus() == null) {
+            return true;
+        }
+        return order.getStatus() != OrderStatus.AWAITING_PAYMENT
+                && order.getStatus() != OrderStatus.PENDING;
     }
 
     private void restoreOrderInventory(Order order) {
@@ -974,20 +986,28 @@ public class PaymentServiceImpl implements PaymentService {
             return;
         }
 
-        BigDecimal buyerPaid = order.getTotalAmount() != null ? order.getTotalAmount() : BigDecimal.ZERO;
+        OrderSettlementCalculator.SettlementAmounts amounts = orderSettlementCalculator.calculate(order);
+        BigDecimal buyerPaid = amounts.buyerPaid();
         if (buyerPaid.compareTo(BigDecimal.ZERO) <= 0) {
-            log.warn("[PAYOS_REFUND] Order {} has invalid totalAmount, skip", order.getId());
+            log.warn("[PAYOS_REFUND] Order {} has invalid buyerPaid, skip", order.getId());
             return;
         }
 
         Payment payment = paymentRepository
                 .findTopByOrderIdAndStatusOrderByCreatedAtDesc(order.getId(), PaymentStatus.SUCCESS)
                 .orElse(null);
-        if (payment == null) {
-            log.warn("[PAYOS_REFUND] Order {} has no SUCCESS payment, skip", order.getId());
+
+        CheckoutBatch batch = order.getCheckoutBatch();
+        boolean fromPaidBatch = batch != null
+                && (batch.getStatus() == CheckoutBatchStatus.PAID
+                || batch.getStatus() == CheckoutBatchStatus.PARTIALLY_PAID);
+
+        if (payment == null && !fromPaidBatch) {
+            log.warn("[PAYOS_REFUND] Order {} has no SUCCESS payment and batch not paid, skip", order.getId());
             return;
         }
-        if (payment.getAmount() != null && payment.getAmount().compareTo(BigDecimal.ZERO) > 0) {
+
+        if (payment != null && payment.getAmount() != null && payment.getAmount().compareTo(BigDecimal.ZERO) > 0) {
             buyerPaid = payment.getAmount();
         }
 
@@ -1001,7 +1021,6 @@ public class PaymentServiceImpl implements PaymentService {
             return;
         }
 
-        OrderSettlementCalculator.SettlementAmounts amounts = orderSettlementCalculator.calculate(order);
         BigDecimal platformBatchSubsidy = amounts.platformBatchSubsidy();
         BigDecimal settlementTotal = amounts.settlementTotal();
         BigDecimal shopGross = amounts.shopGross();
@@ -1040,7 +1059,9 @@ public class PaymentServiceImpl implements PaymentService {
         walletRepository.save(buyerWallet);
 
         String referenceId = "ORDER_" + order.getId();
-        String gateway = payment.getPaymentGateway() != null ? payment.getPaymentGateway() : "PAYOS";
+        String gateway = payment != null && payment.getPaymentGateway() != null
+                ? payment.getPaymentGateway()
+                : "PAYOS";
 
         transactionRepository.save(Transaction.builder()
                 .payment(payment)
@@ -1208,6 +1229,16 @@ public class PaymentServiceImpl implements PaymentService {
             return prefix + formattedAmount + " đã được trừ khỏi số tiền COD khi nhận hàng.";
         }
         return prefix + formattedAmount + " đã được hoàn vào ví của bạn.";
+    }
+
+    private String resolveShopDisplayName(User shopOwner) {
+        if (shopOwner == null) {
+            return null;
+        }
+        if (shopOwner.getShopName() != null && !shopOwner.getShopName().isBlank()) {
+            return shopOwner.getShopName();
+        }
+        return shopOwner.getFullName();
     }
 
 }

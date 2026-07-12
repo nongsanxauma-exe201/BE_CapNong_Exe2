@@ -88,6 +88,7 @@ public enum ErrorCode {
     PAYOS_AMOUNT_MISMATCH(5010, "Số tiền webhook PayOS không khớp với đơn hàng", HttpStatus.BAD_REQUEST),
     ORDER_IN_BATCH_USE_BATCH_PAYMENT(5011, "Đơn thuộc phiên thanh toán gộp, vui lòng thanh toán qua link batch", HttpStatus.BAD_REQUEST),
     PAYOUT_ALREADY_SETTLED(5012, "Đơn hàng đã được chi trả, không thể chi trả lại", HttpStatus.BAD_REQUEST),
+    BATCH_VOUCHER_CANCEL_ALL_REQUIRED(5013, "Checkout có voucher sàn: phải hủy toàn bộ đơn trong cùng lần thanh toán", HttpStatus.BAD_REQUEST),
 
     //Build plan
     BUILD_PLAN_NOT_FOUND(6001, "Build plan not found", HttpStatus.NOT_FOUND),
