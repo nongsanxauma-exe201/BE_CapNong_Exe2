@@ -63,7 +63,18 @@ public class OrderResponse {
     LocalDateTime codSettledAt;
 
     Integer checkoutBatchId;
+    /** PENDING | PAID | CANCELLED ... — dùng FE phân biệt hủy cả batch PayOS vs hủy từng đơn đã TT. */
+    String checkoutBatchStatus;
     Integer batchUnpaidCount;
+    Integer batchShopCount;
+    Boolean hasPlatformBatchVoucher;
+    BigDecimal batchPendingTotalAmount;
+    /** Tổng PayOS / checkout batch (khớp số tiền thanh toán thực tế). */
+    BigDecimal batchCheckoutTotalAmount;
+    /** Tổng giảm voucher sàn trên batch (nếu có). */
+    BigDecimal batchPlatformDiscountAmount;
+    /** Phần giảm voucher sàn phân bổ trên đơn này. */
+    BigDecimal batchDiscountAmount;
 
     BigDecimal qcRefundedAmount;
     LocalDateTime qcBuyerDecisionDeadline;

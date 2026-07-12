@@ -1,5 +1,6 @@
 package com.swd301.foodmarket.service;
 
+import com.fasterxml.jackson.databind.JsonNode;
 import com.swd301.foodmarket.dto.request.PayOSCreateRequest;
 import com.swd301.foodmarket.dto.response.PayOSCreateResponse;
 import com.swd301.foodmarket.dto.response.PayOSPaymentInfoResponse;
@@ -34,4 +35,9 @@ public interface PayosService {
     );
 
     PayOSPaymentInfoResponse getPaymentLinkInformation(Long orderCode);
+
+    /** orderCode hoặc paymentLinkId (id trên return URL PayOS). */
+    PayOSPaymentInfoResponse getPaymentLinkInformation(String id);
+
+    boolean verifyWebhookSignature(JsonNode webhookBody);
 }

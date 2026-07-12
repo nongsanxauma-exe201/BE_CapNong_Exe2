@@ -3,6 +3,7 @@ package com.swd301.foodmarket.controller;
 import com.swd301.foodmarket.dto.request.UpdateOrderStatusRequest;
 import com.swd301.foodmarket.dto.request.AcceptOrderRequest;
 import com.swd301.foodmarket.dto.response.*;
+import com.swd301.foodmarket.enums.OrderStatus;
 import com.swd301.foodmarket.service.ShipperService;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotNull;
@@ -10,8 +11,10 @@ import lombok.AccessLevel;
 import lombok.RequiredArgsConstructor;
 import lombok.experimental.FieldDefaults;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.http.MediaType;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
+import org.springframework.web.multipart.MultipartFile;
 
 import java.util.List;
 
@@ -72,18 +75,42 @@ public class ShipperController {
     }
 
     /**
-     * Shipper cập nhật trạng thái đơn (DELIVERED / FAILED)
+     * Shipper cập nhật trạng thái đơn (DELIVERED / FAILED) — JSON, không ảnh.
      * POST /shipper/orders/{orderId}/status
      */
-    @PostMapping("/orders/{orderId}/status")
+    @PostMapping(value = "/orders/{orderId}/status", consumes = MediaType.APPLICATION_JSON_VALUE)
     @PreAuthorize("hasRole('SHIPPER')")
-    public ApiResponse<ShipperOrderResponse> updateOrderStatus(
+    public ApiResponse<ShipperOrderResponse> updateOrderStatusJson(
             @PathVariable Integer orderId,
             @RequestBody @Valid UpdateOrderStatusRequest request
     ) {
-        log.info("[SHIPPER] Update order {} → {}", orderId, request.getStatus());
+        log.info("[SHIPPER] Update order {} → {} (json)", orderId, request.getStatus());
         return ApiResponse.<ShipperOrderResponse>builder()
-                .result(shipperService.updateOrderStatus(orderId, request))
+                .result(shipperService.updateOrderStatus(orderId, request, List.of()))
+                .build();
+    }
+
+    /**
+     * Shipper cập nhật trạng thái đơn (DELIVERED / FAILED) kèm ảnh bằng chứng (optional).
+     * multipart fields: status, note (optional), files (optional)
+     * POST /shipper/orders/{orderId}/status
+     */
+    @PostMapping(value = "/orders/{orderId}/status", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
+    @PreAuthorize("hasRole('SHIPPER')")
+    public ApiResponse<ShipperOrderResponse> updateOrderStatusMultipart(
+            @PathVariable Integer orderId,
+            @RequestParam("status") OrderStatus status,
+            @RequestParam(value = "note", required = false) String note,
+            @RequestParam(value = "files", required = false) List<MultipartFile> files
+    ) {
+        UpdateOrderStatusRequest request = UpdateOrderStatusRequest.builder()
+                .status(status)
+                .note(note)
+                .build();
+        log.info("[SHIPPER] Update order {} → {} (multipart, files={})",
+                orderId, status, files == null ? 0 : files.size());
+        return ApiResponse.<ShipperOrderResponse>builder()
+                .result(shipperService.updateOrderStatus(orderId, request, files))
                 .build();
     }
 

@@ -4,6 +4,7 @@ import com.swd301.foodmarket.dto.request.AddCartItemRequest;
 import com.swd301.foodmarket.dto.response.CartItemResponse;
 import com.swd301.foodmarket.dto.response.CartResponse;
 import com.swd301.foodmarket.entity.*;
+import com.swd301.foodmarket.enums.ProductStatus;
 import com.swd301.foodmarket.exception.AppException;
 import com.swd301.foodmarket.exception.ErrorCode;
 import com.swd301.foodmarket.repository.*;
@@ -17,7 +18,9 @@ import org.springframework.stereotype.Service;
 
 import java.math.BigDecimal;
 import java.math.RoundingMode;
+import java.time.LocalDate;
 import java.time.LocalDateTime;
+import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -82,6 +85,12 @@ public class CartServiceImpl implements CartService {
         } else if (request.getProductId() != null) {
             Product product = productRepository.findById(request.getProductId())
                     .orElseThrow(() -> new AppException(ErrorCode.PRODUCT_NOT_FOUND));
+
+            if (product.getStatus() != ProductStatus.AVAILABLE) {
+                throw new AppException(
+                        ErrorCode.PRODUCT_OUT_OF_STOCK,
+                        "Sản phẩm \"" + product.getProductName() + "\" không còn bán");
+            }
 
             CartItem item = cartItemRepository.findByCartAndProduct(cart, product).orElse(null);
             validateProductStockKg(product, requestedKg);
@@ -196,10 +205,15 @@ public class CartServiceImpl implements CartService {
     public CartResponse getCart() {
         User user = getCurrentUser();
         Cart cart = getOrCreateCart(user);
+        purgeUnavailableItems(cart);
         List<CartItem> items = cartItemRepository.findByCart(cart);
 
         // ✅ Build CartItemResponse thủ công để thêm shopOwnerId
-        List<CartItemResponse> itemResponses = items.stream().map(item -> {
+        List<CartItemResponse> itemResponses = items.stream()
+                .filter(item -> item.getMysteryBox() != null
+                        || item.getProduct() != null
+                        || item.getBuildCombo() != null)
+                .map(item -> {
             CartItemResponse.CartItemResponseBuilder builder = CartItemResponse.builder()
                     .quantity(item.getQuantity())
                     .quantityKg(resolveCartItemKg(item));
@@ -530,5 +544,85 @@ public class CartServiceImpl implements CartService {
             throw new RuntimeException("Sản phẩm chỉ còn " + stockKg.stripTrailingZeros().toPlainString()
                     + " kg trong kho, không đủ để mua " + requestedKg.stripTrailingZeros().toPlainString() + " kg.");
         }
+    }
+
+    /** Dọn dòng giỏ không còn mua được khi buyer mở giỏ hàng. */
+    private void purgeUnavailableItems(Cart cart) {
+        List<CartItem> items = cartItemRepository.findByCartWithDetails(cart);
+        List<CartItem> toDelete = new ArrayList<>();
+        for (CartItem item : items) {
+            if (shouldRemoveCartItem(item)) {
+                toDelete.add(item);
+            }
+        }
+        if (!toDelete.isEmpty()) {
+            cartItemRepository.deleteAll(toDelete);
+        }
+    }
+
+    private boolean shouldRemoveCartItem(CartItem item) {
+        if (item.getProduct() != null) {
+            Product product = item.getProduct();
+            if (!isProductAvailable(product)) {
+                return true;
+            }
+            return resolveProductStockKg(product).compareTo(resolveCartItemKg(item)) < 0;
+        }
+        if (item.getMysteryBox() != null) {
+            MysteryBox box = item.getMysteryBox();
+            if (!Boolean.TRUE.equals(box.getIsActive())) {
+                return true;
+            }
+            if (box.getShopOwner() != null && !box.getShopOwner().isShopActive()) {
+                return true;
+            }
+            int remaining = (box.getTotalQuantity() != null ? box.getTotalQuantity() : 0)
+                    - (box.getSoldQuantity() != null ? box.getSoldQuantity() : 0);
+            int cartQty = item.getQuantity() != null ? item.getQuantity() : 0;
+            return remaining <= 0 || remaining < cartQty;
+        }
+        if (item.getBuildCombo() != null) {
+            BuildCombo combo = item.getBuildCombo();
+            if (combo.getShopOwner() != null && !combo.getShopOwner().isShopActive()) {
+                return true;
+            }
+            if (combo.getItems() == null || combo.getItems().isEmpty()) {
+                return true;
+            }
+            BigDecimal comboCount = resolveCartItemKg(item);
+            for (ProductCombo comboItem : combo.getItems()) {
+                Product product = comboItem.getProduct();
+                if (product == null || !isProductAvailable(product)) {
+                    return true;
+                }
+                BigDecimal requiredKg = resolveProductComboKg(comboItem).multiply(comboCount);
+                if (resolveProductStockKg(product).compareTo(requiredKg) < 0) {
+                    return true;
+                }
+            }
+            return false;
+        }
+        return true;
+    }
+
+    private boolean isProductAvailable(Product product) {
+        if (product.getStatus() != ProductStatus.AVAILABLE) {
+            return false;
+        }
+        if (product.getExpiryDate() != null && !product.getExpiryDate().isAfter(LocalDate.now())) {
+            return false;
+        }
+        if (product.getShopOwner() != null && !product.getShopOwner().isShopActive()) {
+            return false;
+        }
+        return resolveProductStockKg(product).compareTo(BigDecimal.ZERO) > 0;
+    }
+
+    private BigDecimal resolveProductComboKg(ProductCombo item) {
+        if (item.getQuantityKg() != null) {
+            return item.getQuantityKg();
+        }
+        return BigDecimal.valueOf(item.getQuantity() == null ? 0 : item.getQuantity())
+                .setScale(2, RoundingMode.HALF_UP);
     }
 }

@@ -192,4 +192,8 @@ public class Order {
 
     @Column(name = "qc_buyer_accepted_remaining")
     private Boolean qcBuyerAcceptedRemaining;
+
+    @Builder.Default
+    @Column(name = "payout_settled", nullable = false, columnDefinition = "BOOLEAN DEFAULT FALSE")
+    private Boolean payoutSettled = false;
 }

@@ -23,6 +23,8 @@ public class WithdrawRequestResponse {
     private Integer walletId;
     private Integer shopOwnerId;
     private Integer shipperId;
+    private Integer buyerId;
+    private String walletType;
 
     // Bank info
     private String bankName;

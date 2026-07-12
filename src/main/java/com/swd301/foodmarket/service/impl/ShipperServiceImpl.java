@@ -28,9 +28,13 @@ import com.swd301.foodmarket.repository.WarehouseRepository;
 import com.swd301.foodmarket.service.GoongMapService;
 import com.swd301.foodmarket.service.NotificationService;
 import com.swd301.foodmarket.service.OrderRewardService;
+import com.swd301.foodmarket.service.PaymentService;
 import com.swd301.foodmarket.service.ShipperService;
+import com.swd301.foodmarket.service.TrackingService;
 import com.swd301.foodmarket.service.UserService;
 import com.swd301.foodmarket.service.VoucherService;
+import com.swd301.foodmarket.service.VoucherUserService;
+import com.swd301.foodmarket.service.support.MoneyRoundingUtil;
 import com.swd301.foodmarket.service.support.OrderSettlementCalculator;
 import lombok.AccessLevel;
 import lombok.RequiredArgsConstructor;
@@ -46,6 +50,7 @@ import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.filter.RequestContextFilter;
+import org.springframework.web.multipart.MultipartFile;
 
 import java.math.BigDecimal;
 import java.math.RoundingMode;
@@ -75,7 +80,10 @@ public class ShipperServiceImpl implements ShipperService {
     private final OrderRewardService orderRewardService;
     private final TransactionRepository transactionRepository;
     private final VoucherService voucherService;
+    private final PaymentService paymentService;
+    private final VoucherUserService voucherUserService;
     private final OrderSettlementCalculator orderSettlementCalculator;
+    private final TrackingService trackingService;
     // ===================== HELPERS =====================
 
     private User getCurrentShipper() {
@@ -339,7 +347,11 @@ public class ShipperServiceImpl implements ShipperService {
 
     @Override
     @Transactional
-    public ShipperOrderResponse updateOrderStatus(Integer orderId, UpdateOrderStatusRequest request) {
+    public ShipperOrderResponse updateOrderStatus(
+            Integer orderId,
+            UpdateOrderStatusRequest request,
+            List<MultipartFile> files
+    ) {
 
 
         User shipper = getCurrentShipper();
@@ -354,6 +366,8 @@ public class ShipperServiceImpl implements ShipperService {
         validateStatusTransition(order.getStatus(), request.getStatus());
 
         log.info("[SHIPPER] Update order {} → {}", orderId, request.getStatus());
+
+        OrderStatus previousStatus = order.getStatus();
 
         if ("COD".equalsIgnoreCase(order.getPaymentMethod())
                 && (request.getStatus() == OrderStatus.DELIVERED || request.getStatus() == OrderStatus.FAILED)
@@ -402,7 +416,19 @@ public class ShipperServiceImpl implements ShipperService {
         }
 
         orderRepository.save(order);
+
+        // Tracking + ảnh bằng chứng (optional)
+        if (request.getStatus() == OrderStatus.DELIVERED
+                || request.getStatus() == OrderStatus.FAILED) {
+            trackingService.trackingOrder(order, files != null ? files : List.of());
+        }
+
         if (request.getStatus() == OrderStatus.FAILED) {
+            if ("PAYOS".equalsIgnoreCase(order.getPaymentMethod()) && isPostPaymentStatus(previousStatus)) {
+                paymentService.refundPayosOrderOnFailed(order);
+            }
+            restoreVouchersForFailedOrder(order);
+
             if ("COD".equalsIgnoreCase(order.getPaymentMethod())
                     && order.getCodPaymentStatus() == CodPaymentStatus.PAID) {
                 order.setCodPaymentStatus(CodPaymentStatus.REFUND_PENDING);
@@ -422,8 +448,13 @@ public class ShipperServiceImpl implements ShipperService {
         return toShipperOrderResponse(order);
     }
     private void processPayosDeliveredPayout(Order order, User shipper) {
+        if (Boolean.TRUE.equals(order.getPayoutSettled())) {
+            log.warn("[PAYOS DELIVERED PAYOUT] Order #{} already settled, skip", order.getId());
+            return;
+        }
+
         OrderSettlementCalculator.SettlementAmounts amounts = orderSettlementCalculator.calculate(order);
-        BigDecimal totalAmount = amounts.buyerPaid();
+        BigDecimal buyerPaid = amounts.buyerPaid();
         BigDecimal shippingFee = amounts.shippingFee();
         BigDecimal shippingDiscountAmount = amounts.shippingDiscountAmount();
         BigDecimal platformBatchSubsidy = amounts.platformBatchSubsidy();
@@ -444,20 +475,19 @@ public class ShipperServiceImpl implements ShipperService {
             throw new AppException(ErrorCode.INVALID_REFUND_AMOUNT);
         }
 
-        // Phí sàn shop tính sau refund
         BigDecimal shopChargeable = shopGross.subtract(refundAmount);
 
-        BigDecimal platformFeeFromShop = shopChargeable.multiply(BigDecimal.valueOf(0.1));
-        BigDecimal platformFeeFromShip = shippingFee.multiply(BigDecimal.valueOf(0.1));
+        BigDecimal platformFeeFromShop = MoneyRoundingUtil.commission(shopChargeable);
+        BigDecimal platformFeeFromShip = MoneyRoundingUtil.commission(shippingFee);
         BigDecimal platformFeeTotal = platformFeeFromShop.add(platformFeeFromShip);
 
         BigDecimal finalShopRevenue = shopChargeable.subtract(platformFeeFromShop);
-        BigDecimal shipperNet = shippingFee.subtract(platformFeeFromShip);
+        BigDecimal shipperNet = MoneyRoundingUtil.netAfterCommission(shippingFee);
 
         log.info("========== [PAYOS DELIVERED PAYOUT START] Order #{} ==========", order.getId());
 
         log.info("[PAYOS_AMOUNT_INPUT] buyerPaid={}, shippingFee={}, shippingDiscountAmount={}, platformBatchSubsidy={}, settlementTotal={}, shopGross={}, refundAmount={}",
-                totalAmount,
+                buyerPaid,
                 shippingFee,
                 shippingDiscountAmount,
                 platformBatchSubsidy,
@@ -487,7 +517,7 @@ public class ShipperServiceImpl implements ShipperService {
         Wallet platformWallet = walletRepository.findByTypeForUpdate(WalletType.PLATFORM)
                 .orElseThrow(() -> new AppException(ErrorCode.PLATFORM_WALLET_NOT_FOUND));
 
-        Wallet shopWallet = walletRepository.findByShopOwner_Id(order.getShopOwner().getId())
+        Wallet shopWallet = walletRepository.findByShopOwnerIdForUpdate(order.getShopOwner().getId())
                 .orElseThrow(() -> new AppException(ErrorCode.WALLET_NOT_FOUND));
 
         Wallet shipperWallet = walletRepository.findByShipperIdForUpdate(shipper.getId())
@@ -528,15 +558,11 @@ public class ShipperServiceImpl implements ShipperService {
         );
 
 
-        // Payment success đã add platform.frozenBalance += totalAmount.
-        // Khi delivered, commission trở thành tiền lời admin nên không còn là tiền giữ hộ.
-        if (platformWallet.getFrozenBalance().compareTo(platformFeeTotal) < 0) {
+        // Giải phóng toàn bộ escrow PayOS từ frozen platform
+        if (platformWallet.getFrozenBalance().compareTo(buyerPaid) < 0) {
             throw new AppException(ErrorCode.PLATFORM_BALANCE_NOT_ENOUGH);
         }
-
-        platformWallet.setFrozenBalance(
-                platformWallet.getFrozenBalance().subtract(platformFeeTotal)
-        );
+        platformWallet.setFrozenBalance(platformWallet.getFrozenBalance().subtract(buyerPaid));
 
         platformWallet.setCommissionWallet(
                 platformWallet.getCommissionWallet().add(platformFeeTotal)
@@ -546,8 +572,13 @@ public class ShipperServiceImpl implements ShipperService {
                 platformWallet.getTotalRevenueAllTime().add(platformFeeTotal)
         );
 
-        // Payment success đã add shop.totalBalance += shopGross và shop.frozenBalance += shopGross.
-        // Delivered thì mở khóa shopGross, sau đó trừ refund + phí sàn shop khỏi totalBalance.
+        // Chi shipper và hoàn buyer từ totalBalance platform
+        platformWallet.setTotalBalance(platformWallet.getTotalBalance().subtract(shipperNet));
+        if (deliveryRefundAmount.compareTo(BigDecimal.ZERO) > 0) {
+            platformWallet.setTotalBalance(platformWallet.getTotalBalance().subtract(deliveryRefundAmount));
+        }
+
+        // Shop: mở khóa shopGross, trừ refund + phí sàn
         if (shopWallet.getFrozenBalance().compareTo(shopGross) < 0) {
             log.warn("[PAYOS_SHOP_UNFREEZE] frozenBalance {} < shopGross {}, unfreezing available frozen",
                     shopWallet.getFrozenBalance(), shopGross);
@@ -586,7 +617,7 @@ public class ShipperServiceImpl implements ShipperService {
 
         // PayOS refund về ví buyer (phần chưa hoàn tại QC)
         if (deliveryRefundAmount.compareTo(BigDecimal.ZERO) > 0) {
-            Wallet buyerWallet = walletRepository.findByBuyer(order.getBuyer());
+            Wallet buyerWallet = walletRepository.findByBuyerForUpdate(order.getBuyer());
 
             if (buyerWallet == null) {
                 throw new AppException(ErrorCode.WALLET_NOT_FOUND);
@@ -665,9 +696,11 @@ public class ShipperServiceImpl implements ShipperService {
         }
         if (deliveryRefundAmount.compareTo(BigDecimal.ZERO) > 0) {
             saveTransaction(TransactionType.REFUND, deliveryRefundAmount.negate(),
-                    walletRepository.findByBuyer(order.getBuyer()).getTotalBalance(), "ORDER_" + order.getId(),
+                    walletRepository.findByBuyerForUpdate(order.getBuyer()).getTotalBalance(), "ORDER_" + order.getId(),
                     "Hoàn tiền vào ví buyer cho đơn #" + order.getId());
         }
+
+        order.setPayoutSettled(true);
 
         log.info("[PAYOS_PLATFORM_AFTER] totalBalance={} -> {}, frozenBalance={} -> {}, commissionWallet={} -> {}, totalRevenueAllTime={} -> {}",
                 platformTotalBefore,
@@ -782,7 +815,7 @@ public class ShipperServiceImpl implements ShipperService {
         if (shopChargeable.compareTo(BigDecimal.ZERO) < 0) {
             shopChargeable = BigDecimal.ZERO;
         }
-        BigDecimal platformFeeFromShip = shipping.multiply(BigDecimal.valueOf(0.1));
+        BigDecimal platformFeeFromShip = MoneyRoundingUtil.commission(shipping);
         BigDecimal amount = shopChargeable.add(platformFeeFromShip);
         if (amount.compareTo(BigDecimal.ZERO) < 0) {
             return BigDecimal.ZERO;
@@ -829,21 +862,36 @@ public class ShipperServiceImpl implements ShipperService {
         if (shopChargeable.compareTo(BigDecimal.ZERO) < 0) {
             shopChargeable = BigDecimal.ZERO;
         }
-        BigDecimal platformFeeFromShop = shopChargeable.multiply(BigDecimal.valueOf(0.1));
-        BigDecimal platformFeeFromShip = shipping.multiply(BigDecimal.valueOf(0.1));
+        BigDecimal platformFeeFromShop = MoneyRoundingUtil.commission(shopChargeable);
+        BigDecimal platformFeeFromShip = MoneyRoundingUtil.commission(shipping);
         BigDecimal platformFeeTotal = platformFeeFromShop.add(platformFeeFromShip);
         BigDecimal finalShopRevenue = shopChargeable.subtract(platformFeeFromShop);
+        BigDecimal shipperNet = MoneyRoundingUtil.netAfterCommission(shipping);
 
         Wallet platformWallet = walletRepository.findByTypeForUpdate(WalletType.PLATFORM)
                 .orElseThrow(() -> new AppException(ErrorCode.PLATFORM_WALLET_NOT_FOUND));
         Wallet shopWallet = walletRepository.findByShopOwnerIdForUpdate(order.getShopOwner().getId())
                 .orElseThrow(() -> new AppException(ErrorCode.WALLET_NOT_FOUND));
 
+        User shipperUser = order.getShipper();
+        Wallet shipperWallet = shipperUser != null
+                ? walletRepository.findByShipperIdForUpdate(shipperUser.getId())
+                        .orElseThrow(() -> new AppException(ErrorCode.WALLET_NOT_FOUND))
+                : null;
+
         if (platformWallet.getFrozenBalance().compareTo(prepaidAmount) < 0) {
             throw new AppException(ErrorCode.PLATFORM_BALANCE_NOT_ENOUGH);
         }
 
+        BigDecimal payoutTotal = finalShopRevenue.add(
+                shipperWallet != null && shipperNet.signum() > 0 ? shipperNet : BigDecimal.ZERO);
+        if (platformWallet.getTotalBalance().compareTo(payoutTotal) < 0) {
+            throw new AppException(ErrorCode.PLATFORM_BALANCE_NOT_ENOUGH);
+        }
+
+        // Mở khóa escrow prepaid, rồi trừ total khi chi shop + shipper (giống PayOS / settleCodOrder)
         platformWallet.setFrozenBalance(platformWallet.getFrozenBalance().subtract(prepaidAmount));
+        platformWallet.setTotalBalance(platformWallet.getTotalBalance().subtract(payoutTotal));
         platformWallet.setCommissionWallet(platformWallet.getCommissionWallet().add(platformFeeTotal));
         platformWallet.setTotalRevenueAllTime(platformWallet.getTotalRevenueAllTime().add(platformFeeTotal));
         platformWallet.setUpdatedAt(LocalDateTime.now(ZoneId.of("Asia/Ho_Chi_Minh")));
@@ -851,6 +899,13 @@ public class ShipperServiceImpl implements ShipperService {
         shopWallet.setTotalBalance(shopWallet.getTotalBalance().add(finalShopRevenue));
         shopWallet.setTotalRevenueAllTime(shopWallet.getTotalRevenueAllTime().add(finalShopRevenue));
         shopWallet.setUpdatedAt(LocalDateTime.now(ZoneId.of("Asia/Ho_Chi_Minh")));
+
+        if (shipperWallet != null && shipperNet.signum() > 0) {
+            shipperWallet.setTotalBalance(shipperWallet.getTotalBalance().add(shipperNet));
+            shipperWallet.setTotalRevenueAllTime(shipperWallet.getTotalRevenueAllTime().add(shipperNet));
+            shipperWallet.setUpdatedAt(LocalDateTime.now(ZoneId.of("Asia/Ho_Chi_Minh")));
+            walletRepository.save(shipperWallet);
+        }
 
         order.setCodSettled(true);
         order.setCodSettledAt(LocalDateTime.now(ZoneId.of("Asia/Ho_Chi_Minh")));
@@ -868,30 +923,35 @@ public class ShipperServiceImpl implements ShipperService {
         saveTransaction(TransactionType.SHOP_RELEASE, finalShopRevenue,
                 shopWallet.getTotalBalance(), "ORDER_" + order.getId(),
                 "Cộng tiền hàng COD cho shop sau giao thành công đơn #" + order.getId());
+        if (shipperWallet != null && shipperNet.signum() > 0) {
+            saveTransaction(TransactionType.SHIPPER_PAYOUT, shipperNet,
+                    shipperWallet.getTotalBalance(), "ORDER_" + order.getId(),
+                    "Cộng phí giao hàng COD cho shipper đơn #" + order.getId());
+        }
     }
 
+    private boolean isPostPaymentStatus(OrderStatus status) {
+        return status == OrderStatus.PAID
+                || status == OrderStatus.CONFIRMED
+                || status == OrderStatus.READY_FOR_PICKUP
+                || status == OrderStatus.SHIPPING_TO_WAREHOUSE
+                || status == OrderStatus.ARRIVED_AT_WAREHOUSE
+                || status == OrderStatus.QUALITY_CHECKING
+                || status == OrderStatus.QC_PENDING_BUYER
+                || status == OrderStatus.QUALITY_CHECKED
+                || status == OrderStatus.READY
+                || status == OrderStatus.SHIPPING;
+    }
 
-//    public Map<String,String> calculateRefundAmount(Order order) {
-//        List<OrderDetail> details = order.getOrderDetails();
-//        BigDecimal refundAmount = BigDecimal.ZERO;
-//        String message = "";
-//        for(OrderDetail detail : details) {
-//            QualityResult qualityResult = detail.getQualityResult();
-//            double percentage = 0;
-//            if (qualityResult != null && qualityResult.getRejectedWeight() != null &&   qualityResult.getRejectedWeight() > 0) {
-//                percentage = (double) (qualityResult.getRejectedWeight() * 100) / detail.getQuantity();
-//            }
-//            if (percentage > 5) {
-//                message+= "Sản phẩm " + detail.getProduct().getProductName() + " bị hư hỏng " + qualityResult.getRejectedWeight();
-//                refundAmount = refundAmount.add(detail.getUnitPrice().multiply(BigDecimal.valueOf(qualityResult.getRejectedWeight())));
-//            }
-//        }
-//        Map<String,String> map = new HashMap<>();
-//        map.put("message", message);
-//        map.put("refundAmount", refundAmount.toString());
-//        return map;
-//
-//    }
+    private void restoreVouchersForFailedOrder(Order order) {
+        voucherUserService.restoreVoucherForOrder(order);
+        CheckoutBatch batch = order.getCheckoutBatch();
+        if (batch != null && batch.getBatchVoucherUserId() != null) {
+            List<Order> batchOrders = orderRepository.findByCheckoutBatchId(batch.getId());
+            voucherUserService.restoreBatchVoucher(batch, batchOrders);
+        }
+    }
+
     @Override
     @Transactional
     public List<ShipperOrderResponse> getMyOrders() {

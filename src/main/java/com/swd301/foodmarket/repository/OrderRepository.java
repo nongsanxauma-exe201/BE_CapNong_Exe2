@@ -19,6 +19,13 @@ public interface OrderRepository extends JpaRepository<Order, Integer> {
 
     List<Order> findByShipperIsNullAndStatus(OrderStatus status);
     List<Order> findByCheckoutBatchId(Integer checkoutBatchId);
+
+    @Query("""
+        SELECT o FROM Order o
+        LEFT JOIN FETCH o.checkoutBatch
+        WHERE o.checkoutBatch.id IN :batchIds
+    """)
+    List<Order> findByCheckoutBatchIdIn(@Param("batchIds") Collection<Integer> batchIds);
     Page<Order> findByShipperIsNullAndStatus(OrderStatus status, Pageable pageable);
 
     List<Order> findByShipper(User shipper);

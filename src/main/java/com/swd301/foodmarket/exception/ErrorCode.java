@@ -84,6 +84,14 @@ public enum ErrorCode {
     PAYMENT_ALREADY_SUCCESS(5006, "Payment has already been marked as successful", HttpStatus.BAD_REQUEST),
     ORDER_ALREADY_PAID(5007, "Đơn hàng này đã được thanh toán thành công. Cảm ơn bạn!", HttpStatus.BAD_REQUEST),
     ORDER_ALREADY_CANCELLED(5008, "Đơn hàng này đã bị hủy và không thể thanh toán.", HttpStatus.BAD_REQUEST),
+    PAYOS_WEBHOOK_INVALID(5009, "Chữ ký webhook PayOS không hợp lệ", HttpStatus.BAD_REQUEST),
+    PAYOS_AMOUNT_MISMATCH(5010, "Số tiền webhook PayOS không khớp với đơn hàng", HttpStatus.BAD_REQUEST),
+    ORDER_IN_BATCH_USE_BATCH_PAYMENT(5011, "Đơn thuộc phiên thanh toán gộp, vui lòng thanh toán qua link batch", HttpStatus.BAD_REQUEST),
+    PAYOUT_ALREADY_SETTLED(5012, "Đơn hàng đã được chi trả, không thể chi trả lại", HttpStatus.BAD_REQUEST),
+    BATCH_VOUCHER_CANCEL_ALL_REQUIRED(5013, "Checkout có voucher sàn: phải hủy toàn bộ đơn trong cùng lần thanh toán", HttpStatus.BAD_REQUEST),
+    PAYOS_VERIFY_FAILED(5014, "Không xác minh được trạng thái thanh toán từ PayOS", HttpStatus.BAD_GATEWAY),
+    PAYOS_PAYMENT_NOT_PAID(5015, "PayOS chưa xác nhận thanh toán thành công", HttpStatus.BAD_REQUEST),
+    PAYMENT_STATUS_UPDATE_FORBIDDEN(5016, "Không được cập nhật trạng thái thanh toán SUCCESS thủ công", HttpStatus.FORBIDDEN),
 
     //Build plan
     BUILD_PLAN_NOT_FOUND(6001, "Build plan not found", HttpStatus.NOT_FOUND),

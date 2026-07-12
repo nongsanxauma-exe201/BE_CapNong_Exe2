@@ -1,15 +1,18 @@
 package com.swd301.foodmarket.dto.response;
 
+import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import lombok.Data;
-import java.util.List;
 
 @Data
+@JsonIgnoreProperties(ignoreUnknown = true)
 public class PayOSPaymentInfoResponse {
     private String code;
     private String desc;
     private PaymentDetails data;
+    private String signature;
 
     @Data
+    @JsonIgnoreProperties(ignoreUnknown = true)
     public static class PaymentDetails {
         private String id;
         private long orderCode;
@@ -18,15 +21,6 @@ public class PayOSPaymentInfoResponse {
         private long amountRemaining;
         private String status;
         private String createdAt;
-        private List<Transaction> transactions;
-    }
-
-    @Data
-    public static class Transaction {
-        private String reference;
-        private long amount;
-        private String accountNumber;
-        private String description;
-        private String transactionDateTime;
+        // Không map transactions: PayOS trả {} hoặc [] tùy trạng thái → tránh lỗi deserialize
     }
 }

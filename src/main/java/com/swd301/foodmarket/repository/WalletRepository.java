@@ -51,4 +51,8 @@ public interface WalletRepository extends JpaRepository<Wallet, Integer> {
 
 
     Wallet findByBuyer(User buyer);
+
+    @Lock(LockModeType.PESSIMISTIC_WRITE)
+    @Query("SELECT w FROM Wallet w WHERE w.buyer = :buyer")
+    Wallet findByBuyerForUpdate(User buyer);
 }
