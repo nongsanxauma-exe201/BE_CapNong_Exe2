@@ -61,13 +61,18 @@ public class WalletServiceImpl implements WalletService {
     @Override
     public WalletResponse getMyWallet() {
         User currentUser = getCurrentUser();
-        Role role = currentUser.getRole();
-        Wallet wallet = null;
-        if(role.getName().equals(RoleName.SHOP_OWNER)){
-             wallet = walletRepository.findByShopOwner_Id(currentUser.getId()).get();
-        }
-        if(role.getName() == RoleName.BUYER){
-             wallet = walletRepository.findByBuyer(currentUser);
+        RoleName roleName = currentUser.getRole().getName();
+        Wallet wallet;
+        if (roleName == RoleName.SHOP_OWNER) {
+            wallet = walletRepository.findByShopOwner_Id(currentUser.getId())
+                    .orElseThrow(() -> new AppException(ErrorCode.WALLET_NOT_FOUND));
+        } else if (roleName == RoleName.BUYER) {
+            wallet = walletRepository.findByBuyer(currentUser);
+            if (wallet == null) {
+                throw new AppException(ErrorCode.WALLET_NOT_FOUND);
+            }
+        } else {
+            throw new AppException(ErrorCode.UNAUTHORIZED);
         }
         return walletMapper.toResponse(wallet);
     }
@@ -306,15 +311,26 @@ public class WalletServiceImpl implements WalletService {
     @Override
     public WithdrawRequestResponse createWithdrawRequest(WithdrawRequestCreationRequest request) {
 
-        User shopOwner = getCurrentUser();
+        User currentUser = getCurrentUser();
+        RoleName roleName = currentUser.getRole().getName();
 
-        Wallet wallet = walletRepository.findByShopOwnerIdForUpdate(shopOwner.getId())
-                .orElseThrow(() -> new AppException(ErrorCode.WALLET_NOT_FOUND));
+        Wallet wallet;
+        if (roleName == RoleName.SHOP_OWNER) {
+            wallet = walletRepository.findByShopOwnerIdForUpdate(currentUser.getId())
+                    .orElseThrow(() -> new AppException(ErrorCode.WALLET_NOT_FOUND));
+        } else if (roleName == RoleName.BUYER) {
+            wallet = walletRepository.findByBuyerForUpdate(currentUser);
+            if (wallet == null) {
+                throw new AppException(ErrorCode.WALLET_NOT_FOUND);
+            }
+        } else {
+            throw new AppException(ErrorCode.UNAUTHORIZED);
+        }
 
         if (request.getAmount().compareTo(BigDecimal.ZERO) <= 0) {
             throw new AppException(ErrorCode.INVALID_AMOUNT);
         }
-log.info("Wallet balance: {}, request amount {}", wallet.getTotalBalance(),request.getAmount());
+        log.info("Wallet balance: {}, request amount {}", wallet.getTotalBalance(), request.getAmount());
         if (availableBalance(wallet).compareTo(request.getAmount()) < 0) {
             throw new AppException(ErrorCode.INSUFFICIENT_BALANCE);
         }
@@ -323,18 +339,17 @@ log.info("Wallet balance: {}, request amount {}", wallet.getTotalBalance(),reque
         String bankAccountNumber = request.getBankAccountNumber();
         String bankAccountHolder = request.getBankAccountHolder();
 
-        // Nếu FE không truyền → lấy từ hồ sơ shop owner
+        // Nếu FE không truyền → lấy từ hồ sơ user
         if (bankName == null || bankName.isBlank()) {
-            bankName = shopOwner.getBankName();
-
+            bankName = currentUser.getBankName();
         }
 
         if (bankAccountNumber == null || bankAccountNumber.isBlank()) {
-            bankAccountNumber = shopOwner.getBankAccount();
+            bankAccountNumber = currentUser.getBankAccount();
         }
 
         if (bankAccountHolder == null || bankAccountHolder.isBlank()) {
-            bankAccountHolder = shopOwner.getBankAccountHolder();
+            bankAccountHolder = currentUser.getBankAccountHolder();
         }
 
         if (bankName == null || bankAccountNumber == null || bankAccountHolder == null) {
@@ -363,9 +378,12 @@ log.info("Wallet balance: {}, request amount {}", wallet.getTotalBalance(),reque
         wallet.setFrozenBalance(wallet.getFrozenBalance().add(request.getAmount()));
         walletRepository.save(wallet);
 
+        String freezeNote = roleName == RoleName.BUYER
+                ? "Khóa tiền buyer khi tạo yêu cầu rút #" + wr.getId()
+                : "Khóa tiền shop khi tạo yêu cầu rút #" + wr.getId();
         saveTransaction(TransactionType.WITHDRAW_REQUEST_FREEZE, request.getAmount(),
                 wallet.getFrozenBalance(), "WITHDRAW_" + wr.getId(),
-                "Khóa tiền shop khi tạo yêu cầu rút #" + wr.getId());
+                freezeNote);
 
         return withdrawRequestMapper.toResponse(wr);
     }
