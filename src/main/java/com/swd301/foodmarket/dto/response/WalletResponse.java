@@ -20,6 +20,8 @@ public class WalletResponse {
 
     Integer shipperId;
 
+    Integer buyerId;
+
     WalletStatus status;
 
     BigDecimal totalBalance;

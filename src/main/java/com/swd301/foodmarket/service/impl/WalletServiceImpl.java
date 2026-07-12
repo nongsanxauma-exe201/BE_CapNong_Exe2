@@ -427,7 +427,7 @@ public class WalletServiceImpl implements WalletService {
     @Override
     public List<WithdrawRequestResponse> getPendingWithdrawRequests() {
         return withdrawRequestMapper.toResponses(
-                withdrawRequestRepository.findByStatus(WithdrawRequestStatus.PENDING)
+                withdrawRequestRepository.findByStatusWithWallet(WithdrawRequestStatus.PENDING)
         );
     }
 
@@ -465,11 +465,8 @@ public class WalletServiceImpl implements WalletService {
 
     @Override
     public List<WithdrawRequestResponse> getAllWithdrawRequests() {
-        User admin = getCurrentUser();
-
-        // nếu muốn chặt hơn có thể check role ADMIN ở đây
         return withdrawRequestMapper.toResponses(
-                withdrawRequestRepository.findAllByOrderByIdDesc()
+                withdrawRequestRepository.findAllWithWalletOrderByIdDesc()
         );
     }
     private BigDecimal availableBalance(Wallet wallet) {
