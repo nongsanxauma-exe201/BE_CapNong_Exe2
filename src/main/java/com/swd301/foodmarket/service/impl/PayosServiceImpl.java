@@ -14,15 +14,23 @@ import com.swd301.foodmarket.service.PayosService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.codec.digest.DigestUtils;
+import com.fasterxml.jackson.databind.DeserializationFeature;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.*;
+import org.springframework.http.client.SimpleClientHttpRequestFactory;
+import org.springframework.http.converter.json.MappingJackson2HttpMessageConverter;
 import org.springframework.stereotype.Service;
 import org.springframework.web.client.RestTemplate;
 
 import javax.crypto.Mac;
 import javax.crypto.spec.SecretKeySpec;
 import java.math.BigDecimal;
+import java.net.URI;
+import java.net.http.HttpClient;
+import java.net.http.HttpRequest;
+import java.net.http.HttpResponse;
 import java.nio.charset.StandardCharsets;
+import java.time.Duration;
 import java.util.Map;
 import java.util.SortedMap;
 import java.util.TreeMap;
@@ -46,10 +54,27 @@ public class PayosServiceImpl implements PayosService {
     @Value("${payos.api-url}")
     private String apiUrl;
 
-    private final RestTemplate restTemplate = new RestTemplate();
-    private final ObjectMapper mapper = new ObjectMapper();
+    private final ObjectMapper mapper = new ObjectMapper()
+            .configure(DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES, false);
+    private final RestTemplate restTemplate = createPayosRestTemplate();
+    private final HttpClient payosHttpClient = HttpClient.newBuilder()
+            .connectTimeout(Duration.ofSeconds(15))
+            .followRedirects(HttpClient.Redirect.NORMAL)
+            .build();
     @Value("${FRONTEND_URL}")
     private String frontUrl;
+
+    private RestTemplate createPayosRestTemplate() {
+        // PayOS GET có thể chậm; cần timeout đủ dài + retry ở getPaymentLinkInformation
+        SimpleClientHttpRequestFactory factory = new SimpleClientHttpRequestFactory();
+        factory.setConnectTimeout(15_000);
+        factory.setReadTimeout(35_000);
+        RestTemplate template = new RestTemplate(factory);
+        MappingJackson2HttpMessageConverter jackson = new MappingJackson2HttpMessageConverter(mapper);
+        template.getMessageConverters().removeIf(MappingJackson2HttpMessageConverter.class::isInstance);
+        template.getMessageConverters().add(0, jackson);
+        return template;
+    }
 
     @Override
     public PayosPayoutResult payout(
@@ -293,28 +318,55 @@ public class PayosServiceImpl implements PayosService {
 
     @Override
     public PayOSPaymentInfoResponse getPaymentLinkInformation(Long orderCode) {
-        try {
-            HttpHeaders headers = new HttpHeaders();
-            headers.setContentType(MediaType.APPLICATION_JSON);
-            headers.set("x-client-id", clientId);
-            headers.set("x-api-key", apiKey);
+        return getPaymentLinkInformation(String.valueOf(orderCode));
+    }
 
-            HttpEntity<Void> entity = new HttpEntity<>(headers);
-
-            // Standard PayOS status check URL
-            String checkUrl = "https://api.payos.vn/v2/payment-links/" + orderCode;
-
-            ResponseEntity<PayOSPaymentInfoResponse> response = restTemplate.exchange(
-                    checkUrl, HttpMethod.GET, entity, PayOSPaymentInfoResponse.class
-            );
-
-            log.info("🔍 Check PayOS Status for {}: {}", orderCode, response.getStatusCode());
-            return response.getBody();
-
-        } catch (Exception e) {
-            log.error("❌ Lỗi khi lấy thông tin thanh toán PayOS | orderCode = {}", orderCode, e);
+    @Override
+    public PayOSPaymentInfoResponse getPaymentLinkInformation(String id) {
+        if (id == null || id.isBlank()) {
             return null;
         }
+        String base = apiUrl.endsWith("/") ? apiUrl.substring(0, apiUrl.length() - 1) : apiUrl;
+        String checkUrl = base + "/" + id.trim();
+
+        int maxAttempts = 3;
+        Exception lastError = null;
+        for (int attempt = 1; attempt <= maxAttempts; attempt++) {
+            try {
+                log.info("🔍 Check PayOS payment link (attempt {}/{}): {}", attempt, maxAttempts, checkUrl);
+                HttpRequest request = HttpRequest.newBuilder()
+                        .uri(URI.create(checkUrl))
+                        .timeout(Duration.ofSeconds(35))
+                        .header("Accept", "application/json")
+                        .header("x-client-id", clientId)
+                        .header("x-api-key", apiKey)
+                        .GET()
+                        .build();
+
+                HttpResponse<String> response = payosHttpClient.send(request, HttpResponse.BodyHandlers.ofString());
+                String body = response.body();
+                log.info("🔍 Check PayOS Status for {}: http={} body={}", id, response.statusCode(), body);
+                if (body == null || body.isBlank()) {
+                    lastError = new IllegalStateException("Empty PayOS response body");
+                    continue;
+                }
+                return mapper.readValue(body, PayOSPaymentInfoResponse.class);
+            } catch (Exception e) {
+                lastError = e;
+                log.warn("❌ PayOS getPaymentLink attempt {}/{} failed | id={} | {}",
+                        attempt, maxAttempts, id, e.toString());
+                if (attempt < maxAttempts) {
+                    try {
+                        Thread.sleep(1000L * attempt);
+                    } catch (InterruptedException ie) {
+                        Thread.currentThread().interrupt();
+                        break;
+                    }
+                }
+            }
+        }
+        log.error("❌ Lỗi khi lấy thông tin thanh toán PayOS | id = {}", id, lastError);
+        return null;
     }
 
 }

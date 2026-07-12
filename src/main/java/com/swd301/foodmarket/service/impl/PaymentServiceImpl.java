@@ -2,6 +2,7 @@ package com.swd301.foodmarket.service.impl;
 
 import com.swd301.foodmarket.dto.request.CreatePaymentRequest;
 import com.swd301.foodmarket.dto.response.PayAllOption;
+import com.swd301.foodmarket.dto.response.PayOSPaymentInfoResponse;
 import com.swd301.foodmarket.dto.response.PaymentResponse;
 import com.swd301.foodmarket.dto.response.ResumePaymentOptionsResponse;
 import com.swd301.foodmarket.dto.response.ResumePaymentOrderOption;
@@ -124,10 +125,16 @@ public class PaymentServiceImpl implements PaymentService {
 
     @Override
     public PaymentResponse updateStatus(Integer id, String status) {
+        PaymentStatus nextStatus = PaymentStatus.valueOf(status);
+        if (nextStatus == PaymentStatus.SUCCESS) {
+            // SUCCESS chỉ được set qua webhook PayOS hoặc /confirm đã verify PayOS API
+            throw new AppException(ErrorCode.PAYMENT_STATUS_UPDATE_FORBIDDEN);
+        }
+
         Payment payment = paymentRepository.findById(id)
                 .orElseThrow(() -> new AppException(ErrorCode.PAYMENT_NOT_FOUND));
 
-        payment.setStatus(PaymentStatus.valueOf(status));
+        payment.setStatus(nextStatus);
         payment.setUpdatedAt(LocalDateTime.now(ZoneId.of("Asia/Ho_Chi_Minh")));
 
         paymentRepository.save(payment);
@@ -212,20 +219,50 @@ public class PaymentServiceImpl implements PaymentService {
     }
 
 
+    /**
+     * Client return-URL confirm: không tin FE/APP.
+     * Chỉ settle khi PayOS API xác nhận link đã PAID và số tiền khớp.
+     */
     @Transactional
     public void confirmPaymentByOrderCode(String orderCode) {
-        confirmPaymentByOrderCode(orderCode, null);
+        confirmPaymentFromClient(orderCode, null);
     }
 
+    @Override
     @Transactional
-    public void confirmPaymentByOrderCode(String orderCode, Long webhookAmount) {
+    public void confirmPaymentFromClient(String orderCode, String paymentLinkId) {
+        // Webhook có thể đã settle trước — không cần gọi PayOS lại
+        if (isAlreadySettled(orderCode)) {
+            log.info("Payment already settled locally, skip PayOS verify. orderCode={}", orderCode);
+            return;
+        }
+        Long paidAmount = requirePaidAmountFromPayOS(orderCode, paymentLinkId);
+        confirmPaymentByOrderCode(orderCode, paidAmount);
+    }
+
+    private boolean isAlreadySettled(String orderCode) {
+        var batchOpt = checkoutBatchRepository.findByPayosOrderCode(orderCode);
+        if (batchOpt.isPresent()) {
+            return batchOpt.get().getStatus() == CheckoutBatchStatus.PAID;
+        }
+        return paymentRepository.findByPayosOrderCode(orderCode)
+                .map(p -> p.getStatus() == PaymentStatus.SUCCESS)
+                .orElse(false);
+    }
+
+    /**
+     * Webhook / internal confirm — caller phải đã verify chữ ký PayOS (webhook)
+     * hoặc đã lấy amount từ PayOS API (client confirm).
+     */
+    @Transactional
+    public void confirmPaymentByOrderCode(String orderCode, Long verifiedAmount) {
 
         log.info("===== CONFIRM PAYMENT START =====");
-        log.info("OrderCode received: {}, webhookAmount={}", orderCode, webhookAmount);
+        log.info("OrderCode received: {}, verifiedAmount={}", orderCode, verifiedAmount);
 
         var batchOpt = checkoutBatchRepository.findByPayosOrderCodeForUpdate(orderCode);
         if (batchOpt.isPresent()) {
-            confirmBatchPayment(batchOpt.get(), webhookAmount);
+            confirmBatchPayment(batchOpt.get(), verifiedAmount);
             return;
         }
 
@@ -251,7 +288,7 @@ public class PaymentServiceImpl implements PaymentService {
             throw new AppException(ErrorCode.ORDER_NOT_PAYABLE);
         }
 
-        verifyWebhookAmount(webhookAmount, payment.getAmount());
+        verifyPaidAmount(verifiedAmount, payment.getAmount());
 
         log.info("Order found: id={}, status={}", order.getId(), order.getStatus());
 
@@ -270,13 +307,13 @@ public class PaymentServiceImpl implements PaymentService {
         log.info("===== CONFIRM PAYMENT COMPLETED =====");
     }
 
-    private void confirmBatchPayment(CheckoutBatch batch, Long webhookAmount) {
+    private void confirmBatchPayment(CheckoutBatch batch, Long verifiedAmount) {
         if (batch.getStatus() == CheckoutBatchStatus.PAID) {
             log.warn("Batch already PAID → skip. batchId={}", batch.getId());
             return;
         }
 
-        verifyWebhookAmount(webhookAmount, batch.getTotalAmount());
+        verifyPaidAmount(verifiedAmount, batch.getTotalAmount());
 
         List<Order> orders = orderRepository.findByCheckoutBatchId(batch.getId());
         for (Order order : orders) {
@@ -473,12 +510,70 @@ public class PaymentServiceImpl implements PaymentService {
         log.info("Transaction created: id={}, amount={}", transaction.getId(), buyerPaid);
     }
 
-    private void verifyWebhookAmount(Long webhookAmount, BigDecimal expectedAmount) {
-        if (webhookAmount == null || expectedAmount == null) {
-            return;
+    /**
+     * Gọi PayOS GET payment-link: thử orderCode rồi paymentLinkId (id trên return URL).
+     */
+    private Long requirePaidAmountFromPayOS(String orderCode, String paymentLinkId) {
+        PayOSPaymentInfoResponse info = null;
+        try {
+            info = payosService.getPaymentLinkInformation(Long.parseLong(orderCode));
+        } catch (NumberFormatException ignored) {
+            info = payosService.getPaymentLinkInformation(orderCode);
         }
-        if (expectedAmount.longValue() != webhookAmount) {
-            log.error("[PAYOS_AMOUNT_MISMATCH] expected={}, webhook={}", expectedAmount, webhookAmount);
+
+        if ((info == null || info.getData() == null)
+                && paymentLinkId != null && !paymentLinkId.isBlank()) {
+            log.info("Retry PayOS verify with paymentLinkId={}", paymentLinkId);
+            info = payosService.getPaymentLinkInformation(paymentLinkId.trim());
+        }
+
+        if (info == null) {
+            log.error("[PAYOS_VERIFY_FAILED] empty response for orderCode={}, paymentLinkId={}",
+                    orderCode, paymentLinkId);
+            throw new AppException(ErrorCode.PAYOS_VERIFY_FAILED);
+        }
+
+        if (info.getData() == null) {
+            log.warn("[PAYOS_VERIFY_FAILED] no data orderCode={}, code={}, desc={}",
+                    orderCode, info.getCode(), info.getDesc());
+            throw new AppException(ErrorCode.PAYOS_VERIFY_FAILED);
+        }
+
+        PayOSPaymentInfoResponse.PaymentDetails data = info.getData();
+        String status = data.getStatus();
+        boolean paid = "PAID".equalsIgnoreCase(status)
+                || ("00".equals(info.getCode()) && data.getAmountPaid() > 0 && data.getAmountRemaining() == 0);
+
+        if (!paid) {
+            log.warn("[PAYOS_PAYMENT_NOT_PAID] orderCode={}, status={}, code={}, amountPaid={}",
+                    orderCode, status, info.getCode(), data.getAmountPaid());
+            throw new AppException(ErrorCode.PAYOS_PAYMENT_NOT_PAID);
+        }
+
+        // Đảm bảo orderCode trên PayOS khớp đơn local (chống confirm nhầm link)
+        if (data.getOrderCode() > 0) {
+            String payosOrderCode = String.valueOf(data.getOrderCode());
+            if (!payosOrderCode.equals(orderCode)) {
+                log.error("[PAYOS_VERIFY_FAILED] orderCode mismatch url={} payos={}", orderCode, payosOrderCode);
+                throw new AppException(ErrorCode.PAYOS_VERIFY_FAILED);
+            }
+        }
+
+        long amount = data.getAmountPaid() > 0 ? data.getAmountPaid() : data.getAmount();
+        if (amount <= 0) {
+            log.error("[PAYOS_VERIFY_FAILED] invalid paid amount for orderCode={}", orderCode);
+            throw new AppException(ErrorCode.PAYOS_VERIFY_FAILED);
+        }
+        return amount;
+    }
+
+    private void verifyPaidAmount(Long paidAmount, BigDecimal expectedAmount) {
+        if (paidAmount == null || expectedAmount == null) {
+            log.error("[PAYOS_AMOUNT_MISMATCH] missing amount paid={}, expected={}", paidAmount, expectedAmount);
+            throw new AppException(ErrorCode.PAYOS_AMOUNT_MISMATCH);
+        }
+        if (expectedAmount.longValue() != paidAmount) {
+            log.error("[PAYOS_AMOUNT_MISMATCH] expected={}, paid={}", expectedAmount, paidAmount);
             throw new AppException(ErrorCode.PAYOS_AMOUNT_MISMATCH);
         }
     }
@@ -697,12 +792,15 @@ public class PaymentServiceImpl implements PaymentService {
             throw new AppException(ErrorCode.ORDER_NOT_PAYABLE);
         }
 
-        BigDecimal payAllAmount = sumUnpaidAmount(unpaid);
+        BigDecimal payAllAmount = resolveBatchPayableAmount(batch, unpaid);
         boolean canReuse = !hasPaidOrdersInBatch(batch)
                 && batch.getCheckoutUrl() != null
                 && batch.getPayosOrderCode() != null
                 && batch.getTotalAmount() != null
-                && batch.getTotalAmount().compareTo(payAllAmount) == 0;
+                && batch.getTotalAmount().compareTo(payAllAmount) == 0
+                // Không reuse link cũ khi có voucher sàn — tránh PayOS còn số gross trước giảm giá
+                && (batch.getBatchDiscountAmount() == null
+                    || batch.getBatchDiscountAmount().compareTo(BigDecimal.ZERO) <= 0);
 
         List<ResumePaymentOrderOption> unpaidOptions = unpaid.stream()
                 .map(o -> ResumePaymentOrderOption.builder()
@@ -745,7 +843,7 @@ public class PaymentServiceImpl implements PaymentService {
             throw new AppException(ErrorCode.ORDER_NOT_PAYABLE);
         }
 
-        BigDecimal remainingTotal = sumUnpaidAmount(unpaid);
+        BigDecimal remainingTotal = resolveBatchPayableAmount(batch, unpaid);
         User buyer = unpaid.get(0).getBuyer();
         long orderCode = System.currentTimeMillis() + batch.getId();
 
@@ -811,7 +909,7 @@ public class PaymentServiceImpl implements PaymentService {
 
         return PaymentResponse.builder()
                 .orderId(resolvedOrderId)
-                .amount(sumUnpaidAmount(unpaid))
+                .amount(resolveBatchPayableAmount(batch, unpaid))
                 .paymentGateway("PAYOS")
                 .status(status)
                 .payosOrderCode(batch.getPayosOrderCode())
@@ -849,6 +947,31 @@ public class PaymentServiceImpl implements PaymentService {
                 .map(Order::getTotalAmount)
                 .filter(amount -> amount != null)
                 .reduce(BigDecimal.ZERO, BigDecimal::add);
+    }
+
+    /**
+     * Số tiền buyer phải trả cho các đơn unpaid trong batch.
+     * Nếu voucher sàn đã trừ vào từng order.totalAmount → dùng tổng totalAmount.
+     * Nếu chỉ ghi discount trên batch mà totalAmount vẫn gross → trừ batchDiscountAmount.
+     */
+    private BigDecimal resolveBatchPayableAmount(CheckoutBatch batch, List<Order> unpaid) {
+        BigDecimal sum = sumUnpaidAmount(unpaid);
+        if (batch == null || unpaid == null || unpaid.isEmpty()) {
+            return sum;
+        }
+        BigDecimal batchDisc = batch.getBatchDiscountAmount() != null
+                ? batch.getBatchDiscountAmount()
+                : BigDecimal.ZERO;
+        if (batchDisc.compareTo(BigDecimal.ZERO) <= 0) {
+            return sum;
+        }
+        BigDecimal orderDisc = unpaid.stream()
+                .map(o -> o.getBatchDiscountAmount() != null ? o.getBatchDiscountAmount() : BigDecimal.ZERO)
+                .reduce(BigDecimal.ZERO, BigDecimal::add);
+        if (orderDisc.compareTo(BigDecimal.ZERO) > 0) {
+            return sum;
+        }
+        return sum.subtract(batchDisc).max(BigDecimal.ZERO);
     }
 
     private boolean hasPaidOrdersInBatch(CheckoutBatch batch) {
@@ -899,6 +1022,12 @@ public class PaymentServiceImpl implements PaymentService {
             invalidateBatchPayosLink(batch);
         } else if (hasUnpaid) {
             batch.setStatus(CheckoutBatchStatus.PENDING);
+            List<Order> unpaid = getUnpaidPayosOrders(batch);
+            BigDecimal remaining = resolveBatchPayableAmount(batch, unpaid);
+            if (batch.getTotalAmount() == null || batch.getTotalAmount().compareTo(remaining) != 0) {
+                batch.setTotalAmount(remaining);
+                invalidateBatchPayosLink(batch);
+            }
         }
         checkoutBatchRepository.save(batch);
     }

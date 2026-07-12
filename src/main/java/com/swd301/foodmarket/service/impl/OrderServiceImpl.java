@@ -602,13 +602,6 @@ public class OrderServiceImpl implements OrderService {
             response.setBatchShopCount(batchOrders.size());
             response.setCheckoutBatchStatus(batch.getStatus() != null ? batch.getStatus().name() : null);
             response.setHasPlatformBatchVoucher(batch.getBatchVoucherUserId() != null);
-            if (batch.getTotalAmount() != null && batch.getTotalAmount().compareTo(BigDecimal.ZERO) > 0) {
-                response.setBatchCheckoutTotalAmount(batch.getTotalAmount());
-            }
-            if (batch.getBatchDiscountAmount() != null && batch.getBatchDiscountAmount().compareTo(BigDecimal.ZERO) > 0) {
-                response.setBatchPlatformDiscountAmount(batch.getBatchDiscountAmount());
-            }
-
             BigDecimal pendingTotal = batchOrders.stream()
                     .filter(this::isBatchUnpaidOrder)
                     .map(Order::getTotalAmount)
@@ -616,6 +609,13 @@ public class OrderServiceImpl implements OrderService {
                     .reduce(BigDecimal.ZERO, BigDecimal::add);
             if (pendingTotal.compareTo(BigDecimal.ZERO) > 0) {
                 response.setBatchPendingTotalAmount(pendingTotal);
+                // Ưu tiên tổng đơn chưa TT — tránh hiện batch.totalAmount cũ sau khi hủy 1 shop
+                response.setBatchCheckoutTotalAmount(pendingTotal);
+            } else if (batch.getTotalAmount() != null && batch.getTotalAmount().compareTo(BigDecimal.ZERO) > 0) {
+                response.setBatchCheckoutTotalAmount(batch.getTotalAmount());
+            }
+            if (batch.getBatchDiscountAmount() != null && batch.getBatchDiscountAmount().compareTo(BigDecimal.ZERO) > 0) {
+                response.setBatchPlatformDiscountAmount(batch.getBatchDiscountAmount());
             }
         }
     }
@@ -1124,14 +1124,31 @@ public class OrderServiceImpl implements OrderService {
             clearBatchPayosLink(batch);
         } else if (hasSettled && hasUnpaid) {
             batch.setStatus(CheckoutBatchStatus.PARTIALLY_PAID);
+            refreshBatchPayableTotal(batch, all);
             clearBatchPayosLink(batch);
         } else if (hasSettled) {
             batch.setStatus(CheckoutBatchStatus.PAID);
             clearBatchPayosLink(batch);
         } else if (hasUnpaid) {
             batch.setStatus(CheckoutBatchStatus.PENDING);
+            // Cập nhật tổng còn lại sau hủy 1+ shop — khớp popup resume / PayOS mới
+            BigDecimal before = batch.getTotalAmount();
+            refreshBatchPayableTotal(batch, all);
+            if (before == null || before.compareTo(batch.getTotalAmount()) != 0) {
+                clearBatchPayosLink(batch);
+            }
         }
         checkoutBatchRepository.save(batch);
+    }
+
+    /** Tổng PayOS còn phải trả = sum totalAmount các đơn PayOS chưa TT. */
+    private void refreshBatchPayableTotal(CheckoutBatch batch, List<Order> all) {
+        BigDecimal remaining = all.stream()
+                .filter(this::isPayosUnpaidOrder)
+                .map(Order::getTotalAmount)
+                .filter(Objects::nonNull)
+                .reduce(BigDecimal.ZERO, BigDecimal::add);
+        batch.setTotalAmount(remaining);
     }
 
     private boolean isPayosUnpaidOrder(Order order) {
@@ -1532,6 +1549,17 @@ public class OrderServiceImpl implements OrderService {
         totalBatch = createdOrders.stream()
                 .map(o -> o.getTotalAmount() != null ? o.getTotalAmount() : BigDecimal.ZERO)
                 .reduce(BigDecimal.ZERO, BigDecimal::add);
+
+        // Đồng bộ: nếu voucher sàn đã ghi trên batch nhưng totalAmount đơn vẫn gross → trừ lại trước khi tạo PayOS
+        if (batch.getBatchDiscountAmount() != null
+                && batch.getBatchDiscountAmount().compareTo(BigDecimal.ZERO) > 0) {
+            BigDecimal orderDisc = createdOrders.stream()
+                    .map(o -> o.getBatchDiscountAmount() != null ? o.getBatchDiscountAmount() : BigDecimal.ZERO)
+                    .reduce(BigDecimal.ZERO, BigDecimal::add);
+            if (orderDisc.compareTo(BigDecimal.ZERO) <= 0) {
+                totalBatch = totalBatch.subtract(batch.getBatchDiscountAmount()).max(BigDecimal.ZERO);
+            }
+        }
 
         batch.setTotalAmount(totalBatch);
         String checkoutUrl = null;

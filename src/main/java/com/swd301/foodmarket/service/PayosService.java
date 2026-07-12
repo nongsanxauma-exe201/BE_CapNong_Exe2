@@ -36,5 +36,8 @@ public interface PayosService {
 
     PayOSPaymentInfoResponse getPaymentLinkInformation(Long orderCode);
 
+    /** orderCode hoặc paymentLinkId (id trên return URL PayOS). */
+    PayOSPaymentInfoResponse getPaymentLinkInformation(String id);
+
     boolean verifyWebhookSignature(JsonNode webhookBody);
 }

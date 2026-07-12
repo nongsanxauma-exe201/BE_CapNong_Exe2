@@ -57,10 +57,17 @@ public class PaymentController {
     }
 
 
+    /**
+     * Return-URL fallback khi webhook chậm.
+     * BE tự gọi PayOS API xác minh PAID + amount — không tin client.
+     * @param paymentLinkId optional — param {@code id} trên return URL PayOS
+     */
     @PostMapping("/{orderCode}/confirm")
-    public ApiResponse<String> confirmPayment(@PathVariable String orderCode) {
-
-        paymentService.confirmPaymentByOrderCode(orderCode);
+    public ApiResponse<String> confirmPayment(
+            @PathVariable String orderCode,
+            @RequestParam(required = false) String paymentLinkId
+    ) {
+        paymentService.confirmPaymentFromClient(orderCode, paymentLinkId);
 
         return ApiResponse.<String>builder()
                 .result("OK")
@@ -123,7 +130,11 @@ public class PaymentController {
         if ("00".equals(code) || "PAID".equalsIgnoreCase(status)) {
             try {
                 String orderCode = data.get("orderCode").asText();
-                Long amount = data.has("amount") ? data.get("amount").asLong() : null;
+                if (!data.hasNonNull("amount")) {
+                    log.error("PayOS webhook missing amount for orderCode={}", orderCode);
+                    throw new AppException(ErrorCode.PAYOS_AMOUNT_MISMATCH);
+                }
+                Long amount = data.get("amount").asLong();
                 paymentService.confirmPaymentByOrderCode(orderCode, amount);
             } catch (Exception ex) {
                 log.error("Failed to confirm PayOS webhook orderCode={}: {}",

@@ -73,6 +73,8 @@ public class OrderResponse {
     BigDecimal batchCheckoutTotalAmount;
     /** Tổng giảm voucher sàn trên batch (nếu có). */
     BigDecimal batchPlatformDiscountAmount;
+    /** Phần giảm voucher sàn phân bổ trên đơn này. */
+    BigDecimal batchDiscountAmount;
 
     BigDecimal qcRefundedAmount;
     LocalDateTime qcBuyerDecisionDeadline;
