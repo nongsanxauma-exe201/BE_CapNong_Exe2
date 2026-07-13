@@ -50,7 +50,7 @@ public class AdminInitializer implements CommandLineRunner {
 
             User admin = User.builder()
                     .email("admin@gmail.com")
-                    .password(passwordEncoder.encode("12345678"))
+                    .password(passwordEncoder.encode("Admin@123"))
                     .role(roleAdmin)
                     .fullName("System Admin")
                     .build();
