@@ -15,6 +15,8 @@ public class CheckoutBatchRequest {
     String recipientName;
     String recipientPhone;
     String shippingAddress;
+    /** placeId từ Goong suggestion — dùng cùng cách tính phí ship như preview UI */
+    String placeId;
     String note;
     String paymentMethod;
     List<ShopOrderRequest> shopOrders;

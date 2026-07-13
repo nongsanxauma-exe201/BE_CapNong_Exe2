@@ -3,16 +3,23 @@ package com.swd301.foodmarket.repository;
 import com.swd301.foodmarket.entity.User;
 import com.swd301.foodmarket.entity.Voucher;
 import com.swd301.foodmarket.enums.VoucherType;
+import jakarta.persistence.LockModeType;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Lock;
 import org.springframework.data.jpa.repository.Query;
+import org.springframework.data.repository.query.Param;
 
 import java.time.LocalDateTime;
 import java.util.Optional;
 
 
 public interface VoucherRespository extends JpaRepository<Voucher, Integer> {
+
+    @Lock(LockModeType.PESSIMISTIC_WRITE)
+    @Query("SELECT v FROM Voucher v WHERE v.id = :id")
+    Optional<Voucher> findByIdForUpdate(@Param("id") Integer id);
 
     Voucher findByVoucherCode(String voucherCode);
     Optional<Voucher> findByVoucherTypeAndAutoCreatedFromOrderId(VoucherType voucherType, Integer autoCreatedFromOrderId);

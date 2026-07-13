@@ -5,6 +5,8 @@ import com.swd301.foodmarket.dto.response.OrderResponse;
 import com.swd301.foodmarket.entity.Order;
 import com.swd301.foodmarket.entity.ShipperLocation;
 import com.swd301.foodmarket.entity.User;
+import com.swd301.foodmarket.enums.CodPaymentOption;
+import com.swd301.foodmarket.enums.CodPaymentStatus;
 import com.swd301.foodmarket.enums.OrderStatus;
 import com.swd301.foodmarket.enums.RoleName;
 import com.swd301.foodmarket.enums.UserStatus;
@@ -22,6 +24,7 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.math.BigDecimal;
 import java.util.List;
 import java.util.stream.Collectors;
 
@@ -95,7 +98,14 @@ public class StaffServiceImpl implements StaffService {
         }
 
         order.setShipper(shipper);
-        order.setStatus(OrderStatus.SHIPPING); // gán xong → SHIPPING luôn
+        order.setStatus(OrderStatus.SHIPPING);
+
+        if ("COD".equalsIgnoreCase(order.getPaymentMethod())) {
+            order.setCodPaymentStatus(CodPaymentStatus.PAID);
+            order.setCodPaymentOption(CodPaymentOption.CASH);
+            order.setCodPrepaidAmount(BigDecimal.ZERO);
+        }
+
         orderRepository.save(order);
 
         log.info("[STAFF] Assigned shipper {} to order {} → SHIPPING", shipperId, orderId);

@@ -54,7 +54,7 @@ public class GlobalExceptionHandler {
 
         ApiResponse apiResponse = new ApiResponse();
         apiResponse.setCode(errorCode.getCode());
-        apiResponse.setMessage(errorCode.getMessage());
+        apiResponse.setMessage(ex.getMessage() != null ? ex.getMessage() : errorCode.getMessage());
 
         return ResponseEntity
                 .status(errorCode.getStatusCode())

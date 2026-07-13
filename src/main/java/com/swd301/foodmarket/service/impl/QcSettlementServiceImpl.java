@@ -16,6 +16,7 @@ import com.swd301.foodmarket.service.PaymentService;
 import com.swd301.foodmarket.service.QcSettlementService;
 import com.swd301.foodmarket.service.TrackingService;
 import com.swd301.foodmarket.service.VoucherService;
+import com.swd301.foodmarket.service.VoucherUserService;
 import jakarta.transaction.Transactional;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -44,6 +45,7 @@ public class QcSettlementServiceImpl implements QcSettlementService {
     private final MysteryBoxRepository mysteryBoxRepository;
     private final PaymentService paymentService;
     private final VoucherService voucherService;
+    private final VoucherUserService voucherUserService;
     private final NotificationService notificationService;
     private final TrackingService trackingService;
     private final OrderMapper orderMapper;
@@ -250,6 +252,8 @@ public class QcSettlementServiceImpl implements QcSettlementService {
         order.setStatus(OrderStatus.CANCELLED);
         order.setRefundReason((order.getRefundReason() == null ? "" : order.getRefundReason() + "\n")
                 + "Đơn hàng bị hủy do toàn bộ hàng không đạt chất lượng");
+        updateCodAmount(order);
+        restoreVouchersForCancelledOrder(order);
         orderRepository.save(order);
 
         grantDamageVoucherForQcCancelledOrder(order);
@@ -289,6 +293,8 @@ public class QcSettlementServiceImpl implements QcSettlementService {
                         "Hủy đơn sau QC buyer từ chối nhận #" + order.getId());
             }
             order.setStatus(OrderStatus.CANCELLED);
+            updateCodAmount(order);
+            restoreVouchersForCancelledOrder(order);
             return;
         }
         order.setStatus(OrderStatus.QUALITY_CHECKED);
@@ -572,5 +578,14 @@ public class QcSettlementServiceImpl implements QcSettlementService {
         String email = SecurityContextHolder.getContext().getAuthentication().getName();
         return userRepository.findByEmail(email)
                 .orElseThrow(() -> new AppException(ErrorCode.USER_NOT_EXISTED));
+    }
+
+    private void restoreVouchersForCancelledOrder(Order order) {
+        voucherUserService.restoreVoucherForOrder(order);
+        CheckoutBatch batch = order.getCheckoutBatch();
+        if (batch != null && batch.getBatchVoucherUserId() != null) {
+            List<Order> batchOrders = orderRepository.findByCheckoutBatchId(batch.getId());
+            voucherUserService.restoreBatchVoucher(batch, batchOrders);
+        }
     }
 }

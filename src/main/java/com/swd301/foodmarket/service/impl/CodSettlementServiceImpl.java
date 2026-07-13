@@ -16,6 +16,7 @@ import com.swd301.foodmarket.repository.TransactionRepository;
 import com.swd301.foodmarket.repository.WalletRepository;
 import com.swd301.foodmarket.service.CodSettlementService;
 import com.swd301.foodmarket.service.NotificationService;
+import com.swd301.foodmarket.service.support.MoneyRoundingUtil;
 import com.swd301.foodmarket.service.support.OrderSettlementCalculator;
 import jakarta.transaction.Transactional;
 import lombok.RequiredArgsConstructor;
@@ -116,59 +117,16 @@ public class CodSettlementServiceImpl implements CodSettlementService {
 // Phí sàn shop tính sau refund
         BigDecimal shopChargeable = shopGross.subtract(refundAmount);
 
-        BigDecimal platformFeeFromShop = shopChargeable.multiply(BigDecimal.valueOf(0.1));
-        BigDecimal platformFeeFromShip = shippingFee.multiply(BigDecimal.valueOf(0.1));
+        BigDecimal platformFeeFromShop = MoneyRoundingUtil.commission(shopChargeable);
+        BigDecimal platformFeeFromShip = MoneyRoundingUtil.commission(shippingFee);
         BigDecimal platformFeeTotal = platformFeeFromShop.add(platformFeeFromShip);
 
         BigDecimal finalShopRevenue = shopChargeable.subtract(platformFeeFromShop);
-        BigDecimal shipperNet = shippingFee.subtract(platformFeeFromShip);
+        BigDecimal shipperNet = MoneyRoundingUtil.netAfterCommission(shippingFee);
 
-        BigDecimal totalHeld = finalShopRevenue.add(shipperNet);
-        log.info("[COD_ORDER_INFO] orderId={}, paymentMethod={}, status={}, codSettled={}, shipperId={}, shopOwnerId={}, buyerId={}",
-                order.getId(),
-                order.getPaymentMethod(),
-                order.getStatus(),
-                order.getCodSettled(),
-                order.getShipper() != null ? order.getShipper().getId() : null,
-                order.getShopOwner() != null ? order.getShopOwner().getId() : null,
-                order.getBuyer() != null ? order.getBuyer().getId() : null
-        );
-
-        log.info("[COD_AMOUNT_INPUT] buyerPaid={}, shippingFee={}, shippingDiscountAmount={}, platformBatchSubsidy={}, settlementTotal={}, refundAmount={}, codAmount={}",
-                orderTotalAmount,
-                shippingFee,
-                shippingDiscountAmount,
-                platformBatchSubsidy,
-                settlementTotal,
-                refundAmount,
-                codAmount
-        );
-
-        log.info("[COD_FORMULA] shopGross=settlementTotal-shippingFee => {} - {} = {}",
-                settlementTotal,
-                shippingFee,
-                shopGross
-        );
-
-        log.info("[COD_PLATFORM_FEE] platformFeeFromShop=shopChargeable*10%={}, platformFeeFromShip=shippingFee*10%={}, platformFeeTotal={}",
-                platformFeeFromShop,
-                platformFeeFromShip,
-                platformFeeTotal
-        );
-
-        log.info("[COD_NET_AMOUNT] shopChargeable=shopGross-refundAmount => {} - {} = {}, finalShopRevenue=shopChargeable-platformFeeFromShop => {} - {} = {}, shipperNet={}, totalHeld={}",
-                shopGross,
-                refundAmount,
-                shopChargeable,
-                shopChargeable,
-                platformFeeFromShop,
-                finalShopRevenue,
-                shipperNet,
-                totalHeld
-        );
-        log.info("[COD_EXPECTED_FLOW] platform.totalBalance + codAmount={}, platform.frozenBalance + totalHeld={}, shop.totalBalance + finalShopRevenue={}, shipper.totalBalance + shipperNet={}",
-                codAmount,
-                totalHeld,
+        log.info("[COD_NET_AMOUNT] shopChargeable={}, finalShopRevenue={}, shipperNet={}",
+                shopChargeable, finalShopRevenue, shipperNet);
+        log.info("[COD_EXPECTED_FLOW] platform.totalBalance + codAmount - shop - shipper, shop.totalBalance + finalShopRevenue={}, shipper.totalBalance + shipperNet={}",
                 finalShopRevenue,
                 shipperNet
         );
@@ -224,14 +182,13 @@ public class CodSettlementServiceImpl implements CodSettlementService {
                 shipperRevenueBefore
         );
 
-        // Tiền thật admin/platform nhận từ shipper sau đối soát COD.
+        // Tiền thật admin/platform nhận từ shipper sau đối soát COD, trừ phần đã chi cho shop/shipper.
         platformWallet.setTotalBalance(
-                platformWallet.getTotalBalance().add(codAmount).subtract(platformBatchSubsidy)
-        );
-
-        // Platform đang giữ hộ shop + shipper.
-        platformWallet.setFrozenBalance(
-                platformWallet.getFrozenBalance().add(totalHeld)
+                platformWallet.getTotalBalance()
+                        .add(codAmount)
+                        .subtract(platformBatchSubsidy)
+                        .subtract(finalShopRevenue)
+                        .subtract(shipperNet)
         );
 
         platformWallet.setCommissionWallet(
@@ -308,8 +265,12 @@ public class CodSettlementServiceImpl implements CodSettlementService {
                 shipperAvailableAfter
         );
 
-        BigDecimal expectedPlatformTotalAfter = platformTotalBefore.add(codAmount);
-        BigDecimal expectedPlatformFrozenAfter = platformFrozenBefore.add(totalHeld);
+        BigDecimal expectedPlatformTotalAfter = platformTotalBefore
+                .add(codAmount)
+                .subtract(platformBatchSubsidy)
+                .subtract(finalShopRevenue)
+                .subtract(shipperNet);
+        BigDecimal expectedPlatformFrozenAfter = platformFrozenBefore;
         BigDecimal expectedPlatformCommissionAfter = platformCommissionBefore.add(platformFeeTotal);
         BigDecimal expectedPlatformRevenueAfter = platformRevenueBefore.add(platformFeeTotal);
         BigDecimal expectedShopTotalAfter = shopTotalBefore.add(finalShopRevenue);
@@ -377,9 +338,6 @@ public class CodSettlementServiceImpl implements CodSettlementService {
         saveTransaction(TransactionType.COD_RECEIVED, codAmount,
                 platformWallet.getTotalBalance(), "ORDER_" + order.getId(),
                 "Đối soát nhận tiền COD đơn #" + order.getId());
-        saveTransaction(TransactionType.PLATFORM_FREEZE, totalHeld,
-                platformWallet.getFrozenBalance(), "ORDER_" + order.getId(),
-                "Khóa tiền platform đang giữ hộ shop/shipper cho COD đơn #" + order.getId());
         saveTransaction(TransactionType.PLATFORM_COMMISSION, platformFeeTotal,
                 platformWallet.getCommissionWallet(), "ORDER_" + order.getId(),
                 "Ghi nhận phí nền tảng COD đơn #" + order.getId());

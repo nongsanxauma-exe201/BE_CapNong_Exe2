@@ -67,9 +67,9 @@ public class WalletController {
                                 .build();
         }
 
-        // Shop owner gửi yêu cầu rút tiền
+        // Shop owner / Buyer gửi yêu cầu rút tiền
         @PostMapping("/withdraw-requests")
-        @PreAuthorize("hasRole('SHOP_OWNER')")
+        @PreAuthorize("hasAnyRole('SHOP_OWNER','BUYER')")
         public ApiResponse<WithdrawRequestResponse> withdraw(
                         @RequestBody @Valid WithdrawRequestCreationRequest request) {
                 return ApiResponse.<WithdrawRequestResponse>builder()

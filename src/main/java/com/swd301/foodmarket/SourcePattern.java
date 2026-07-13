@@ -16,6 +16,8 @@ import java.time.LocalDateTime;
 public class SourcePattern {
 
     public static void main(String[] args) {
+        // PayOS (Cloudflare) resolve IPv6 trước; trên Windows IPv6 hay fail → RestTemplate plainConnect lỗi.
+        System.setProperty("java.net.preferIPv4Stack", "true");
         SpringApplication.run(SourcePattern.class, args);
     }
 

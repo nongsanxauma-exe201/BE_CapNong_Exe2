@@ -3,17 +3,25 @@ package com.swd301.foodmarket.repository;
 import com.swd301.foodmarket.entity.User;
 import com.swd301.foodmarket.entity.Voucher;
 import com.swd301.foodmarket.entity.VoucherUser;
+import jakarta.persistence.LockModeType;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Lock;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
+import java.util.Optional;
 import java.util.UUID;
 
 public interface VoucherUserRepository extends JpaRepository<VoucherUser, UUID> {
+
+    @Lock(LockModeType.PESSIMISTIC_WRITE)
+    @Query("SELECT vu FROM VoucherUser vu WHERE vu.id = :id")
+    Optional<VoucherUser> findByIdForUpdate(@Param("id") UUID id);
+
     java.util.Optional<VoucherUser> findByIdAndUser(UUID id, User user);
     java.util.Optional<VoucherUser> findByUserAndVoucher_VoucherCode(User user, String voucherCode);
     java.util.Optional<VoucherUser> findByUserAndVoucher(User user, Voucher voucher);

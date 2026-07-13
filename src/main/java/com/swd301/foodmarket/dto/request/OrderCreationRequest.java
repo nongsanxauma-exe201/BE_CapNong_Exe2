@@ -16,6 +16,7 @@ public class OrderCreationRequest {
     String recipientName;
     String recipientPhone;
     String shippingAddress;
+    String placeId;
     String note;
     String paymentMethod;
     UUID voucherUserId;
@@ -23,6 +24,7 @@ public class OrderCreationRequest {
     List<String> voucherCodes;
 
     Boolean restrictToShopVouchers;
+    Boolean skipCartCleanup;
 
     List<OrderItemRequest> items;
 }
