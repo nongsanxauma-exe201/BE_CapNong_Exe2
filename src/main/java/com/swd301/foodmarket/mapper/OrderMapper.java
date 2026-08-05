@@ -13,6 +13,7 @@ public interface OrderMapper {
 
     // ================== ORDER ==================
     @Mapping(target = "status", source = "status")
+    @Mapping(target = "deliveryType", source = "deliveryType")
     @Mapping(target = "items", expression = "java(mapItems(order))")
     @Mapping(target = "buyerId", source = "buyer.id")
     @Mapping(target = "passedQualityCheck", expression = "java(allPassQualityChecks(order))")

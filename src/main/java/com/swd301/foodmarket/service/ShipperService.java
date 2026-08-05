@@ -7,12 +7,19 @@ import com.swd301.foodmarket.dto.response.AvailableOrderResponse;
 import com.swd301.foodmarket.dto.response.PageResponse;
 import com.swd301.foodmarket.dto.response.ShipperLocationResponse;
 import com.swd301.foodmarket.dto.response.ShipperOrderResponse;
+import com.swd301.foodmarket.entity.Order;
+import com.swd301.foodmarket.enums.OrderStatus;
 import org.springframework.data.domain.Page;
 import org.springframework.web.multipart.MultipartFile;
 
 import java.util.List;
 
 public interface ShipperService {
+    // Đơn nhận tại kho (không có shipper) — tái dùng các hiệu ứng phụ giống lúc shipper bấm DELIVERED/FAILED
+    void settlePayosPickupPayout(Order order);
+    void settleCodPickupDelivered(Order order);
+    void settlePickupOrderFailed(Order order, OrderStatus previousStatus);
+
     // Xem top 6 đơn gần nhất (có GPS shipper + Goong distance)
     List<AvailableOrderResponse> getAvailableOrdersNearby(Double shipperLat, Double shipperLng);
 

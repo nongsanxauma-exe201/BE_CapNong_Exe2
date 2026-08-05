@@ -11,7 +11,7 @@ public enum OrderStatus {
     QUALITY_CHECKING,
     QC_PENDING_BUYER,
     QUALITY_CHECKED,
-    READY,      // Đã đóng gói xong, chờ shipper lấy
+    READY,      // Đã đóng gói xong, chờ shipper lấy (hoặc chờ buyer đến kho lấy nếu deliveryType=PICKUP_AT_WAREHOUSE)
     DELIVERED,
     CANCELLED,
     PAID,

@@ -8,4 +8,6 @@ import java.util.List;
 public interface StaffService {
     List<AvailableShipperResponse> getAvailableShippers();
     OrderResponse assignShipperToOrder(Integer orderId, Integer shipperId);
+    OrderResponse confirmWarehousePickupDelivered(Integer orderId);
+    OrderResponse markWarehousePickupFailed(Integer orderId);
 }
