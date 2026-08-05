@@ -3,6 +3,7 @@ package com.swd301.foodmarket.entity;
 import com.fasterxml.jackson.annotation.JsonIgnore;
 import com.swd301.foodmarket.enums.CodPaymentOption;
 import com.swd301.foodmarket.enums.CodPaymentStatus;
+import com.swd301.foodmarket.enums.DeliveryType;
 import com.swd301.foodmarket.enums.OrderStatus;
 import jakarta.persistence.*;
 import lombok.*;
@@ -114,6 +115,11 @@ public class Order {
     @Column(name = "status", nullable = false)
     @Enumerated(EnumType.STRING)
     OrderStatus status;
+
+    @Builder.Default
+    @Column(name = "delivery_type", nullable = false)
+    @Enumerated(EnumType.STRING)
+    DeliveryType deliveryType = DeliveryType.DELIVERY;
 
 
     @Column(precision = 18, scale = 2)

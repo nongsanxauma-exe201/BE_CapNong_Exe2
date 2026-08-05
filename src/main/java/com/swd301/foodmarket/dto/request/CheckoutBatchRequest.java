@@ -1,5 +1,6 @@
 package com.swd301.foodmarket.dto.request;
 
+import com.swd301.foodmarket.enums.DeliveryType;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Data;
@@ -21,4 +22,5 @@ public class CheckoutBatchRequest {
     String paymentMethod;
     List<ShopOrderRequest> shopOrders;
     java.util.UUID batchVoucherUserId;
+    DeliveryType deliveryType; // null → mặc định DELIVERY
 }

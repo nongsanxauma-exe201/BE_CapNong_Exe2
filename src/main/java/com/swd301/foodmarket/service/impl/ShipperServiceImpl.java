@@ -65,6 +65,59 @@ import java.util.stream.Collectors;
 @Slf4j
 public class ShipperServiceImpl implements ShipperService {
 
+    /**
+     * Đơn PayOS nhận tại kho (deliveryType=PICKUP_AT_WAREHOUSE, không có shipper).
+     * Gọi khi staff xác nhận buyer đã lấy hàng — chốt payout giống lúc shipper DELIVERED,
+     * nhưng bỏ qua phần ví shipper (shippingFee=0 nên shipperNet=0).
+     */
+    @Override
+    @Transactional
+    public void settlePayosPickupPayout(Order order) {
+        if (!"PAYOS".equalsIgnoreCase(order.getPaymentMethod())) {
+            return;
+        }
+        processPayosDeliveredPayout(order, null);
+    }
+
+    /**
+     * Đơn COD nhận tại kho (deliveryType=PICKUP_AT_WAREHOUSE, không có shipper).
+     * Gọi khi staff xác nhận buyer đã lấy hàng — tái dùng đúng logic COD delivered của shipper.
+     */
+    @Override
+    @Transactional
+    public void settleCodPickupDelivered(Order order) {
+        if (!"COD".equalsIgnoreCase(order.getPaymentMethod())) {
+            return;
+        }
+        processCodDelivered(order);
+    }
+
+    /**
+     * Đơn nhận tại kho mà buyer không đến lấy — tái dùng đúng hiệu ứng phụ của luồng shipper FAILED
+     * (hoàn tiền PayOS nếu đã thanh toán, hoàn voucher, khóa tài khoản sau 3 lần thất bại).
+     */
+    @Override
+    @Transactional
+    public void settlePickupOrderFailed(Order order, OrderStatus previousStatus) {
+        if ("PAYOS".equalsIgnoreCase(order.getPaymentMethod()) && isPostPaymentStatus(previousStatus)) {
+            paymentService.refundPayosOrderOnFailed(order);
+        }
+        restoreVouchersForFailedOrder(order);
+
+        if ("COD".equalsIgnoreCase(order.getPaymentMethod())
+                && order.getCodPaymentStatus() == CodPaymentStatus.PAID) {
+            order.setCodPaymentStatus(CodPaymentStatus.REFUND_PENDING);
+            orderRepository.save(order);
+        }
+
+        Integer buyerId = order.getBuyer().getId();
+        long failedCount = orderRepository.countByBuyerIdAndStatus(buyerId, OrderStatus.FAILED) + 1;
+        if (failedCount >= 3) {
+            userService.deactivateUser(buyerId);
+            log.info("[AutoLock] Buyer {} bị khóa do {} đơn FAILED", buyerId, failedCount);
+        }
+    }
+
     final OrderRepository orderRepository;
     final ShipperLocationRepository shipperLocationRepository;
     final UserRepository userRepository;
@@ -520,8 +573,11 @@ public class ShipperServiceImpl implements ShipperService {
         Wallet shopWallet = walletRepository.findByShopOwnerIdForUpdate(order.getShopOwner().getId())
                 .orElseThrow(() -> new AppException(ErrorCode.WALLET_NOT_FOUND));
 
-        Wallet shipperWallet = walletRepository.findByShipperIdForUpdate(shipper.getId())
-                .orElseThrow(() -> new AppException(ErrorCode.WALLET_NOT_FOUND));
+        // Đơn nhận tại kho không có shipper — shippingFee=0 nên shipperNet=0, bỏ qua ví shipper
+        Wallet shipperWallet = shipper != null
+                ? walletRepository.findByShipperIdForUpdate(shipper.getId())
+                        .orElseThrow(() -> new AppException(ErrorCode.WALLET_NOT_FOUND))
+                : null;
 ///  Log to check
         BigDecimal platformTotalBefore = platformWallet.getTotalBalance();
         BigDecimal platformFrozenBefore = platformWallet.getFrozenBalance();
@@ -532,9 +588,9 @@ public class ShipperServiceImpl implements ShipperService {
         BigDecimal shopFrozenBefore = shopWallet.getFrozenBalance();
         BigDecimal shopRevenueBefore = shopWallet.getTotalRevenueAllTime();
 
-        BigDecimal shipperTotalBefore = shipperWallet.getTotalBalance();
-        BigDecimal shipperFrozenBefore = shipperWallet.getFrozenBalance();
-        BigDecimal shipperRevenueBefore = shipperWallet.getTotalRevenueAllTime();
+        BigDecimal shipperTotalBefore = shipperWallet != null ? shipperWallet.getTotalBalance() : BigDecimal.ZERO;
+        BigDecimal shipperFrozenBefore = shipperWallet != null ? shipperWallet.getFrozenBalance() : BigDecimal.ZERO;
+        BigDecimal shipperRevenueBefore = shipperWallet != null ? shipperWallet.getTotalRevenueAllTime() : BigDecimal.ZERO;
 
         log.info("[PAYOS_PLATFORM_BEFORE] totalBalance={}, frozenBalance={}, commissionWallet={}, totalRevenueAllTime={}",
                 platformTotalBefore,
@@ -550,12 +606,14 @@ public class ShipperServiceImpl implements ShipperService {
                 shopRevenueBefore
         );
 
-        log.info("[PAYOS_SHIPPER_BEFORE] shipperId={}, totalBalance={}, frozenBalance={}, totalRevenueAllTime={}",
-                shipper.getId(),
-                shipperTotalBefore,
-                shipperFrozenBefore,
-                shipperRevenueBefore
-        );
+        if (shipperWallet != null) {
+            log.info("[PAYOS_SHIPPER_BEFORE] shipperId={}, totalBalance={}, frozenBalance={}, totalRevenueAllTime={}",
+                    shipper.getId(),
+                    shipperTotalBefore,
+                    shipperFrozenBefore,
+                    shipperRevenueBefore
+            );
+        }
 
 
         // Giải phóng toàn bộ escrow PayOS từ frozen platform
@@ -604,16 +662,18 @@ public class ShipperServiceImpl implements ShipperService {
 
         shopWallet.setUpdatedAt(LocalDateTime.now(ZoneId.of("Asia/Ho_Chi_Minh")));
 
-        // Shipper nhận 90% phí ship khi delivered
-        shipperWallet.setTotalBalance(
-                shipperWallet.getTotalBalance().add(shipperNet)
-        );
+        // Shipper nhận 90% phí ship khi delivered (đơn nhận tại kho không có shipper → bỏ qua)
+        if (shipperWallet != null) {
+            shipperWallet.setTotalBalance(
+                    shipperWallet.getTotalBalance().add(shipperNet)
+            );
 
-        shipperWallet.setTotalRevenueAllTime(
-                shipperWallet.getTotalRevenueAllTime().add(shipperNet)
-        );
+            shipperWallet.setTotalRevenueAllTime(
+                    shipperWallet.getTotalRevenueAllTime().add(shipperNet)
+            );
 
-        shipperWallet.setUpdatedAt(LocalDateTime.now(ZoneId.of("Asia/Ho_Chi_Minh")));
+            shipperWallet.setUpdatedAt(LocalDateTime.now(ZoneId.of("Asia/Ho_Chi_Minh")));
+        }
 
         // PayOS refund về ví buyer (phần chưa hoàn tại QC)
         if (deliveryRefundAmount.compareTo(BigDecimal.ZERO) > 0) {
@@ -673,7 +733,9 @@ public class ShipperServiceImpl implements ShipperService {
 
         walletRepository.save(platformWallet);
         walletRepository.save(shopWallet);
-        walletRepository.save(shipperWallet);
+        if (shipperWallet != null) {
+            walletRepository.save(shipperWallet);
+        }
 
         saveTransaction(TransactionType.PLATFORM_COMMISSION, platformFeeTotal,
                 platformWallet.getCommissionWallet(), "ORDER_" + order.getId(),
@@ -681,9 +743,11 @@ public class ShipperServiceImpl implements ShipperService {
         saveTransaction(TransactionType.SHOP_RELEASE, finalShopRevenue,
                 shopWallet.getTotalBalance(), "ORDER_" + order.getId(),
                 "Mở khóa tiền shop sau giao thành công đơn #" + order.getId());
-        saveTransaction(TransactionType.SHIPPER_PAYOUT, shipperNet,
-                shipperWallet.getTotalBalance(), "ORDER_" + order.getId(),
-                "Cộng phí giao hàng cho shipper đơn #" + order.getId());
+        if (shipperWallet != null) {
+            saveTransaction(TransactionType.SHIPPER_PAYOUT, shipperNet,
+                    shipperWallet.getTotalBalance(), "ORDER_" + order.getId(),
+                    "Cộng phí giao hàng cho shipper đơn #" + order.getId());
+        }
         if (shippingDiscountAmount.compareTo(BigDecimal.ZERO) > 0) {
             saveTransaction(TransactionType.SHIPPING_SUBSIDY, shippingDiscountAmount.negate(),
                     platformWallet.getTotalBalance(), "ORDER_" + order.getId(),
@@ -723,15 +787,17 @@ public class ShipperServiceImpl implements ShipperService {
                 shopWallet.getTotalRevenueAllTime()
         );
 
-        log.info("[PAYOS_SHIPPER_AFTER] shipperId={}, totalBalance={} -> {}, frozenBalance={} -> {}, totalRevenueAllTime={} -> {}",
-                shipper.getId(),
-                shipperTotalBefore,
-                shipperWallet.getTotalBalance(),
-                shipperFrozenBefore,
-                shipperWallet.getFrozenBalance(),
-                shipperRevenueBefore,
-                shipperWallet.getTotalRevenueAllTime()
-        );
+        if (shipperWallet != null) {
+            log.info("[PAYOS_SHIPPER_AFTER] shipperId={}, totalBalance={} -> {}, frozenBalance={} -> {}, totalRevenueAllTime={} -> {}",
+                    shipper.getId(),
+                    shipperTotalBefore,
+                    shipperWallet.getTotalBalance(),
+                    shipperFrozenBefore,
+                    shipperWallet.getFrozenBalance(),
+                    shipperRevenueBefore,
+                    shipperWallet.getTotalRevenueAllTime()
+            );
+        }
         BigDecimal expectedPlatformFrozenAfter = platformFrozenBefore.subtract(platformFeeTotal);
         BigDecimal expectedPlatformCommissionAfter = platformCommissionBefore.add(platformFeeTotal);
         BigDecimal expectedPlatformRevenueAfter = platformRevenueBefore.add(platformFeeTotal);
@@ -779,17 +845,19 @@ public class ShipperServiceImpl implements ShipperService {
                 expectedShopRevenueAfter.compareTo(shopWallet.getTotalRevenueAllTime()) == 0
         );
 
-        log.info("[PAYOS_VERIFY] expectedShipperTotalAfter={}, actualShipperTotalAfter={}, match={}",
-                expectedShipperTotalAfter,
-                shipperWallet.getTotalBalance(),
-                expectedShipperTotalAfter.compareTo(shipperWallet.getTotalBalance()) == 0
-        );
+        if (shipperWallet != null) {
+            log.info("[PAYOS_VERIFY] expectedShipperTotalAfter={}, actualShipperTotalAfter={}, match={}",
+                    expectedShipperTotalAfter,
+                    shipperWallet.getTotalBalance(),
+                    expectedShipperTotalAfter.compareTo(shipperWallet.getTotalBalance()) == 0
+            );
 
-        log.info("[PAYOS_VERIFY] expectedShipperRevenueAfter={}, actualShipperRevenueAfter={}, match={}",
-                expectedShipperRevenueAfter,
-                shipperWallet.getTotalRevenueAllTime(),
-                expectedShipperRevenueAfter.compareTo(shipperWallet.getTotalRevenueAllTime()) == 0
-        );
+            log.info("[PAYOS_VERIFY] expectedShipperRevenueAfter={}, actualShipperRevenueAfter={}, match={}",
+                    expectedShipperRevenueAfter,
+                    shipperWallet.getTotalRevenueAllTime(),
+                    expectedShipperRevenueAfter.compareTo(shipperWallet.getTotalRevenueAllTime()) == 0
+            );
+        }
 
 
         log.info("========== [PAYOS DELIVERED PAYOUT END] Order #{} ==========", order.getId());

@@ -52,4 +52,34 @@ public class StaffController {
                 .message("Shipper assigned successfully")
                 .build();
     }
+
+    /**
+     * Staff xác nhận buyer đã đến kho nhận hàng (đơn deliveryType=PICKUP_AT_WAREHOUSE, status READY).
+     * READY → DELIVERED. Tương đương shipper bấm "Đã giao" nhưng do staff thực hiện tại quầy.
+     * POST /staff/orders/{orderId}/confirm-pickup
+     */
+    @PostMapping("/orders/{orderId}/confirm-pickup")
+    @PreAuthorize("hasRole('STAFF')")
+    public ApiResponse<OrderResponse> confirmPickup(@PathVariable Integer orderId) {
+        log.info("[STAFF] Confirm warehouse pickup delivered for order {}", orderId);
+        return ApiResponse.<OrderResponse>builder()
+                .result(staffService.confirmWarehousePickupDelivered(orderId))
+                .message("Order confirmed as delivered (picked up by buyer)")
+                .build();
+    }
+
+    /**
+     * Staff đánh dấu buyer không đến lấy hàng tại kho (đơn deliveryType=PICKUP_AT_WAREHOUSE, status READY).
+     * READY → FAILED.
+     * POST /staff/orders/{orderId}/pickup-failed
+     */
+    @PostMapping("/orders/{orderId}/pickup-failed")
+    @PreAuthorize("hasRole('STAFF')")
+    public ApiResponse<OrderResponse> markPickupFailed(@PathVariable Integer orderId) {
+        log.info("[STAFF] Mark warehouse pickup failed for order {}", orderId);
+        return ApiResponse.<OrderResponse>builder()
+                .result(staffService.markWarehousePickupFailed(orderId))
+                .message("Order marked as pickup failed")
+                .build();
+    }
 }
