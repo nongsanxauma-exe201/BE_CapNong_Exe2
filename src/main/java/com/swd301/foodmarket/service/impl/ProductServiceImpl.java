@@ -322,7 +322,7 @@ public class ProductServiceImpl implements ProductService {
     @Override
     @Transactional
     public List<ProductImageResponse> addImages(Integer productId, List<MultipartFile> images) {
-        Product product = productRepository.findById(productId)
+        Product product = productRepository.findByIdForUpdate(productId)
                 .orElseThrow(() -> new AppException(ErrorCode.PRODUCT_NOT_FOUND));
 
         verifyOwner(product);
