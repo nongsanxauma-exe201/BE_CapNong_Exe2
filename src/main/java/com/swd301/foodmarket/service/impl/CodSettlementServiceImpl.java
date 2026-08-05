@@ -4,6 +4,7 @@ import com.swd301.foodmarket.dto.response.OrderResponse;
 import com.swd301.foodmarket.entity.*;
 import com.swd301.foodmarket.enums.CodPaymentOption;
 import com.swd301.foodmarket.enums.CodPaymentStatus;
+import com.swd301.foodmarket.enums.DeliveryType;
 import com.swd301.foodmarket.enums.OrderStatus;
 import com.swd301.foodmarket.enums.TransactionStatus;
 import com.swd301.foodmarket.enums.TransactionType;
@@ -74,7 +75,7 @@ public class CodSettlementServiceImpl implements CodSettlementService {
             throw new AppException(ErrorCode.COD_ALREADY_SETTLED);
         }
 
-        if (order.getShipper() == null) {
+        if (order.getShipper() == null && order.getDeliveryType() != DeliveryType.PICKUP_AT_WAREHOUSE) {
             log.error("[COD_SETTLEMENT_NO_SHIPPER] orderId={}", order.getId());
             throw new AppException(ErrorCode.SHIPPER_NOT_FOUND);
         }
@@ -137,8 +138,11 @@ public class CodSettlementServiceImpl implements CodSettlementService {
         Wallet shopWallet = walletRepository.findByShopOwnerIdForUpdate(order.getShopOwner().getId())
                 .orElseThrow(() -> new AppException(ErrorCode.WALLET_NOT_FOUND));
 
-        Wallet shipperWallet = walletRepository.findByShipperIdForUpdate(order.getShipper().getId())
-                .orElseThrow(() -> new AppException(ErrorCode.WALLET_NOT_FOUND));
+        // Đơn nhận tại kho không có shipper — staff thu tiền trực tiếp, không cần ví shipper
+        Wallet shipperWallet = order.getShipper() != null
+                ? walletRepository.findByShipperIdForUpdate(order.getShipper().getId())
+                        .orElseThrow(() -> new AppException(ErrorCode.WALLET_NOT_FOUND))
+                : null;
 
         BigDecimal platformTotalBefore = platformWallet.getTotalBalance();
         BigDecimal platformFrozenBefore = platformWallet.getFrozenBalance();
@@ -149,9 +153,9 @@ public class CodSettlementServiceImpl implements CodSettlementService {
         BigDecimal shopFrozenBefore = shopWallet.getFrozenBalance();
         BigDecimal shopRevenueBefore = shopWallet.getTotalRevenueAllTime();
 
-        BigDecimal shipperTotalBefore = shipperWallet.getTotalBalance();
-        BigDecimal shipperFrozenBefore = shipperWallet.getFrozenBalance();
-        BigDecimal shipperRevenueBefore = shipperWallet.getTotalRevenueAllTime();
+        BigDecimal shipperTotalBefore = shipperWallet != null ? shipperWallet.getTotalBalance() : BigDecimal.ZERO;
+        BigDecimal shipperFrozenBefore = shipperWallet != null ? shipperWallet.getFrozenBalance() : BigDecimal.ZERO;
+        BigDecimal shipperRevenueBefore = shipperWallet != null ? shipperWallet.getTotalRevenueAllTime() : BigDecimal.ZERO;
         BigDecimal platformAvailableBefore = platformTotalBefore.subtract(platformFrozenBefore);
         BigDecimal shopAvailableBefore = shopTotalBefore.subtract(shopFrozenBefore);
         BigDecimal shipperAvailableBefore = shipperTotalBefore.subtract(shipperFrozenBefore);
@@ -175,12 +179,14 @@ public class CodSettlementServiceImpl implements CodSettlementService {
                 shopRevenueBefore
         );
 
-        log.info("[SHIPPER_WALLET_BEFORE] shipperId={}, totalBalance={}, frozenBalance={}, totalRevenueAllTime={}",
-                order.getShipper().getId(),
-                shipperTotalBefore,
-                shipperFrozenBefore,
-                shipperRevenueBefore
-        );
+        if (shipperWallet != null) {
+            log.info("[SHIPPER_WALLET_BEFORE] shipperId={}, totalBalance={}, frozenBalance={}, totalRevenueAllTime={}",
+                    order.getShipper().getId(),
+                    shipperTotalBefore,
+                    shipperFrozenBefore,
+                    shipperRevenueBefore
+            );
+        }
 
         // Tiền thật admin/platform nhận từ shipper sau đối soát COD, trừ phần đã chi cho shop/shipper.
         platformWallet.setTotalBalance(
@@ -208,14 +214,16 @@ public class CodSettlementServiceImpl implements CodSettlementService {
                 shopWallet.getTotalRevenueAllTime().add(finalShopRevenue)
         );
 
-        // Shipper nhận phí ship khả dụng luôn.
-        shipperWallet.setTotalBalance(
-                shipperWallet.getTotalBalance().add(shipperNet)
-        );
+        // Shipper nhận phí ship khả dụng luôn (đơn nhận tại kho không có shipper → bỏ qua).
+        if (shipperWallet != null) {
+            shipperWallet.setTotalBalance(
+                    shipperWallet.getTotalBalance().add(shipperNet)
+            );
 
-        shipperWallet.setTotalRevenueAllTime(
-                shipperWallet.getTotalRevenueAllTime().add(shipperNet)
-        );
+            shipperWallet.setTotalRevenueAllTime(
+                    shipperWallet.getTotalRevenueAllTime().add(shipperNet)
+            );
+        }
 
         log.info("[PLATFORM_WALLET_AFTER] totalBalance={} -> {}, frozenBalance={} -> {}, commissionWallet={} -> {}, totalRevenueAllTime={} -> {}",
                 platformTotalBefore,
@@ -238,23 +246,26 @@ public class CodSettlementServiceImpl implements CodSettlementService {
                 shopWallet.getTotalRevenueAllTime()
         );
 
-        log.info("[SHIPPER_WALLET_AFTER] shipperId={}, totalBalance={} -> {}, frozenBalance={} -> {}, totalRevenueAllTime={} -> {}",
-                order.getShipper().getId(),
-                shipperTotalBefore,
-                shipperWallet.getTotalBalance(),
-                shipperFrozenBefore,
-                shipperWallet.getFrozenBalance(),
-                shipperRevenueBefore,
-                shipperWallet.getTotalRevenueAllTime()
-        );
+        if (shipperWallet != null) {
+            log.info("[SHIPPER_WALLET_AFTER] shipperId={}, totalBalance={} -> {}, frozenBalance={} -> {}, totalRevenueAllTime={} -> {}",
+                    order.getShipper().getId(),
+                    shipperTotalBefore,
+                    shipperWallet.getTotalBalance(),
+                    shipperFrozenBefore,
+                    shipperWallet.getFrozenBalance(),
+                    shipperRevenueBefore,
+                    shipperWallet.getTotalRevenueAllTime()
+            );
+        }
         BigDecimal platformAvailableAfter = platformWallet.getTotalBalance()
                 .subtract(platformWallet.getFrozenBalance());
 
         BigDecimal shopAvailableAfter = shopWallet.getTotalBalance()
                 .subtract(shopWallet.getFrozenBalance());
 
-        BigDecimal shipperAvailableAfter = shipperWallet.getTotalBalance()
-                .subtract(shipperWallet.getFrozenBalance());
+        BigDecimal shipperAvailableAfter = shipperWallet != null
+                ? shipperWallet.getTotalBalance().subtract(shipperWallet.getFrozenBalance())
+                : BigDecimal.ZERO;
 
         log.info("[COD_AVAILABLE_AFTER] platformAvailable={} -> {}, shopAvailable={} -> {}, shipperAvailable={} -> {}",
                 platformAvailableBefore,
@@ -314,17 +325,19 @@ public class CodSettlementServiceImpl implements CodSettlementService {
                 expectedShopRevenueAfter.compareTo(shopWallet.getTotalRevenueAllTime()) == 0
         );
 
-        log.info("[COD_VERIFY] expectedShipperTotalAfter={}, actualShipperTotalAfter={}, match={}",
-                expectedShipperTotalAfter,
-                shipperWallet.getTotalBalance(),
-                expectedShipperTotalAfter.compareTo(shipperWallet.getTotalBalance()) == 0
-        );
+        if (shipperWallet != null) {
+            log.info("[COD_VERIFY] expectedShipperTotalAfter={}, actualShipperTotalAfter={}, match={}",
+                    expectedShipperTotalAfter,
+                    shipperWallet.getTotalBalance(),
+                    expectedShipperTotalAfter.compareTo(shipperWallet.getTotalBalance()) == 0
+            );
 
-        log.info("[COD_VERIFY] expectedShipperRevenueAfter={}, actualShipperRevenueAfter={}, match={}",
-                expectedShipperRevenueAfter,
-                shipperWallet.getTotalRevenueAllTime(),
-                expectedShipperRevenueAfter.compareTo(shipperWallet.getTotalRevenueAllTime()) == 0
-        );
+            log.info("[COD_VERIFY] expectedShipperRevenueAfter={}, actualShipperRevenueAfter={}, match={}",
+                    expectedShipperRevenueAfter,
+                    shipperWallet.getTotalRevenueAllTime(),
+                    expectedShipperRevenueAfter.compareTo(shipperWallet.getTotalRevenueAllTime()) == 0
+            );
+        }
 
         order.setCodAmount(codAmount);
         order.setCodSettled(true);
@@ -332,7 +345,9 @@ public class CodSettlementServiceImpl implements CodSettlementService {
 
         walletRepository.save(platformWallet);
         walletRepository.save(shopWallet);
-        walletRepository.save(shipperWallet);
+        if (shipperWallet != null) {
+            walletRepository.save(shipperWallet);
+        }
         orderRepository.save(order);
 
         saveTransaction(TransactionType.COD_RECEIVED, codAmount,
@@ -344,9 +359,11 @@ public class CodSettlementServiceImpl implements CodSettlementService {
         saveTransaction(TransactionType.SHOP_RELEASE, finalShopRevenue,
                 shopWallet.getTotalBalance(), "ORDER_" + order.getId(),
                 "Cộng doanh thu shop COD đơn #" + order.getId());
-        saveTransaction(TransactionType.SHIPPER_PAYOUT, shipperNet,
-                shipperWallet.getTotalBalance(), "ORDER_" + order.getId(),
-                "Cộng phí giao hàng shipper COD đơn #" + order.getId());
+        if (shipperWallet != null) {
+            saveTransaction(TransactionType.SHIPPER_PAYOUT, shipperNet,
+                    shipperWallet.getTotalBalance(), "ORDER_" + order.getId(),
+                    "Cộng phí giao hàng shipper COD đơn #" + order.getId());
+        }
         if (shippingDiscountAmount.compareTo(BigDecimal.ZERO) > 0) {
             saveTransaction(TransactionType.SHIPPING_SUBSIDY, shippingDiscountAmount.negate(),
                     platformWallet.getTotalBalance(), "ORDER_" + order.getId(),
@@ -375,15 +392,17 @@ public class CodSettlementServiceImpl implements CodSettlementService {
 
         notificationService.createUserNotification(order.getShopOwner(), shopNotification);
 
-        Notification shipperNotification = Notification.builder()
-                .title("Đối soát COD thành công #" + order.getId())
-                .message("Đơn hàng COD #" + order.getId()
-                        + " đã được đối soát. Bạn nhận được "
-                        + shipperNet + "đ phí giao hàng.")
-                .receiverType("USER_" + order.getShipper().getId())
-                .build();
+        if (order.getShipper() != null) {
+            Notification shipperNotification = Notification.builder()
+                    .title("Đối soát COD thành công #" + order.getId())
+                    .message("Đơn hàng COD #" + order.getId()
+                            + " đã được đối soát. Bạn nhận được "
+                            + shipperNet + "đ phí giao hàng.")
+                    .receiverType("USER_" + order.getShipper().getId())
+                    .build();
 
-        notificationService.createUserNotification(order.getShipper(), shipperNotification);
+            notificationService.createUserNotification(order.getShipper(), shipperNotification);
+        }
 
         log.info("========== [COD SETTLEMENT END] Order #{} ==========", order.getId());
     }

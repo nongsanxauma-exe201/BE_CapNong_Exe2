@@ -38,6 +38,7 @@ public class OrderResponse {
     Boolean rewardApplied;
 
     String status;
+    String deliveryType;
 
     LocalDateTime createdAt;
 

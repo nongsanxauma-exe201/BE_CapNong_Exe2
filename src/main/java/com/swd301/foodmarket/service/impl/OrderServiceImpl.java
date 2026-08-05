@@ -9,6 +9,7 @@ import com.swd301.foodmarket.dto.request.ShopOrderRequest;
 import com.swd301.foodmarket.dto.response.*;
 import com.swd301.foodmarket.entity.*;
 import com.swd301.foodmarket.enums.CheckoutBatchStatus;
+import com.swd301.foodmarket.enums.DeliveryType;
 import com.swd301.foodmarket.enums.OrderStatus;
 import com.swd301.foodmarket.enums.RoleName;
 import com.swd301.foodmarket.enums.ProductStatus;
@@ -889,16 +890,23 @@ public class OrderServiceImpl implements OrderService {
             }
         }
 
-        BigDecimal shippingFee = BigDecimal.valueOf(15_000); // fallback
-        if (shopOwner != null) {
-            String buyerAddress = getOrDefault(request.getShippingAddress(), buyer.getAddress());
-            if (request.getPlaceId() != null && !request.getPlaceId().isBlank()) {
-                shippingFee = calculateShippingFeeByPlaceId(request.getPlaceId(), shopOwner.getId());
-            } else {
-                shippingFee = calculateShippingFee(buyerAddress, shopOwner.getId());
+        DeliveryType deliveryType = request.getDeliveryType() != null
+                ? request.getDeliveryType() : DeliveryType.DELIVERY;
+
+        BigDecimal shippingFee = BigDecimal.ZERO;
+        if (deliveryType == DeliveryType.DELIVERY) {
+            shippingFee = BigDecimal.valueOf(15_000); // fallback
+            if (shopOwner != null) {
+                String buyerAddress = getOrDefault(request.getShippingAddress(), buyer.getAddress());
+                if (request.getPlaceId() != null && !request.getPlaceId().isBlank()) {
+                    shippingFee = calculateShippingFeeByPlaceId(request.getPlaceId(), shopOwner.getId());
+                } else {
+                    shippingFee = calculateShippingFee(buyerAddress, shopOwner.getId());
+                }
             }
         }
 
+        order.setDeliveryType(deliveryType);
         order.setShippingFee(shippingFee);
         if (shopOwner == null) {
             throw new AppException(ErrorCode.INVALID_REQUEST);
@@ -959,6 +967,12 @@ public class OrderServiceImpl implements OrderService {
 
         Order order = orderRepository.findById(id)
                 .orElseThrow(() -> new AppException(ErrorCode.ORDER_NOT_FOUND));
+
+        if (request.getStatus() == OrderStatus.SHIPPING
+                && order.getDeliveryType() == DeliveryType.PICKUP_AT_WAREHOUSE) {
+            // Đơn nhận tại kho không đi qua shipper — phải dùng mark-pickup-ready / confirm-pickup
+            throw new AppException(ErrorCode.INVALID_ORDER_STATUS);
+        }
 
         if (request.getStatus() == OrderStatus.READY) {
             if (order.getStatus() == OrderStatus.QC_PENDING_BUYER) {
@@ -1499,6 +1513,7 @@ public class OrderServiceImpl implements OrderService {
                     .placeId(request.getPlaceId())
                     .note(request.getNote())
                     .paymentMethod(request.getPaymentMethod())
+                    .deliveryType(request.getDeliveryType())
                     .voucherUserId(shopOrder.getVoucherUserId())
                     .voucherUserIds(shopOrder.getVoucherUserIds())
                     .voucherCodes(shopOrder.getVoucherCodes())
