@@ -1,5 +1,6 @@
 package com.swd301.foodmarket.service;
 
+import com.swd301.foodmarket.dto.response.AdminDeliveryReceiptIdsResponse;
 import jakarta.servlet.http.HttpServletResponse;
 import org.springframework.security.oauth2.jwt.Jwt;
 
@@ -36,4 +37,8 @@ public interface ExportService {
             Integer orderId,
             HttpServletResponse response
     ) throws IOException;
+
+    AdminDeliveryReceiptIdsResponse listAdminDeliveryReceiptIds(LocalDate from, LocalDate to);
+
+    void exportAdminDeliveryReceiptPdf(Integer orderId, HttpServletResponse response) throws IOException;
 }

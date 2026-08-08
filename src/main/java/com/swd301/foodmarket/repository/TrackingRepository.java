@@ -6,8 +6,11 @@ import com.swd301.foodmarket.enums.OrderStatus;
 import org.springframework.data.jpa.repository.JpaRepository;
 
 import java.time.LocalDateTime;
+import java.util.Optional;
 import java.util.UUID;
 
 public interface TrackingRepository extends JpaRepository<Tracking, UUID> {
     Integer countByCreatedAtBetweenAndStatus(LocalDateTime createdAtAfter, LocalDateTime createdAtBefore, OrderStatus status);
+
+    Optional<Tracking> findFirstByOrder_IdAndStatusOrderByCreatedAtDesc(Integer orderId, OrderStatus status);
 }

@@ -6,13 +6,20 @@ import com.lowagie.text.Rectangle;
 import com.lowagie.text.pdf.*;
 import com.swd301.foodmarket.dto.internal.ExportOrderRowDto;
 import com.swd301.foodmarket.dto.internal.ExportSummaryDto;
+import com.swd301.foodmarket.dto.response.AdminDeliveryReceiptIdsResponse;
 import com.swd301.foodmarket.entity.Order;
 import com.swd301.foodmarket.entity.OrderDetail;
 import com.swd301.foodmarket.entity.User;
+import com.swd301.foodmarket.enums.CodPaymentOption;
+import com.swd301.foodmarket.enums.CodPaymentStatus;
 import com.swd301.foodmarket.enums.OrderStatus;
+import com.swd301.foodmarket.exception.AppException;
+import com.swd301.foodmarket.exception.ErrorCode;
 import com.swd301.foodmarket.repository.OrderRepository;
 import com.swd301.foodmarket.repository.UserRepository;
 import com.swd301.foodmarket.service.ExportService;
+import com.swd301.foodmarket.service.support.MoneyRoundingUtil;
+import com.swd301.foodmarket.service.support.OrderSettlementCalculator;
 import jakarta.servlet.http.HttpServletResponse;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -48,6 +55,7 @@ public class ExportServiceImpl implements ExportService {
 
     private final OrderRepository orderRepository;
     private final UserRepository userRepository;
+    private final OrderSettlementCalculator orderSettlementCalculator;
 
     private static final DateTimeFormatter DATE_FMT = DateTimeFormatter.ofPattern("dd/MM/yyyy HH:mm");
     /** Định dạng ngày trong tên file theo chuẩn Việt Nam (VD: 26-06-2024) */
@@ -612,6 +620,191 @@ public class ExportServiceImpl implements ExportService {
         BaseFont baseFont = loadBaseFont();
         addReceiptPage(doc, order, baseFont, writer);
         doc.close();
+    }
+
+    // ==============================
+    // Admin delivery receipts (per-file) + COD details
+    // ==============================
+    @Override
+    public AdminDeliveryReceiptIdsResponse listAdminDeliveryReceiptIds(LocalDate from, LocalDate to) {
+        validateDateRange(from, to);
+        LocalDateTime dtFrom = from != null ? from.atStartOfDay() : null;
+        LocalDateTime dtTo = to != null ? to.plusDays(1).atStartOfDay() : null;
+        List<Integer> ids = orderRepository.findAdminDeliveryReceiptOrderIds(
+                OrderStatus.DELIVERED, dtFrom, dtTo);
+        return AdminDeliveryReceiptIdsResponse.builder().orderIds(ids).build();
+    }
+
+    @Override
+    public void exportAdminDeliveryReceiptPdf(Integer orderId, HttpServletResponse response) throws IOException {
+        Order order = orderRepository.findByIdWithAdminDeliveryReceiptDetails(orderId)
+                .orElseThrow(() -> new AppException(ErrorCode.ORDER_NOT_FOUND));
+
+        if (order.getStatus() != OrderStatus.DELIVERED) {
+            throw new AppException(ErrorCode.INVALID_ORDER_STATUS);
+        }
+
+        String orderDate = order.getCreatedAt() != null
+                ? order.getCreatedAt().toLocalDate().format(FILE_DATE_FMT)
+                : LocalDate.now().format(FILE_DATE_FMT);
+        String filename = "HD_GiaoHang_DH" + orderId + "_" + orderDate + ".pdf";
+        response.setContentType("application/pdf");
+        response.setHeader("Content-Disposition", "attachment; filename=\"" + filename + "\"");
+
+        Document doc = new Document(PageSize.A4, 40, 40, 50, 50);
+        PdfWriter writer = PdfWriter.getInstance(doc, response.getOutputStream());
+        doc.open();
+        BaseFont baseFont = loadBaseFont();
+        addAdminDeliveryReceiptPage(doc, order, baseFont, writer);
+        doc.close();
+    }
+
+    private void addAdminDeliveryReceiptPage(
+            Document doc, Order order, BaseFont baseFont, PdfWriter writer
+    ) throws DocumentException {
+        Font titleFont = new Font(baseFont, 18, Font.BOLD, Color.BLACK);
+        Font labelFont = new Font(baseFont, 10, Font.BOLD, new Color(80, 80, 80));
+        Font valueFont = new Font(baseFont, 10, Font.NORMAL, Color.BLACK);
+        Font smallFont = new Font(baseFont, 9, Font.NORMAL, new Color(120, 120, 120));
+
+        Paragraph header = new Paragraph("HÓA ĐƠN GIAO HÀNG", titleFont);
+        header.setAlignment(Element.ALIGN_CENTER);
+        header.setSpacingAfter(4);
+        doc.add(header);
+
+        Paragraph subHeader = new Paragraph("CapNong - Nền tảng nông sản sạch",
+                new Font(baseFont, 11, Font.NORMAL, new Color(100, 140, 60)));
+        subHeader.setAlignment(Element.ALIGN_CENTER);
+        subHeader.setSpacingAfter(16);
+        doc.add(subHeader);
+
+        addSeparator(doc, writer);
+
+        addInfoLine(doc, "Mã đơn hàng:", "#" + order.getId(), labelFont, valueFont);
+        addInfoLine(doc, "Ngày tạo:",
+                order.getCreatedAt() != null ? order.getCreatedAt().format(DATE_FMT) : "—",
+                labelFont, valueFont);
+
+        addSeparator(doc, writer);
+
+        User buyer = order.getBuyer();
+        addInfoLine(doc, "Mã người mua:", buyer != null ? "#" + buyer.getId() : "—", labelFont, valueFont);
+        addInfoLine(doc, "Tên người mua:", buyer != null ? safeStr(buyer.getFullName()) : "—", labelFont, valueFont);
+        addInfoLine(doc, "Email:", buyer != null ? safeStr(buyer.getEmail()) : "—", labelFont, valueFont);
+        addInfoLine(doc, "Số điện thoại:", safeStr(order.getRecipientPhone()), labelFont, valueFont);
+        addInfoLine(doc, "Địa chỉ giao:", safeStr(order.getShippingAddress()), labelFont, valueFont);
+
+        addSeparator(doc, writer);
+
+        User shop = order.getShopOwner();
+        String shopDisplayName = shop != null
+                ? (shop.getShopName() != null ? shop.getShopName() : shop.getFullName())
+                : "—";
+        addInfoLine(doc, "Cửa hàng:", shopDisplayName, labelFont, valueFont);
+        addInfoLine(doc, "Phương thức thanh toán:", safeStr(order.getPaymentMethod()), labelFont, valueFont);
+
+        if ("COD".equalsIgnoreCase(order.getPaymentMethod())) {
+            addSeparator(doc, writer);
+            addCodAdminSettlementSection(doc, order, labelFont, valueFont);
+        }
+
+        addSeparator(doc, writer);
+
+        PdfPTable table = new PdfPTable(new float[]{4f, 1.5f, 2f, 2f});
+        table.setWidthPercentage(100);
+        table.setSpacingBefore(6);
+        addTableHeader(table, baseFont, "Sản phẩm", "SL", "Đơn giá", "Thành tiền");
+
+        List<OrderDetail> details = order.getOrderDetails();
+        if (details != null) {
+            for (OrderDetail detail : details) {
+                String productName = detail.getProduct() != null
+                        ? detail.getProduct().getProductName() : "?";
+                BigDecimal unit = detail.getUnitPrice() != null ? detail.getUnitPrice() : BigDecimal.ZERO;
+                int qty = detail.getQuantity() != null ? detail.getQuantity() : 0;
+                BigDecimal lineTotal = unit.multiply(BigDecimal.valueOf(qty));
+                addTableCell(table, productName, valueFont);
+                addTableCell(table, String.valueOf(qty), valueFont);
+                addTableCell(table, formatMoney(unit), valueFont);
+                addTableCell(table, formatMoney(lineTotal), valueFont);
+            }
+        }
+        doc.add(table);
+
+        addSeparator(doc, writer);
+
+        addInfoLine(doc, "Phí vận chuyển:", formatMoney(order.getShippingFee()), labelFont, valueFont);
+        Font totalFont = new Font(baseFont, 12, Font.BOLD, new Color(30, 100, 30));
+        addInfoLine(doc, "TỔNG CỘNG:", formatMoney(order.getTotalAmount()),
+                new Font(baseFont, 12, Font.BOLD, new Color(80, 80, 80)), totalFont);
+
+        if (order.getStatus() == OrderStatus.DELIVERED) {
+            Paragraph stamp = new Paragraph("✓ ĐÃ GIAO HÀNG THÀNH CÔNG",
+                    new Font(baseFont, 14, Font.BOLD, new Color(34, 139, 34)));
+            stamp.setAlignment(Element.ALIGN_CENTER);
+            stamp.setSpacingBefore(20);
+            doc.add(stamp);
+        }
+
+        Paragraph footer = new Paragraph("Cảm ơn bạn đã mua hàng tại CapNong!", smallFont);
+        footer.setAlignment(Element.ALIGN_CENTER);
+        footer.setSpacingBefore(16);
+        doc.add(footer);
+    }
+
+    private void addCodAdminSettlementSection(
+            Document doc, Order order, Font labelFont, Font valueFont
+    ) throws DocumentException {
+        OrderSettlementCalculator.SettlementAmounts amounts = orderSettlementCalculator.calculate(order);
+        BigDecimal refund = order.getRefundAmount() != null ? order.getRefundAmount() : BigDecimal.ZERO;
+        BigDecimal shipping = amounts.shippingFee();
+        BigDecimal shopChargeable = amounts.shopGross().subtract(refund);
+        if (shopChargeable.compareTo(BigDecimal.ZERO) < 0) {
+            shopChargeable = BigDecimal.ZERO;
+        }
+        BigDecimal platformFeeFromShip = MoneyRoundingUtil.commission(shipping);
+        BigDecimal prepaidAmount = order.getCodPrepaidAmount() != null
+                ? order.getCodPrepaidAmount()
+                : shopChargeable.add(platformFeeFromShip);
+
+        User shipper = order.getShipper();
+        String shipperName = shipper != null ? safeStr(shipper.getFullName()) : "—";
+        if (shipperName.isBlank()) {
+            shipperName = "—";
+        }
+
+        addInfoLine(doc, "Shipper:", shipperName, labelFont, valueFont);
+        addInfoLine(doc, "Phương thức ứng COD:",
+                formatCodPaymentOption(order.getCodPaymentOption()), labelFont, valueFont);
+        addInfoLine(doc, "Trạng thái COD:",
+                formatCodPaymentStatus(order.getCodPaymentStatus()), labelFont, valueFont);
+        addInfoLine(doc, "Tổng chuyển/ứng admin:", formatMoney(prepaidAmount), labelFont, valueFont);
+        addInfoLine(doc, "Tiền hàng (ứng):", formatMoney(shopChargeable), labelFont, valueFont);
+        addInfoLine(doc, "Phí ship:", formatMoney(shipping), labelFont, valueFont);
+        addInfoLine(doc, "Hoa hồng platform từ ship:", formatMoney(platformFeeFromShip), labelFont, valueFont);
+        if (order.getShipperPaidAt() != null) {
+            addInfoLine(doc, "Thời điểm shipper thanh toán:",
+                    order.getShipperPaidAt().format(DATE_FMT), labelFont, valueFont);
+        }
+    }
+
+    private String formatCodPaymentOption(CodPaymentOption option) {
+        if (option == null) return "—";
+        return switch (option) {
+            case WALLET -> "Trừ ví shipper";
+            case CASH -> "Tiền mặt (admin xác nhận)";
+        };
+    }
+
+    private String formatCodPaymentStatus(CodPaymentStatus status) {
+        if (status == null) return "—";
+        return switch (status) {
+            case NOT_REQUIRED -> "Không yêu cầu";
+            case PENDING_ADMIN_CONFIRM -> "Chờ admin xác nhận";
+            case PAID -> "Đã thanh toán";
+            case REFUND_PENDING -> "Chờ hoàn ứng";
+            case REFUNDED -> "Đã hoàn ứng";
+        };
     }
 
     // ==============================
