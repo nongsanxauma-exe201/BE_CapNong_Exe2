@@ -912,8 +912,8 @@ public class ShipperServiceImpl implements ShipperService {
         }
 
         // Không cộng ví ở đây.
-        // Shipper đã giao và đã thu tiền mặt từ buyer.
-        // Admin đối soát COD xong mới cộng ví ở CodSettlementService.
+        // Shipper đã giao và đã thu tiền mặt từ buyer (giữ phí ship bằng tiền mặt).
+        // Admin đối soát COD chi shop; không cộng phí ship vào ví shipper.
     }
 
     private void settlePrepaidCodDelivered(Order order) {
@@ -934,6 +934,7 @@ public class ShipperServiceImpl implements ShipperService {
         BigDecimal platformFeeFromShip = MoneyRoundingUtil.commission(shipping);
         BigDecimal platformFeeTotal = platformFeeFromShop.add(platformFeeFromShip);
         BigDecimal finalShopRevenue = shopChargeable.subtract(platformFeeFromShop);
+        // COD: shipper giữ 90% phí ship trong tiền mặt thu từ buyer — không cộng ví.
         BigDecimal shipperNet = MoneyRoundingUtil.netAfterCommission(shipping);
 
         Wallet platformWallet = walletRepository.findByTypeForUpdate(WalletType.PLATFORM)
@@ -941,23 +942,16 @@ public class ShipperServiceImpl implements ShipperService {
         Wallet shopWallet = walletRepository.findByShopOwnerIdForUpdate(order.getShopOwner().getId())
                 .orElseThrow(() -> new AppException(ErrorCode.WALLET_NOT_FOUND));
 
-        User shipperUser = order.getShipper();
-        Wallet shipperWallet = shipperUser != null
-                ? walletRepository.findByShipperIdForUpdate(shipperUser.getId())
-                        .orElseThrow(() -> new AppException(ErrorCode.WALLET_NOT_FOUND))
-                : null;
-
         if (platformWallet.getFrozenBalance().compareTo(prepaidAmount) < 0) {
             throw new AppException(ErrorCode.PLATFORM_BALANCE_NOT_ENOUGH);
         }
 
-        BigDecimal payoutTotal = finalShopRevenue.add(
-                shipperWallet != null && shipperNet.signum() > 0 ? shipperNet : BigDecimal.ZERO);
+        // Prepaid chỉ gồm tiền hàng + phí sàn ship; chi shop, không chi shipper qua ví.
+        BigDecimal payoutTotal = finalShopRevenue;
         if (platformWallet.getTotalBalance().compareTo(payoutTotal) < 0) {
             throw new AppException(ErrorCode.PLATFORM_BALANCE_NOT_ENOUGH);
         }
 
-        // Mở khóa escrow prepaid, rồi trừ total khi chi shop + shipper (giống PayOS / settleCodOrder)
         platformWallet.setFrozenBalance(platformWallet.getFrozenBalance().subtract(prepaidAmount));
         platformWallet.setTotalBalance(platformWallet.getTotalBalance().subtract(payoutTotal));
         platformWallet.setCommissionWallet(platformWallet.getCommissionWallet().add(platformFeeTotal));
@@ -967,13 +961,6 @@ public class ShipperServiceImpl implements ShipperService {
         shopWallet.setTotalBalance(shopWallet.getTotalBalance().add(finalShopRevenue));
         shopWallet.setTotalRevenueAllTime(shopWallet.getTotalRevenueAllTime().add(finalShopRevenue));
         shopWallet.setUpdatedAt(LocalDateTime.now(ZoneId.of("Asia/Ho_Chi_Minh")));
-
-        if (shipperWallet != null && shipperNet.signum() > 0) {
-            shipperWallet.setTotalBalance(shipperWallet.getTotalBalance().add(shipperNet));
-            shipperWallet.setTotalRevenueAllTime(shipperWallet.getTotalRevenueAllTime().add(shipperNet));
-            shipperWallet.setUpdatedAt(LocalDateTime.now(ZoneId.of("Asia/Ho_Chi_Minh")));
-            walletRepository.save(shipperWallet);
-        }
 
         order.setCodSettled(true);
         order.setCodSettledAt(LocalDateTime.now(ZoneId.of("Asia/Ho_Chi_Minh")));
@@ -991,11 +978,8 @@ public class ShipperServiceImpl implements ShipperService {
         saveTransaction(TransactionType.SHOP_RELEASE, finalShopRevenue,
                 shopWallet.getTotalBalance(), "ORDER_" + order.getId(),
                 "Cộng tiền hàng COD cho shop sau giao thành công đơn #" + order.getId());
-        if (shipperWallet != null && shipperNet.signum() > 0) {
-            saveTransaction(TransactionType.SHIPPER_PAYOUT, shipperNet,
-                    shipperWallet.getTotalBalance(), "ORDER_" + order.getId(),
-                    "Cộng phí giao hàng COD cho shipper đơn #" + order.getId());
-        }
+        log.info("[COD_PREPAID_DELIVERED] orderId={}, shipperNet={} giữ tiền mặt — không cộng ví shipper",
+                order.getId(), shipperNet);
     }
 
     private boolean isPostPaymentStatus(OrderStatus status) {
