@@ -1,5 +1,7 @@
 package com.swd301.foodmarket.controller;
 
+import com.swd301.foodmarket.dto.response.AdminDeliveryReceiptIdsResponse;
+import com.swd301.foodmarket.dto.response.ApiResponse;
 import com.swd301.foodmarket.service.ExportService;
 import jakarta.servlet.http.HttpServletResponse;
 import lombok.RequiredArgsConstructor;
@@ -78,5 +80,34 @@ public class ExportController {
             HttpServletResponse response
     ) throws IOException {
         exportService.exportOrderReceiptPdf(jwt, orderId, response);
+    }
+
+    /**
+     * GET /export/admin/delivery-receipts/ids
+     * Admin: danh sách orderId DELIVERED để xuất từng hóa đơn giao hàng
+     */
+    @GetMapping("/admin/delivery-receipts/ids")
+    @PreAuthorize("hasRole('ADMIN')")
+    public ApiResponse<AdminDeliveryReceiptIdsResponse> listAdminDeliveryReceiptIds(
+            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate from,
+            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate to
+    ) {
+        return ApiResponse.<AdminDeliveryReceiptIdsResponse>builder()
+                .result(exportService.listAdminDeliveryReceiptIds(from, to))
+                .message("OK")
+                .build();
+    }
+
+    /**
+     * GET /export/admin/delivery-receipts/{orderId}/pdf
+     * Admin: tải 1 hóa đơn giao hàng PDF (kèm chi tiết COD nếu có)
+     */
+    @GetMapping("/admin/delivery-receipts/{orderId}/pdf")
+    @PreAuthorize("hasRole('ADMIN')")
+    public void exportAdminDeliveryReceiptPdf(
+            @PathVariable Integer orderId,
+            HttpServletResponse response
+    ) throws IOException {
+        exportService.exportAdminDeliveryReceiptPdf(orderId, response);
     }
 }

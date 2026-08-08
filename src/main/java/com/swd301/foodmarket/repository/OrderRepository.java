@@ -248,4 +248,28 @@ public interface OrderRepository extends JpaRepository<Order, Integer> {
         WHERE o.id = :orderId
     """)
     Optional<Order> findByIdWithDetails(@Param("orderId") Integer orderId);
+
+    @Query("""
+        SELECT o.id FROM Order o
+        WHERE o.status = :status
+          AND (:from IS NULL OR o.createdAt >= :from)
+          AND (:to IS NULL OR o.createdAt < :to)
+        ORDER BY o.id DESC
+    """)
+    List<Integer> findAdminDeliveryReceiptOrderIds(
+            @Param("status") OrderStatus status,
+            @Param("from") LocalDateTime from,
+            @Param("to") LocalDateTime to
+    );
+
+    @Query("""
+        SELECT DISTINCT o FROM Order o
+        LEFT JOIN FETCH o.buyer
+        LEFT JOIN FETCH o.shopOwner
+        LEFT JOIN FETCH o.shipper
+        LEFT JOIN FETCH o.orderDetails od
+        LEFT JOIN FETCH od.product
+        WHERE o.id = :orderId
+    """)
+    Optional<Order> findByIdWithAdminDeliveryReceiptDetails(@Param("orderId") Integer orderId);
 }

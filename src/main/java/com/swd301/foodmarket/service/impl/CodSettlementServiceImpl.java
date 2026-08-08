@@ -125,11 +125,10 @@ public class CodSettlementServiceImpl implements CodSettlementService {
         BigDecimal finalShopRevenue = shopChargeable.subtract(platformFeeFromShop);
         BigDecimal shipperNet = MoneyRoundingUtil.netAfterCommission(shippingFee);
 
-        log.info("[COD_NET_AMOUNT] shopChargeable={}, finalShopRevenue={}, shipperNet={}",
+        log.info("[COD_NET_AMOUNT] shopChargeable={}, finalShopRevenue={}, shipperNet={} (giữ tiền mặt, không cộng ví)",
                 shopChargeable, finalShopRevenue, shipperNet);
-        log.info("[COD_EXPECTED_FLOW] platform.totalBalance + codAmount - shop - shipper, shop.totalBalance + finalShopRevenue={}, shipper.totalBalance + shipperNet={}",
-                finalShopRevenue,
-                shipperNet
+        log.info("[COD_EXPECTED_FLOW] platform.totalBalance + codAmount - shop - shipperNet(cash), shop.totalBalance + finalShopRevenue={}",
+                finalShopRevenue
         );
 
         Wallet platformWallet = walletRepository.findByTypeForUpdate(WalletType.PLATFORM)
@@ -214,16 +213,7 @@ public class CodSettlementServiceImpl implements CodSettlementService {
                 shopWallet.getTotalRevenueAllTime().add(finalShopRevenue)
         );
 
-        // Shipper nhận phí ship khả dụng luôn (đơn nhận tại kho không có shipper → bỏ qua).
-        if (shipperWallet != null) {
-            shipperWallet.setTotalBalance(
-                    shipperWallet.getTotalBalance().add(shipperNet)
-            );
-
-            shipperWallet.setTotalRevenueAllTime(
-                    shipperWallet.getTotalRevenueAllTime().add(shipperNet)
-            );
-        }
+        // Shipper giữ 90% phí ship trong tiền mặt thu từ buyer — không cộng ví.
 
         log.info("[PLATFORM_WALLET_AFTER] totalBalance={} -> {}, frozenBalance={} -> {}, commissionWallet={} -> {}, totalRevenueAllTime={} -> {}",
                 platformTotalBefore,
@@ -286,8 +276,8 @@ public class CodSettlementServiceImpl implements CodSettlementService {
         BigDecimal expectedPlatformRevenueAfter = platformRevenueBefore.add(platformFeeTotal);
         BigDecimal expectedShopTotalAfter = shopTotalBefore.add(finalShopRevenue);
         BigDecimal expectedShopRevenueAfter = shopRevenueBefore.add(finalShopRevenue);
-        BigDecimal expectedShipperTotalAfter = shipperTotalBefore.add(shipperNet);
-        BigDecimal expectedShipperRevenueAfter = shipperRevenueBefore.add(shipperNet);
+        BigDecimal expectedShipperTotalAfter = shipperTotalBefore;
+        BigDecimal expectedShipperRevenueAfter = shipperRevenueBefore;
 
         log.info("[COD_VERIFY] expectedPlatformTotalAfter={}, actualPlatformTotalAfter={}, match={}",
                 expectedPlatformTotalAfter,
@@ -345,9 +335,6 @@ public class CodSettlementServiceImpl implements CodSettlementService {
 
         walletRepository.save(platformWallet);
         walletRepository.save(shopWallet);
-        if (shipperWallet != null) {
-            walletRepository.save(shipperWallet);
-        }
         orderRepository.save(order);
 
         saveTransaction(TransactionType.COD_RECEIVED, codAmount,
@@ -359,10 +346,9 @@ public class CodSettlementServiceImpl implements CodSettlementService {
         saveTransaction(TransactionType.SHOP_RELEASE, finalShopRevenue,
                 shopWallet.getTotalBalance(), "ORDER_" + order.getId(),
                 "Cộng doanh thu shop COD đơn #" + order.getId());
-        if (shipperWallet != null) {
-            saveTransaction(TransactionType.SHIPPER_PAYOUT, shipperNet,
-                    shipperWallet.getTotalBalance(), "ORDER_" + order.getId(),
-                    "Cộng phí giao hàng shipper COD đơn #" + order.getId());
+        if (order.getShipper() != null && shipperNet.signum() > 0) {
+            log.info("[COD_SETTLEMENT] orderId={}, shipperNet={} giữ tiền mặt — không cộng ví shipper",
+                    order.getId(), shipperNet);
         }
         if (shippingDiscountAmount.compareTo(BigDecimal.ZERO) > 0) {
             saveTransaction(TransactionType.SHIPPING_SUBSIDY, shippingDiscountAmount.negate(),
@@ -396,8 +382,8 @@ public class CodSettlementServiceImpl implements CodSettlementService {
             Notification shipperNotification = Notification.builder()
                     .title("Đối soát COD thành công #" + order.getId())
                     .message("Đơn hàng COD #" + order.getId()
-                            + " đã được đối soát. Bạn nhận được "
-                            + shipperNet + "đ phí giao hàng.")
+                            + " đã được đối soát. Phí giao hàng "
+                            + shipperNet + "đ bạn giữ từ tiền mặt buyer (không cộng ví).")
                     .receiverType("USER_" + order.getShipper().getId())
                     .build();
 
